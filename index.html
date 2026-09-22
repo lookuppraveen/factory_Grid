@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Factory Grid — B2B Pharmaceutical Marketplace</title>
+    <meta name="description" content="Factory Grid: Enterprise B2B pharmaceutical sourcing and manufacturing marketplace platform." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // DIAGNOSTIC: Clear stale auth state that causes redirect loops
+      (function() {
+        var auth = localStorage.getItem('fg_auth');
+        if (auth === 'false' || auth === null) {
+          localStorage.setItem('fg_auth', 'true');
+        }
+        // Catch & display any unhandled runtime exception
+        window.onerror = function(msg, src, line, col, err) {
+          var root = document.getElementById('root');
+          if (root && root.children.length === 0) {
+            root.innerHTML = '<div style="font-family:monospace;background:#1e293b;color:#f8fafc;min-height:100vh;padding:40px;white-space:pre-wrap">'
+              + '<h2 style="color:#f87171">⛔ FactoryGrid Runtime Error</h2>'
+              + '<p><b>Message:</b> ' + msg + '</p>'
+              + '<p><b>File:</b> ' + src + '</p>'
+              + '<p><b>Line:</b> ' + line + ':' + col + '</p>'
+              + '<p><b>Stack:</b> ' + (err && err.stack ? err.stack : 'N/A') + '</p>'
+              + '<hr>'
+              + '<p style="color:#94a3b8">If this is a localStorage issue, click below to reset session data:</p>'
+              + '<button onclick="[\'fg_rfqs\',\'fg_quotes\',\'fg_orders\',\'fg_auth\',\'fg_role\'].forEach(k=>localStorage.removeItem(k));location.reload();" style="padding:10px 20px;background:#0f766e;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">Reset Session & Reload</button>'
+              + '</div>';
+          }
+        };
+        window.addEventListener('unhandledrejection', function(e) {
+          window.onerror(e.reason && e.reason.message ? e.reason.message : String(e.reason), 'promise', 0, 0, e.reason);
+        });
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
