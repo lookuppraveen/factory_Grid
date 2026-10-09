@@ -1,16 +1,49 @@
-# React + Vite
+# FactoryGrid Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+B2B manufacturing marketplace. The repository is split into an independent frontend and backend.
 
-Currently, two official plugins are available:
+```text
+Factory_Grid_Platform/
+├── frontend/                 React 19 + Vite 8 + Tailwind 4 web app
+├── backend/
+│   ├── infrastructure/       api-gateway, config-server, eureka-server (reserved, later phases)
+│   └── services/
+│       └── iam-service/      Centralized Identity & Access Management (Spring Boot 3, Java 17)
+├── scripts/                  Developer helper scripts
+└── vercel.json               Vercel builds frontend/ (see below)
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Frontend
 
-## React Compiler
+```powershell
+cd frontend
+npm ci
+npm run dev        # http://localhost:5173
+npm run build      # output: frontend/dist
+npm run lint
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+See [frontend/README.md](frontend/README.md).
 
-## Expanding the Oxlint configuration
+## Backend: IAM service
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Requires Java 17+ and PostgreSQL with databases `factorygrid` (app) and `factorygrid_test` (tests).
+
+```powershell
+copy backend\services\iam-service\.env.example backend\services\iam-service\.env
+# edit .env and set DB_PASSWORD and JWT_SECRET (never commit .env)
+
+.\scripts\start-iam.ps1 -Test     # Maven tests
+.\scripts\start-iam.ps1           # run service on http://localhost:8081
+```
+
+- Swagger UI: http://localhost:8081/swagger-ui/index.html
+- OpenAPI JSON: http://localhost:8081/v3/api-docs
+
+See [backend/README.md](backend/README.md).
+
+## Deployment (Vercel)
+
+The root `vercel.json` installs and builds from `frontend/` and serves `frontend/dist`.
+No Vercel dashboard change is required. If the project's **Root Directory** setting is
+ever changed to `frontend`, delete the `cd frontend &&` prefixes from `vercel.json`.

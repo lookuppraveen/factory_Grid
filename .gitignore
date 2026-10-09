@@ -26,6 +26,7 @@ dist-ssr
 # Environment & Deployment
 .env
 .env.*
+!.env.example
 .vercel
 
 # Temporary / Scratch & Backup Files
@@ -38,3 +39,10 @@ step_*.txt
 
 # Local workspace mirror
 Factory_Grid_Platform-main/
+
+# Java / Maven build output
+target/
+*.class
+ 
+# Database backups
+archive/
