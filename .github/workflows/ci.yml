@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build libraries, API and web app
+        run: pnpm build
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: API integration tests (Testcontainers PostgreSQL)
+        run: pnpm test
+
+      - name: OpenAPI contract matches the code
+        run: pnpm contracts:check
+
+      # The existing frontend has known lint errors (rules-of-hooks in older modules).
+      # Reported here but not blocking until they are fixed during the F-phases.
+      - name: Frontend lint (non-blocking)
+        run: pnpm --filter frontend lint
+        continue-on-error: true

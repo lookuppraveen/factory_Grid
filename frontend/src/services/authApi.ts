@@ -1,6 +1,6 @@
 /**
  * FactoryGrid Real IAM Authentication API Client
- * Connects directly to PostgreSQL-backed Spring Boot IAM Microservice at http://localhost:8081
+ * Connects to the IAM module of the Node.js factorygrid-api (http://localhost:8081 in development)
  */
 
 export interface AuthUser {
@@ -61,7 +61,8 @@ export interface RegistrationResult {
   message: string;
 }
 
-const API_BASE = import.meta.env.VITE_IAM_API_URL || 'http://localhost:8081';
+// VITE_API_BASE_URL points at the Node.js factorygrid-api; VITE_IAM_API_URL is the older name.
+const API_BASE = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_IAM_API_URL || 'http://localhost:8081';
 
 class AuthApiService {
   /**

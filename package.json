@@ -1,0 +1,30 @@
+{
+  "name": "factorygrid",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter factorygrid-api dev",
+    "dev:web": "pnpm --filter frontend dev",
+    "build": "nx run-many -t build",
+    "test": "nx run-many -t test",
+    "lint": "nx run-many -t lint",
+    "typecheck": "nx run-many -t typecheck",
+    "contracts:check": "pnpm --filter factorygrid-api openapi:export && git diff --exit-code -- contracts",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "nx": "23.3.0",
+    "typescript": "~6.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "prisma",
+      "nx"
+    ]
+  }
+}

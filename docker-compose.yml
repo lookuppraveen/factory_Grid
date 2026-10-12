@@ -1,0 +1,44 @@
+# Local development stack. Host ports avoid the defaults (5432, 6379, 1025)
+# because other local projects often use them.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: factorygrid
+      POSTGRES_PASSWORD: factorygrid
+      POSTGRES_DB: factorygrid
+    ports:
+      - "127.0.0.1:5442:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U factorygrid"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6381:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: factorygrid
+      MINIO_ROOT_PASSWORD: factorygrid-dev
+    ports:
+      - "127.0.0.1:9010:9000"
+      - "127.0.0.1:9011:9001"
+    volumes:
+      - minio-data:/data
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:1027:1025"
+      - "127.0.0.1:8027:8025"
+
+volumes:
+  postgres-data:
+  minio-data:

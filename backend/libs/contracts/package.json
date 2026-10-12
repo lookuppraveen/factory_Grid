@@ -1,0 +1,17 @@
+{
+  "name": "@factorygrid/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript types generated from contracts/*.yaml, shared by the API and the web app.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "generate": "openapi-typescript ../../../contracts/factorygrid-api.yaml -o src/factorygrid-api.ts",
+    "build": "pnpm generate && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13",
+    "typescript": "~6.0.3"
+  }
+}

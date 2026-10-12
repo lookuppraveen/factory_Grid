@@ -1,49 +1,75 @@
 # FactoryGrid Platform
 
-B2B manufacturing marketplace. The repository is split into an independent frontend and backend.
+B2B pharmaceutical manufacturing marketplace. One pnpm + Nx workspace holds the React web app and the
+Node.js (NestJS + TypeScript) backend. Plans live in [doc/](doc/).
 
 ```text
-Factory_Grid_Platform/
-├── frontend/                 React 19 + Vite 8 + Tailwind 4 web app
+factory_Grid/
+├── frontend/                     React 19 + Vite 8 + Tailwind 4 web app (deployed on Vercel)
 ├── backend/
-│   ├── infrastructure/       api-gateway, config-server, eureka-server (reserved, later phases)
-│   └── services/
-│       └── iam-service/      Centralized Identity & Access Management (Spring Boot 3, Java 17)
-├── scripts/                  Developer helper scripts
-└── vercel.json               Vercel builds frontend/ (see below)
+│   ├── apps/factorygrid-api/     NestJS API: one app, one module per business area (iam today)
+│   └── libs/
+│       ├── auth/                 JWT guard, @Roles, @Public, @CurrentUser
+│       ├── errors/               ApiResponse / ErrorResponse shapes, exception filter, validation pipe
+│       └── contracts/            @factorygrid/contracts: TypeScript types generated from contracts/
+├── contracts/                    OpenAPI contract of the API (source of truth for both sides)
+├── docker-compose.yml            local PostgreSQL, Redis, MinIO, Mailpit
+├── nx.json, pnpm-workspace.yaml  workspace setup
+└── doc/                          development plans and tracker
 ```
 
-## Frontend
+## Prerequisites
+
+- Node.js 24 LTS and pnpm 9 (`corepack enable` picks the version from `package.json`)
+- Docker Desktop (local database and the API's integration tests)
+
+## First run
 
 ```powershell
-cd frontend
-npm ci
-npm run dev        # http://localhost:5173
-npm run build      # output: frontend/dist
-npm run lint
+pnpm install
+pnpm db:up                                                   # PostgreSQL on localhost:5442, etc.
+copy backend\apps\factorygrid-api\.env.example backend\apps\factorygrid-api\.env
+# edit .env: set JWT_SECRET (the file shows how to generate one)
+pnpm --filter factorygrid-api db:migrate                     # apply database migrations
+pnpm build                                                   # libraries, API and web app
+pnpm dev:api                                                 # API on http://localhost:8081
+pnpm dev:web                                                 # web app on http://localhost:5173
 ```
 
-See [frontend/README.md](frontend/README.md).
+Create the first admin once: set `BOOTSTRAP_ADMIN_PASSWORD` in the API's `.env`, then run
+`pnpm --filter factorygrid-api db:seed-admin`.
 
-## Backend: IAM service
+## Everyday commands
 
-Requires Java 17+ and PostgreSQL with databases `factorygrid` (app) and `factorygrid_test` (tests).
+| Command | What it does |
+| --- | --- |
+| `pnpm build` | Builds every project in dependency order (Nx caches results) |
+| `pnpm test` | API integration tests against a throwaway PostgreSQL (needs Docker) |
+| `pnpm typecheck` | TypeScript checks for the backend projects |
+| `pnpm contracts:check` | Regenerates `contracts/` from the API and fails if it changed |
+| `pnpm db:up` / `pnpm db:down` | Start or stop the local Docker stack |
 
-```powershell
-copy backend\services\iam-service\.env.example backend\services\iam-service\.env
-# edit .env and set DB_PASSWORD and JWT_SECRET (never commit .env)
+## Local service ports
 
-.\scripts\start-iam.ps1 -Test     # Maven tests
-.\scripts\start-iam.ps1           # run service on http://localhost:8081
-```
+| Service | URL |
+| --- | --- |
+| API | http://localhost:8081 (Swagger UI at `/docs`, OpenAPI JSON at `/docs-json`, health at `/health`) |
+| Web app | http://localhost:5173 |
+| PostgreSQL | localhost:5442, user/password/db `factorygrid` |
+| Redis | localhost:6381 |
+| MinIO | API http://localhost:9010, console http://localhost:9011 |
+| Mailpit | SMTP localhost:1027, inbox http://localhost:8027 |
 
-- Swagger UI: http://localhost:8081/swagger-ui/index.html
-- OpenAPI JSON: http://localhost:8081/v3/api-docs
+The host ports avoid the usual defaults (5432, 6379, 1025) so they do not clash with other local projects.
 
-See [backend/README.md](backend/README.md).
+## API contracts
 
-## Deployment (Vercel)
+`contracts/factorygrid-api.yaml` is generated from the API (`pnpm --filter factorygrid-api openapi:export`)
+and committed. `backend/libs/contracts` turns it into TypeScript types that the web app imports as
+`@factorygrid/contracts`. CI fails when the committed contract and the code disagree.
 
-The root `vercel.json` installs and builds from `frontend/` and serves `frontend/dist`.
-No Vercel dashboard change is required. If the project's **Root Directory** setting is
-ever changed to `frontend`, delete the `cd frontend &&` prefixes from `vercel.json`.
+## Deployment
+
+- **Web app:** Vercel, with the project's Root Directory set to `frontend`. `frontend/vercel.json` installs
+  only the web app's part of the workspace (`pnpm install --frozen-lockfile --filter frontend...`).
+- **API:** not deployed yet. Hosting is an open decision in the backend plan.

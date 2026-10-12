@@ -4,12 +4,14 @@ React 19 + Vite 8 + Tailwind CSS 4 + React Router 7.
 
 ## Commands
 
+The frontend is part of the pnpm workspace at the repo root. Run these from the repo root:
+
 ```powershell
-npm ci             # install exactly from package-lock.json
-npm run dev        # dev server (http://localhost:5173)
-npm run build      # production build -> dist/
-npm run preview    # serve the production build locally
-npm run lint       # oxlint
+pnpm install                        # installs the whole workspace from pnpm-lock.yaml
+pnpm dev:web                        # dev server (http://localhost:5173)
+pnpm --filter frontend build        # production build -> frontend/dist/
+pnpm --filter frontend preview      # serve the production build locally
+pnpm --filter frontend lint         # oxlint
 ```
 
 ## Source layout
@@ -34,5 +36,5 @@ src/
 Notes:
 - `useApp` and `useTheme` stay with their context providers in `context/`, so no separate `hooks/` folder exists yet.
 - Routes are currently defined in `App.tsx`.
-- The frontend is not yet wired to the IAM service. When it is, the API base URL
-  should come from `VITE_IAM_API_URL` (default `http://localhost:8081`).
+- Login calls the IAM module of `factorygrid-api`. The API base URL comes from
+  `VITE_API_BASE_URL` (default `http://localhost:8081`); see `.env.example`.

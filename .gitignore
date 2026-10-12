@@ -40,9 +40,15 @@ step_*.txt
 # Local workspace mirror
 Factory_Grid_Platform-main/
 
-# Java / Maven build output
-target/
-*.class
  
 # Database backups
 archive/
+
+# Node.js workspace
+node_modules/
+coverage/
+.nx/
+*.tsbuildinfo
+
+# Generated code (rebuilt by `prisma generate`)
+backend/apps/*/src/generated/
