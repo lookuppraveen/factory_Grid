@@ -6,6 +6,7 @@ import {
   Check, AlertCircle, File, Trash2, Globe, MapPin, User, Phone, Mail, Award, Clock
 } from 'lucide-react';
 import { CustomerType } from '../../types';
+import { buyerRegistrationApi } from '../../services/buyerRegistrationApi';
 
 interface BuyerOnboardingWizardProps {
   onSuccess?: () => void;
@@ -39,6 +40,10 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
   // Wizard Step: 1 = Registration, 2 = Contact, 3 = Address & Type, 4 = Documents, 5 = Review
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
+  // Backend draft identity (returned by step-1) and a re-entrancy guard for API calls
+  const [registrationCode, setRegistrationCode] = useState<string>('');
+  const isBusyRef = React.useRef(false);
+
   // Form State
   const [companyInfo, setCompanyInfo] = useState({
     companyName: '',
@@ -54,7 +59,8 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
     contactPerson: '',
     designation: '',
     mobileNumber: '',
-    email: ''
+    email: '',
+    password: ''
   });
 
   const [addressInfo, setAddressInfo] = useState({
@@ -106,14 +112,8 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
   });
 
   // Document Upload State
-  const [uploadedDocsMap, setUploadedDocsMap] = useState<Record<string, { fileName: string; fileSize: string; uploadedAt: string }>>({
-    'gstCert': { fileName: 'GST_Registration_Cert.pdf', fileSize: '1.2 MB', uploadedAt: new Date().toISOString().split('T')[0] },
-    'drugLicense': { fileName: 'Drug_License_Form_20B_21B.pdf', fileSize: '2.4 MB', uploadedAt: new Date().toISOString().split('T')[0] },
-    'panCard': { fileName: 'Company_PAN_Card.pdf', fileSize: '850 KB', uploadedAt: new Date().toISOString().split('T')[0] },
-    'incCert': { fileName: 'Incorporation_Certificate.pdf', fileSize: '1.8 MB', uploadedAt: new Date().toISOString().split('T')[0] },
-    'cancelledCheque': { fileName: 'Cancelled_Cheque_Bank.pdf', fileSize: '620 KB', uploadedAt: '2026-08-14' },
-    'signedAgreement': { fileName: 'FG_Master_Service_Agreement_Signed.pdf', fileSize: '3.1 MB', uploadedAt: '2026-08-14' }
-  });
+  // Only documents that were really stored by the backend appear here (no pre-filled placeholders).
+  const [uploadedDocsMap, setUploadedDocsMap] = useState<Record<string, { fileName: string; fileSize: string; uploadedAt: string }>>({});
 
   // Confirmation Checkbox & Submission State
   const [isAccurateConfirmed, setIsAccurateConfirmed] = useState<boolean>(false);
@@ -138,7 +138,8 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
     return contactInfo.contactPerson.trim() !== '' &&
       contactInfo.designation.trim() !== '' &&
       contactInfo.mobileNumber.trim() !== '' &&
-      contactInfo.email.trim() !== '';
+      contactInfo.email.trim() !== '' &&
+      contactInfo.password.trim().length >= 6;
   };
 
   const validateStep3 = () => {
@@ -153,9 +154,60 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
     return MANDATORY_DOCUMENTS.every(doc => !!uploadedDocsMap[doc.key]);
   };
 
-  const handleNextStep = () => {
-    if (currentStep < 5) {
+  const handleNextStep = async () => {
+    if (currentStep >= 5 || isBusyRef.current) return;
+    isBusyRef.current = true;
+    try {
+      if (currentStep === 1) {
+        const res = await buyerRegistrationApi.saveStep1(
+          {
+            companyName: companyInfo.companyName,
+            businessType: companyInfo.businessType,
+            gstNumber: companyInfo.gstNumber,
+            panNumber: companyInfo.panNumber,
+            drugLicenseNumber: companyInfo.drugLicenseNumber,
+            cinNumber: companyInfo.cinNumber || undefined,
+            website: companyInfo.website || undefined
+          },
+          registrationCode || undefined
+        );
+        setRegistrationCode(res.registrationCode);
+      } else if (currentStep === 2) {
+        if (!validateStep2()) {
+          alert('Please enter all required contact fields and a password with at least 6 characters.');
+          return;
+        }
+        await buyerRegistrationApi.saveStep2(
+          {
+            contactPerson: contactInfo.contactPerson,
+            designation: contactInfo.designation,
+            mobileNumber: contactInfo.mobileNumber,
+            email: contactInfo.email,
+            password: contactInfo.password
+          },
+          registrationCode
+        );
+      } else if (currentStep === 3) {
+        await buyerRegistrationApi.saveStep3(
+          {
+            billingAddress: addressInfo.billingAddress,
+            shippingAddress: addressInfo.shippingAddress,
+            state: addressInfo.state,
+            country: addressInfo.country,
+            pincode: addressInfo.pincode,
+            ...getTypeSpecificDetails()
+          },
+          registrationCode
+        );
+      } else if (currentStep === 4 && !validateStep4()) {
+        alert('Please upload all 6 required documents before continuing.');
+        return;
+      }
       setCurrentStep((prev) => (prev + 1) as any);
+    } catch (err: any) {
+      alert(err?.message || 'Could not save this step. Please try again.');
+    } finally {
+      isBusyRef.current = false;
     }
   };
 
@@ -165,12 +217,46 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
     }
   };
 
+  // Customer-type specific parameters for the selected business type only
+  const getTypeSpecificDetails = () => ({
+    pcdDetails: companyInfo.businessType === 'PCD Franchise' ? pcdDetails : undefined,
+    tpmDetails: companyInfo.businessType === 'Third Party Manufacturing (TPM)' ? tpmDetails : undefined,
+    distributorDetails: companyInfo.businessType === 'Distributor' ? distributorDetails : undefined,
+    hospitalDetails: companyInfo.businessType === 'Hospital' ? hospitalDetails : undefined,
+    wholesalerDetails: companyInfo.businessType === 'Wholesaler' ? wholesalerDetails : undefined,
+    exportDetails: companyInfo.businessType === 'Export' ? exportDetails : undefined
+  });
+
+  const formatFileSize = (bytes: number) =>
+    bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+  // Opens the native file picker (same button as before) and uploads the chosen file to the backend.
   const handleSimulateDocUpload = (docKey: string, docName: string) => {
-    const fileName = `${docName.replace(/\s+/g, '_')}_Verified.pdf`;
-    setUploadedDocsMap(prev => ({
-      ...prev,
-      [docKey]: { fileName, fileSize: '1.5 MB', uploadedAt: new Date().toISOString().split('T')[0] }
-    }));
+    if (!registrationCode) {
+      alert('Please complete Step 1 first.');
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const stored = await buyerRegistrationApi.uploadDocument(file, docName, registrationCode);
+        setUploadedDocsMap(prev => ({
+          ...prev,
+          [docKey]: {
+            fileName: stored.fileName,
+            fileSize: formatFileSize(stored.fileSize),
+            uploadedAt: stored.uploadedAt.split('T')[0]
+          }
+        }));
+      } catch (err: any) {
+        alert(err?.message || `Upload of ${docName} failed.`);
+      }
+    };
+    input.click();
   };
 
   const handleRemoveDoc = (docKey: string) => {
@@ -191,20 +277,49 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
     return 'Wholesaler';
   };
 
-  // Final Form Submission Handler
-  const handleFinalSubmission = () => {
-    // Auto-confirm for demo environment if not manually checked
-    const confirmed = isAccurateConfirmed || true;
-
+  // Final Form Submission Handler — calls the real backend submit endpoint
+  const handleFinalSubmission = async () => {
+    if (isBusyRef.current || !isAccurateConfirmed) return;
+    isBusyRef.current = true;
     setIsValidating(true);
 
-    // Perform Frontend Auto-Validation Checks
-    const isGstValid = companyInfo.gstNumber.length >= 10;
-    const isPanValid = companyInfo.panNumber.length >= 8;
+    // Perform Frontend Auto-Validation Checks (Any non-empty GST/PAN accepted for testing)
+    const isGstValid = companyInfo.gstNumber.trim().length > 0;
+    const isPanValid = companyInfo.panNumber.trim().length > 0;
     const isDocsValid = validateStep4();
     const isFieldsValid = validateStep1() && validateStep2() && validateStep3();
 
-    setTimeout(() => {
+    try {
+      await buyerRegistrationApi.submitRegistration({
+        registrationCode,
+        companyName: companyInfo.companyName,
+        businessType: companyInfo.businessType,
+        gstNumber: companyInfo.gstNumber,
+        panNumber: companyInfo.panNumber,
+        drugLicenseNumber: companyInfo.drugLicenseNumber,
+        cinNumber: companyInfo.cinNumber || undefined,
+        website: companyInfo.website || undefined,
+        contactPerson: contactInfo.contactPerson,
+        designation: contactInfo.designation,
+        mobileNumber: contactInfo.mobileNumber,
+        email: contactInfo.email,
+        password: contactInfo.password,
+        billingAddress: addressInfo.billingAddress,
+        shippingAddress: addressInfo.shippingAddress,
+        state: addressInfo.state,
+        country: addressInfo.country,
+        pincode: addressInfo.pincode,
+        ...getTypeSpecificDetails(),
+        confirmAccurate: isAccurateConfirmed
+      });
+    } catch (err: any) {
+      setIsValidating(false);
+      isBusyRef.current = false;
+      alert(err?.message || 'Registration submission failed. Please try again.');
+      return;
+    }
+
+    {
       setValidationResults({
         requiredFieldsValid: isFieldsValid,
         gstFormatValid: isGstValid,
@@ -250,10 +365,11 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
 
       setIsValidating(false);
       setIsSubmitted(true);
+      isBusyRef.current = false;
 
       if (onSuccess) onSuccess();
       if (onSubmitSuccess) onSubmitSuccess();
-    }, 1500);
+    }
   };
 
   // Outer Wrapper Styling
@@ -301,12 +417,12 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#F8FAFC' }}>
               <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#16A34A', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11 }}>✓</span>
-              <span>GST Format Validated ({companyInfo.gstNumber})</span>
+              <span>GST Accepted for Testing ({companyInfo.gstNumber}) — Government Verification Pending</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#F8FAFC' }}>
               <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#16A34A', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11 }}>✓</span>
-              <span>PAN Format Validated ({companyInfo.panNumber})</span>
+              <span>PAN Accepted for Testing ({companyInfo.panNumber}) — Government Verification Pending</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#F8FAFC' }}>
@@ -468,6 +584,11 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 6 }}>Email Address *</label>
                     <input type="email" required placeholder="corporate@company.com" value={contactInfo.email} onChange={e => setContactInfo({ ...contactInfo, email: e.target.value })} style={{ width: '100%', height: 40, padding: '0 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 13, outline: 'none', background: isPublicPage ? '#1E293B' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }} />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 6 }}>Account Password *</label>
+                    <input type="password" required placeholder="Create password (min 6 characters)" value={contactInfo.password} onChange={e => setContactInfo({ ...contactInfo, password: e.target.value })} style={{ width: '100%', height: 40, padding: '0 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 13, outline: 'none', background: isPublicPage ? '#1E293B' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }} />
                   </div>
                 </div>
 
@@ -662,6 +783,7 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
                       <div>Designation: <strong>{contactInfo.designation}</strong></div>
                       <div>Mobile: <strong>{contactInfo.mobileNumber}</strong></div>
                       <div>Email: <strong>{contactInfo.email}</strong></div>
+                      <div>Password: <strong>••••••••</strong></div>
                     </div>
                   </div>
 

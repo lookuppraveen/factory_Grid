@@ -1,7 +1,8 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, ForbiddenException, Get } from '@nestjs/common';
 import { ApiBearerAuth, ApiForbiddenResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthUser, CurrentUser, Roles } from '@factorygrid/auth';
 import { ok } from '@factorygrid/errors';
+import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import {
   ErrorResponseDto,
@@ -34,11 +35,20 @@ export class AdminController {
 @Roles('BUYER')
 @Controller('buyer')
 export class BuyerAccessController {
+  constructor(private readonly prisma: PrismaService) {}
+
   @Get('dashboard')
   @ApiOperation({ summary: 'Buyer portal access check' })
   @ApiOkResponse({ type: PortalAccessResponseDto })
   @ApiForbiddenResponse({ type: ErrorResponseDto })
-  dashboard(@CurrentUser() user: AuthUser): PortalAccessResponseDto {
+  async dashboard(@CurrentUser() user: AuthUser): Promise<PortalAccessResponseDto> {
+    const dbUser = await this.prisma.user.findUnique({ where: { id: BigInt(user.id) } });
+    if (!dbUser || dbUser.accountStatus.toUpperCase() !== 'ACTIVE') {
+      throw new ForbiddenException(
+        'Account is pending compliance approval. Ordering and procurement features remain restricted until final verification is complete.',
+      );
+    }
+
     return ok('Buyer portal access granted', {
       portal: 'BUYER',
       accessibleBy: user.username,
@@ -62,11 +72,19 @@ export class BuyerAccessController {
 @Roles('SUPPLIER', 'MANUFACTURER')
 @Controller('manufacturer')
 export class ManufacturerAccessController {
+  constructor(private readonly prisma: PrismaService) {}
+
   @Get('dashboard')
   @ApiOperation({ summary: 'Manufacturer portal access check' })
   @ApiOkResponse({ type: PortalAccessResponseDto })
   @ApiForbiddenResponse({ type: ErrorResponseDto })
-  dashboard(@CurrentUser() user: AuthUser): PortalAccessResponseDto {
+  async dashboard(@CurrentUser() user: AuthUser): Promise<PortalAccessResponseDto> {
+    const dbUser = await this.prisma.user.findUnique({ where: { id: BigInt(user.id) } });
+    if (!dbUser || dbUser.accountStatus.toUpperCase() !== 'ACTIVE') {
+      throw new ForbiddenException(
+        'Account is pending compliance approval. Manufacturing workspace features remain restricted until final verification is complete.',
+      );
+    }
     return ok('Manufacturer portal access granted', {
       portal: 'MANUFACTURER',
       accessibleBy: user.username,

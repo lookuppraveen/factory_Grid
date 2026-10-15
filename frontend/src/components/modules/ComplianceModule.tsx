@@ -39,116 +39,7 @@ export interface VerificationRecord {
   currentReviewer?: string;
 }
 
-const mockVerificationRecords: VerificationRecord[] = [
-  {
-    id: 'ver-1',
-    organizationName: 'Zenith Global Pharma Exporters',
-    type: 'BUYER',
-    gstNumber: '24DDDDD3333D1Z9',
-    licenseNumber: 'GJ-DL-2026-11002 (Form 20B/21B)',
-    expiryDate: '2026-10-15',
-    daysRemaining: 69,
-    submittedDate: '2026-07-28',
-    status: 'PENDING',
-    riskScore: 'LOW',
-    submittedBy: 'Vikram Mehta',
-    currentReviewer: 'Compliance Officer Desk A',
-    documents: [
-      { id: 'd1', name: 'GSTIN_Registration_Certificate.pdf', type: 'GST', status: 'VERIFIED', issuedDate: '2022-04-10', expiryDate: '2027-04-10', url: '#' },
-      { id: 'd2', name: 'Drug_License_Form_20B_21B.pdf', type: 'DRUG_LICENSE', status: 'PENDING', issuedDate: '2021-10-15', expiryDate: '2026-10-15', url: '#' },
-      { id: 'd3', name: 'Board_Resolution_Authorization.pdf', type: 'TRADEMARK', status: 'VERIFIED', issuedDate: '2026-01-05', expiryDate: '2028-01-05', url: '#' }
-    ],
-    auditNotes: [
-      'GSTIN active & verified against GST portal.',
-      'Form 20B/21B license pending officer physical stamp verification.'
-    ]
-  },
-  {
-    id: 'ver-2',
-    organizationName: 'NovaMed Formulations Pvt Ltd',
-    type: 'MANUFACTURER',
-    gstNumber: '02MMM3344K1Z2',
-    licenseNumber: 'HP-MFG-2023-44102 (Form 25/28)',
-    expiryDate: '2026-09-20',
-    daysRemaining: 44,
-    submittedDate: '2026-08-01',
-    status: 'UNDER_REVIEW',
-    riskScore: 'LOW',
-    submittedBy: 'Dr. Rajesh Vardhan',
-    currentReviewer: 'Compliance Officer Desk B',
-    documents: [
-      { id: 'd4', name: 'WHO_GMP_Master_Certificate.pdf', type: 'WHO_GMP', status: 'VERIFIED', issuedDate: '2023-09-20', expiryDate: '2026-09-20', url: '#' },
-      { id: 'd5', name: 'Manufacturing_License_Baddi.pdf', type: 'MFG_LICENSE', status: 'VERIFIED', issuedDate: '2023-01-15', expiryDate: '2028-01-15', url: '#' },
-      { id: 'd6', name: 'Pollution_Control_NOC.pdf', type: 'GST', status: 'VERIFIED', issuedDate: '2024-03-01', expiryDate: '2027-03-01', url: '#' }
-    ],
-    auditNotes: [
-      'WHO-GMP certificate expiring within 44 days.',
-      'Factory inspection report cleared.'
-    ]
-  },
-  {
-    id: 'ver-3',
-    organizationName: 'Apex Pharma Labs Ltd',
-    type: 'BUYER',
-    gstNumber: '36APXPH0001A1Z5',
-    licenseNumber: 'TS-DL-2024-88912',
-    expiryDate: '2028-05-30',
-    daysRemaining: 662,
-    submittedDate: '2026-06-15',
-    status: 'APPROVED',
-    riskScore: 'LOW',
-    submittedBy: 'Dr. Vikram Sethi',
-    currentReviewer: 'Lead Auditor Desk',
-    documents: [
-      { id: 'd7', name: 'Apex_GSTIN_Active.pdf', type: 'GST', status: 'VERIFIED', issuedDate: '2021-05-30', expiryDate: '2028-05-30', url: '#' },
-      { id: 'd8', name: 'Drug_License_TS_Form20B.pdf', type: 'DRUG_LICENSE', status: 'VERIFIED', issuedDate: '2023-05-30', expiryDate: '2028-05-30', url: '#' }
-    ],
-    auditNotes: [
-      'Account approved. Official Buyer Code BUY-2026-101 allocated.'
-    ]
-  },
-  {
-    id: 'ver-4',
-    organizationName: 'SunBio LifeSciences Ltd',
-    type: 'MANUFACTURER',
-    gstNumber: '02SUNBI0001A1Z8',
-    licenseNumber: 'ML-HP-2024-001',
-    expiryDate: '2026-09-15',
-    daysRemaining: 39,
-    submittedDate: '2026-05-20',
-    status: 'APPROVED',
-    riskScore: 'LOW',
-    submittedBy: 'Rajesh Sharma',
-    currentReviewer: 'Lead Auditor Desk',
-    documents: [
-      { id: 'd9', name: 'WHO_GMP_SunBio_2024.pdf', type: 'WHO_GMP', status: 'VERIFIED', issuedDate: '2024-09-15', expiryDate: '2026-09-15', url: '#' },
-      { id: 'd10', name: 'Form_25_Form_28_License.pdf', type: 'MFG_LICENSE', status: 'VERIFIED', issuedDate: '2024-01-10', expiryDate: '2029-01-10', url: '#' }
-    ],
-    auditNotes: [
-      'WHO-GMP renewal notice dispatched.'
-    ]
-  },
-  {
-    id: 'ver-5',
-    organizationName: 'Unverified Trader Network',
-    type: 'BUYER',
-    gstNumber: '09UNV8899K1Z1',
-    licenseNumber: 'EXPIRED-DL-2020',
-    expiryDate: '2025-12-31',
-    daysRemaining: -219,
-    submittedDate: '2026-07-10',
-    status: 'REJECTED',
-    riskScore: 'HIGH',
-    submittedBy: 'Amit Verma',
-    currentReviewer: 'Compliance Desk C',
-    documents: [
-      { id: 'd11', name: 'Expired_Drug_License.pdf', type: 'DRUG_LICENSE', status: 'REJECTED', issuedDate: '2020-01-01', expiryDate: '2025-12-31', url: '#' }
-    ],
-    auditNotes: [
-      'Rejected due to expired Drug License Form 20B.'
-    ]
-  }
-];
+const mockVerificationRecords: VerificationRecord[] = [];
 
 export const AIComplianceResultCard: React.FC<{ finding: AIComplianceFinding; onClose?: () => void }> = ({ finding, onClose }) => {
   return (
@@ -278,7 +169,7 @@ export const ComplianceModule: React.FC = () => {
         auditNotes: ['Manufacturer plant onboarding document verification pending.']
       }))
     ];
-    return [...mockVerificationRecords, ...contextRecords];
+    return contextRecords;
   });
 
   const [drawerRecordId, setDrawerRecordId] = useState<string | null>(null);
@@ -429,6 +320,28 @@ export const ComplianceModule: React.FC = () => {
         return <span style={{ fontSize: 12 }}>{status}</span>;
     }
   };
+
+  if (activeComplianceSubTab === 'CUSTOMER_VERIFICATION') {
+    return (
+      <div>
+        <div style={{ background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', padding: '12px 24px', display: 'flex', gap: 12 }}>
+          <button onClick={() => setActiveComplianceSubTab('CUSTOMER_VERIFICATION')} style={{ height: 32, padding: '0 14px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: '#1D4ED8', color: '#FFF', border: 'none', cursor: 'pointer' }}>
+            Customer (Buyer) Verification Desk
+          </button>
+          <button onClick={() => setActiveComplianceSubTab('MANUFACTURER_VERIFICATION')} style={{ height: 32, padding: '0 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: '#FFFFFF', border: '1px solid #CBD5E1', cursor: 'pointer' }}>
+            Manufacturer Onboarding Verification
+          </button>
+          <button onClick={() => setActiveComplianceSubTab('TRADEMARK_VERIFICATION')} style={{ height: 32, padding: '0 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: '#FFFFFF', border: '1px solid #CBD5E1', cursor: 'pointer' }}>
+            Trademark (TM) Verification
+          </button>
+          <button onClick={() => setActiveComplianceSubTab('BRAND_VERIFICATION')} style={{ height: 32, padding: '0 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: '#FFFFFF', border: '1px solid #CBD5E1', cursor: 'pointer' }}>
+            Brand Verification Workflow
+          </button>
+        </div>
+        <CustomerVerificationModule />
+      </div>
+    );
+  }
 
   if (activeComplianceSubTab === 'MANUFACTURER_VERIFICATION') {
     return (

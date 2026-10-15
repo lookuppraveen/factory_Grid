@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { adminVerificationApi } from '../../services/adminVerificationApi';
+import { analyzeComplianceDocument, AIComplianceFinding } from '../../services/aiComplianceService';
 import {
   CustomerVerificationRequest,
   CustomerVerificationStatus,
@@ -18,7 +20,7 @@ import {
   Eye, ChevronRight, X, Clock, FileText, Download, RefreshCw,
   UserCheck, Building2, Upload, FileCheck, Filter, User, HelpCircle,
   Key, ArrowRight, AlertCircle, Plus, Check, Mail, Phone, MapPin, Award, Globe,
-  Star, Tag
+  Star, Tag, ExternalLink
 } from 'lucide-react';
 
 const REQUIRED_DOC_TYPES: CustomerVerificationDocumentType[] = [
@@ -103,16 +105,12 @@ const AIComplianceResultCard: React.FC<{ finding: AIComplianceFinding; onClose?:
 };
 
 export const CustomerVerificationModule: React.FC = () => {
-  const {
-    customerVerifications,
-    submitCustomerVerificationRequest,
-    assignComplianceOfficer,
-    approveCustomerVerification,
-    rejectCustomerVerification,
-    requestMoreCustomerDocs,
-    resubmitCustomerDocs,
-    updateCustomerClassification
-  } = useApp();
+  const { addAuditLog } = useApp();
+
+  const [records, setRecords] = useState<CustomerVerificationRequest[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
 
   // Filters & Tabs
   const [activeStatusTab, setActiveStatusTab] = useState<string>('ALL');
@@ -131,9 +129,88 @@ export const CustomerVerificationModule: React.FC = () => {
 
   // Selected Detail Drawer Record
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+
+  const loadVerifications = async () => {
+    setIsLoading(true);
+    setApiError(null);
+    try {
+      const data = await adminVerificationApi.listCustomerVerifications();
+      const list = Array.isArray(data) ? data : [];
+      setRecords(list);
+      if (list.length > 0) {
+        setSelectedRecordId(prev => prev && list.some(r => r.id === prev || r.requestCode === prev) ? prev : (list[0].requestCode || list[0].id));
+      } else {
+        setSelectedRecordId(null);
+      }
+    } catch (err: any) {
+      setApiError(err.message || 'Failed to fetch verification records from database.');
+      setRecords([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadVerifications();
+  }, []);
+
+  // Fetch full details when selected record changes
+  useEffect(() => {
+    if (!selectedRecordId) return;
+    adminVerificationApi.getCustomerVerification(selectedRecordId)
+      .then(fullRec => {
+        if (fullRec) {
+          setRecords(prev => prev.map(r => (r.id === fullRec.id || r.requestCode === fullRec.requestCode) ? fullRec : r));
+        }
+      })
+      .catch(() => {});
+  }, [selectedRecordId]);
   
   // Document Viewing Modal State
   const [viewingDoc, setViewingDoc] = useState<CustomerVerificationDocument | null>(null);
+  const [docBlobUrl, setDocBlobUrl] = useState<string | null>(null);
+  const [docBlobType, setDocBlobType] = useState<string>('application/pdf');
+  const [isDocLoading, setIsDocLoading] = useState<boolean>(false);
+  const [docLoadError, setDocLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!viewingDoc) {
+      if (docBlobUrl) {
+        URL.revokeObjectURL(docBlobUrl);
+        setDocBlobUrl(null);
+      }
+      setDocLoadError(null);
+      setIsDocLoading(false);
+      return;
+    }
+
+    let active = true;
+    setIsDocLoading(true);
+    setDocLoadError(null);
+
+    const targetUrl = (viewingDoc as any).url || (viewingDoc as any).downloadUrl || `/api/v1/compliance/documents/${viewingDoc.id}/download`;
+
+    adminVerificationApi.getDocumentBlob(targetUrl)
+      .then(({ blobUrl, contentType }) => {
+        if (!active) {
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+        setDocBlobUrl(blobUrl);
+        setDocBlobType(contentType);
+        setIsDocLoading(false);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setIsDocLoading(false);
+        setDocLoadError(err.message || 'Document file not found in storage.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [viewingDoc]);
+
   const [aiResultsMap, setAiResultsMap] = useState<Record<string, AIComplianceFinding>>({});
   const [analyzingDocType, setAnalyzingDocType] = useState<string | null>(null);
 
@@ -142,7 +219,7 @@ export const CustomerVerificationModule: React.FC = () => {
       setAnalyzingDocType(docType);
       const res = await analyzeComplianceDocument(docType, docType, { name: rec.companyName, gstin: rec.gstNumber, licenseNumber: rec.drugLicenseNumber, address: rec.billingAddress });
       setAiResultsMap(prev => ({ ...prev, [docType]: res }));
-    } catch (e) {
+    } catch {
       alert("AI analysis unavailable. You may proceed with manual compliance verification.");
     } finally {
       setAnalyzingDocType(null);
@@ -154,7 +231,6 @@ export const CustomerVerificationModule: React.FC = () => {
   
   // Registration Form State
   const [formData, setFormData] = useState({
-    // Company Info
     companyName: '',
     businessType: 'Private Limited',
     gstNumber: '',
@@ -162,24 +238,16 @@ export const CustomerVerificationModule: React.FC = () => {
     drugLicenseNumber: '',
     cinNumber: '',
     website: '',
-
-    // Contact Info
     contactPerson: '',
     designation: 'Procurement Head',
     mobileNumber: '',
     email: '',
-
-    // Address Info
     billingAddress: '',
     shippingAddress: '',
     state: 'Delhi',
     country: 'India',
     pincode: '',
-
-    // Customer Type
     customerType: 'PCD' as CustomerType,
-
-    // Type-Specific Fields
     pcd: { territory: 'North Zone', state: 'Delhi NCR', district: 'South Delhi', monopolyRights: true, brandPortfolio: 'Cardiology, Diabetology' } as PCDDetails,
     tpm: { brandName: 'Brand Formulations', packagingRequirements: 'Alu-Alu Packaging', artworkApproval: true, regulatoryRequirements: 'Form 25/28 License', moqAgreement: true } as TPMDetails,
     distributor: { distributionTerritory: 'Regional State', salesChannel: 'Retail Pharmacy & Hospitals', warehouseLocations: 'Central Warehouse (10,000 sq ft)' } as DistributorDetails,
@@ -188,24 +256,7 @@ export const CustomerVerificationModule: React.FC = () => {
     wholesaler: { storageCapacitySqFt: '5,000 sq ft', coldChainStorage: true, networkSize: '25 Retail Stores' } as WholesalerDetails
   });
 
-  const [uploadedFilesMap, setUploadedFilesMap] = useState<Record<string, { fileName: string; fileSize: string }>>({
-    'GST Certificate': { fileName: 'GSTIN_Registration_Certificate.pdf', fileSize: '1.2 MB' },
-    'PAN Card': { fileName: 'Company_PAN_Card.pdf', fileSize: '780 KB' },
-    'Drug License': { fileName: 'Form_20B_21B_License.pdf', fileSize: '2.4 MB' },
-    'Incorporation Certificate': { fileName: 'ROC_Incorporation_Cert.pdf', fileSize: '1.8 MB' },
-    'Bank Details': { fileName: 'Bank_Verification_Letter_HDFC.pdf', fileSize: '850 KB' },
-    'Authorized Signatory Details': { fileName: 'Board_Resolution_Signatory_Auth.pdf', fileSize: '1.4 MB' }
-  });
-
-  // Document Status State Mapping
-  const [docStatusesMap, setDocStatusesMap] = useState<Record<string, 'Pending' | 'Under Review' | 'Verified' | 'Rejected' | 'Need Replacement'>>({
-    'GST Certificate': 'Verified',
-    'PAN Card': 'Verified',
-    'Drug License': 'Under Review',
-    'Incorporation Certificate': 'Verified',
-    'Bank Details': 'Verified',
-    'Authorized Signatory Details': 'Verified'
-  });
+  const [uploadedFilesMap, setUploadedFilesMap] = useState<Record<string, { fileName: string; fileSize: string }>>({});
 
   // Decision Dialog States
   const [decisionModalType, setDecisionModalType] = useState<'APPROVE' | 'REJECT' | 'NEED_MORE_DOCS' | null>(null);
@@ -216,21 +267,21 @@ export const CustomerVerificationModule: React.FC = () => {
   const [isResubmitModalOpen, setIsResubmitModalOpen] = useState<boolean>(false);
   const [resubmitDocsList, setResubmitDocsList] = useState<CustomerVerificationDocument[]>([]);
 
-  // Selected Record Object
-  const selectedRecord = customerVerifications.find(r => r.id === selectedRecordId) || null;
+  // Selected Record Object from DB records
+  const selectedRecord = records.find(r => r.id === selectedRecordId || r.requestCode === selectedRecordId) || null;
 
   // Counts for KPI Strip
   const counts = {
-    total: customerVerifications.length,
-    pending: customerVerifications.filter(r => r.verificationStatus === 'Pending').length,
-    underReview: customerVerifications.filter(r => r.verificationStatus === 'Under Review').length,
-    approved: customerVerifications.filter(r => r.verificationStatus === 'Approved' || r.verificationStatus === 'Active').length,
-    needMoreDocs: customerVerifications.filter(r => r.verificationStatus === 'Need More Docs').length,
-    rejected: customerVerifications.filter(r => r.verificationStatus === 'Rejected').length,
+    total: records.length,
+    pending: records.filter(r => r.verificationStatus === 'Pending').length,
+    underReview: records.filter(r => r.verificationStatus === 'Under Review').length,
+    approved: records.filter(r => r.verificationStatus === 'Approved' || r.verificationStatus === 'Active').length,
+    needMoreDocs: records.filter(r => r.verificationStatus === 'Need More Docs').length,
+    rejected: records.filter(r => r.verificationStatus === 'Rejected').length,
   };
 
   // Filtered Listing
-  const filteredRecords = customerVerifications.filter(r => {
+  const filteredRecords = records.filter(r => {
     const matchSearch = r.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       r.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       r.gstNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -254,76 +305,133 @@ export const CustomerVerificationModule: React.FC = () => {
   });
 
   // Handle Registration Form Submit
-  const handleCreateRequestSubmit = (e: React.FormEvent) => {
+  const handleCreateRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    const docs: CustomerVerificationDocument[] = REQUIRED_DOC_TYPES.map((docType, idx) => {
-      const fileInfo = uploadedFilesMap[docType] || { fileName: `${docType.replace(/\s+/g, '_')}.pdf`, fileSize: '1.0 MB' };
-      return {
-        id: `doc_${Date.now()}_${idx}`,
-        documentType: docType,
-        fileName: fileInfo.fileName,
-        fileSize: fileInfo.fileSize,
-        uploadedAt: new Date().toISOString().split('T')[0],
-        status: 'Valid',
-        url: '#'
-      };
-    });
-
-    submitCustomerVerificationRequest({
-      customerName: formData.contactPerson,
-      companyName: formData.companyName,
-      customerType: formData.customerType,
-      businessType: formData.businessType,
-      gstNumber: formData.gstNumber,
-      panNumber: formData.panNumber,
-      drugLicenseNumber: formData.drugLicenseNumber,
-      cinNumber: formData.cinNumber,
-      website: formData.website,
-      contactPerson: formData.contactPerson,
-      designation: formData.designation,
-      mobileNumber: formData.mobileNumber,
-      email: formData.email,
-      billingAddress: formData.billingAddress,
-      shippingAddress: formData.shippingAddress || formData.billingAddress,
-      state: formData.state,
-      country: formData.country,
-      pincode: formData.pincode,
-      pcdDetails: formData.customerType === 'PCD' ? formData.pcd : undefined,
-      tpmDetails: formData.customerType === 'TPM' ? formData.tpm : undefined,
-      distributorDetails: formData.customerType === 'Distributor' ? formData.distributor : undefined,
-      hospitalDetails: formData.customerType === 'Hospital' ? formData.hospital : undefined,
-      exportDetails: formData.customerType === 'Export' ? formData.export : undefined,
-      wholesalerDetails: formData.customerType === 'Wholesaler' ? formData.wholesaler : undefined,
-      documents: docs
-    });
-
-    setIsNewRequestModalOpen(false);
-    alert('✔ Customer Registration Request submitted successfully! Documents attached, auto-validation cleared, routed to Compliance Officer (Under Review).');
+    setIsActionLoading(true);
+    try {
+      setToastMessage('For manual registrations, please use the Buyer Registration Portal.');
+      setIsNewRequestModalOpen(false);
+      await loadVerifications();
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
-  // Decision Execution Handlers
-    const handleExecuteApprove = () => {
+  // Decision Execution Handlers with Real Backend Integration
+  const handleExecuteApprove = async () => {
     if (!selectedRecord) return;
-    approveCustomerVerification(selectedRecord.id);
-    setDecisionModalType(null);
+    setIsActionLoading(true);
+    try {
+      const targetCode = selectedRecord.requestCode || selectedRecord.id;
+      const updated = await adminVerificationApi.approveCustomerVerification(targetCode);
+      setToastMessage(`✓ Successfully approved ${selectedRecord.companyName}. Customer Code: ${updated.customerCode || 'Issued'}`);
+      addAuditLog('Customer Verification', `Approved ${selectedRecord.companyName} (${targetCode})`);
+      setDecisionModalType(null);
+      await loadVerifications();
+    } catch (err: any) {
+      alert(`Approval failed: ${err.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
-  const handleExecuteReject = () => {
+  const handleExecuteReject = async () => {
     if (!selectedRecord) return;
-    const reason = rejectionReasonInput.trim() || 'Statutory compliance verification rejected by compliance auditor';
-    rejectCustomerVerification(selectedRecord.id, reason);
-    setDecisionModalType(null);
-    setRejectionReasonInput('');
+    const reason = rejectionReasonInput.trim();
+    if (!reason) {
+      alert('A specific rejection reason is required.');
+      return;
+    }
+    setIsActionLoading(true);
+    try {
+      const targetCode = selectedRecord.requestCode || selectedRecord.id;
+      await adminVerificationApi.rejectCustomerVerification(targetCode, reason);
+      setToastMessage(`Rejection recorded for ${selectedRecord.companyName}. Registrant notified to re-upload.`);
+      addAuditLog('Customer Verification', `Rejected ${selectedRecord.companyName} (${targetCode}): ${reason}`);
+      setDecisionModalType(null);
+      setRejectionReasonInput('');
+      await loadVerifications();
+    } catch (err: any) {
+      alert(`Rejection failed: ${err.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
-  const handleExecuteNeedMoreDocs = () => {
+  const handleExecuteNeedMoreDocs = async () => {
     if (!selectedRecord) return;
-    const notesInput = moreDocsNotesInput.trim() || 'Drug License / GST Certificate clarification required';
+    const notesInput = moreDocsNotesInput.trim() || 'Additional regulatory documents / clarification required';
     const notesArray = notesInput.split('\n').filter(n => n.trim().length > 0);
-    requestMoreCustomerDocs(selectedRecord.id, notesArray);
-    setDecisionModalType(null);
-    setMoreDocsNotesInput('');
+    setIsActionLoading(true);
+    try {
+      const targetCode = selectedRecord.requestCode || selectedRecord.id;
+      await adminVerificationApi.requestMoreCustomerDocs(targetCode, notesArray);
+      setToastMessage(`Requested additional documents for ${selectedRecord.companyName}.`);
+      setDecisionModalType(null);
+      setMoreDocsNotesInput('');
+      await loadVerifications();
+    } catch (err: any) {
+      alert(`Request more docs failed: ${err.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleAssignOfficer = async (officer: string) => {
+    if (!selectedRecord) return;
+    try {
+      const targetCode = selectedRecord.requestCode || selectedRecord.id;
+      await adminVerificationApi.assignCustomerOfficer(targetCode, officer);
+      setToastMessage(`Case assigned to ${officer}`);
+      await loadVerifications();
+    } catch (err: any) {
+      alert(`Officer assignment failed: ${err.message}`);
+    }
+  };
+
+  const handleUpdateClassification = async (recordId: string, classification: 'REGULAR' | 'SPECIAL_PARTY') => {
+    try {
+      await adminVerificationApi.updateCustomerClassification(recordId, classification);
+      setToastMessage(`Customer classification updated to ${classification === 'SPECIAL_PARTY' ? 'Special Party' : 'Regular'}`);
+      setClassificationConfirmModal(null);
+      await loadVerifications();
+    } catch (err: any) {
+      alert(`Classification update failed: ${err.message}`);
+    }
+  };
+
+  const handleReviewDocument = async (docId: string, docName: string, decision: 'APPROVED' | 'REJECTED' | 'NEEDS_REPLACEMENT', promptReason?: boolean) => {
+    if (!selectedRecord) return;
+    let reason: string | undefined = undefined;
+    if (promptReason || decision === 'REJECTED' || decision === 'NEEDS_REPLACEMENT') {
+      const promptText = decision === 'REJECTED' ? `Enter mandatory reason for rejecting ${docName}:` : `Enter replacement instructions for ${docName}:`;
+      const input = window.prompt(promptText)?.trim();
+      if (!input) {
+        alert('A valid reason is required for rejection or replacement.');
+        return;
+      }
+      reason = input;
+    }
+
+    try {
+      const targetCode = selectedRecord.requestCode || selectedRecord.id;
+      await adminVerificationApi.reviewCustomerDocument(targetCode, docId, decision, reason);
+      setToastMessage(`Document ${docName} marked as ${decision === 'APPROVED' ? 'Verified' : decision === 'REJECTED' ? 'Rejected' : 'Needs Replacement'}`);
+      setViewingDoc(prev => (prev && prev.id === docId) ? {
+        ...prev,
+        status: decision === 'APPROVED' ? 'Valid' : decision === 'REJECTED' ? 'Invalid' : 'Pending',
+        rejectionReason: reason || null,
+      } : prev);
+      await loadVerifications();
+      if (selectedRecordId) {
+        const refreshed = await adminVerificationApi.getCustomerVerification(selectedRecordId);
+        if (refreshed) {
+          setRecords(prev => prev.map(r => (r.id === refreshed.id || r.requestCode === refreshed.requestCode) ? refreshed : r));
+        }
+      }
+    } catch (err: any) {
+      alert(`Document review failed: ${err.message}`);
+    }
   };
 
   const handleOpenResubmit = () => {
@@ -333,10 +441,8 @@ export const CustomerVerificationModule: React.FC = () => {
   };
 
   const handleExecuteResubmit = () => {
-    if (!selectedRecord) return;
-    resubmitCustomerDocs(selectedRecord.id, resubmitDocsList);
     setIsResubmitModalOpen(false);
-    alert('✔ Customer documents re-submitted! Workflow returned to Compliance Officer (Under Review).');
+    loadVerifications();
   };
 
   // Status Badge Rendering Helper
@@ -407,6 +513,29 @@ export const CustomerVerificationModule: React.FC = () => {
               Customer registration → Document submission → Business verification → Regulatory verification → Financial verification → Approval
             </div>
           </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={loadVerifications}
+            disabled={isLoading}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #CBD5E1',
+              background: '#FFFFFF',
+              color: '#0F172A',
+              fontSize: 12.5,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            {isLoading ? 'Syncing...' : '↻ Refresh from Database'}
+          </button>
         </div>
       </div>
 
@@ -850,125 +979,115 @@ export const CustomerVerificationModule: React.FC = () => {
                 </div>
               </div>
 
-              {/* 7. DOCUMENT VERIFICATION (6 Required Documents) */}
+              {/* 7. DOCUMENT VERIFICATION */}
               <div id="doc-verification-section" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>DOCUMENT VERIFICATION (6 REQUIRED)</span>
+                  <span>DOCUMENT VERIFICATION ({selectedRecord.documents?.length || 0} SUBMITTED)</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '2px 8px', borderRadius: 4 }}>
-                    6 / 6 Statutory Customer Documents
+                    Live PostgreSQL Compliance Records
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {REQUIRED_DOC_TYPES.map(docType => {
-                    const docNumber = docType === 'GST Certificate' ? selectedRecord.gstNumber :
-                      docType === 'PAN Card' ? selectedRecord.panNumber :
-                      docType === 'Drug License' ? selectedRecord.drugLicenseNumber :
-                      docType === 'Incorporation Certificate' ? selectedRecord.cinNumber :
-                      docType === 'Bank Details' ? 'HDFC0001204 / A/C 91823901' : 'BR-2026-08 (Board Resolution)';
+                  {(!selectedRecord.documents || selectedRecord.documents.length === 0) ? (
+                    <div style={{ padding: '24px', textAlign: 'center', background: '#F8FAFC', borderRadius: 8, border: '1px dashed #CBD5E1', color: '#64748B', fontSize: 12.5 }}>
+                      No documents uploaded yet for this customer registration. Registrant can upload compliance documents via Buyer Portal.
+                    </div>
+                  ) : (
+                    selectedRecord.documents.map((docItem: any) => {
+                      const docType = docItem.documentType || docItem.category || 'Regulatory Document';
+                      const currentStatus = docItem.verificationStatus || (docItem.status === 'Valid' ? 'APPROVED' : docItem.status === 'Invalid' ? 'REJECTED' : 'PENDING');
+                      const isVerified = currentStatus === 'APPROVED' || currentStatus === 'Verified';
+                      const isRejected = currentStatus === 'REJECTED' || currentStatus === 'Rejected';
+                      const isReplacement = currentStatus === 'NEEDS_REPLACEMENT' || currentStatus === 'Need Replacement';
 
-                    const expiryDate = docType === 'Drug License' ? '2027-12-31' : 'N/A (Permanent)';
-                    const currentDocStatus = docStatusesMap[docType] || 'Verified';
-
-                    const docItem: CustomerVerificationDocument = {
-                      id: `doc_${docType.replace(/\s+/g, '_')}`,
-                      documentType: docType,
-                      fileName: `${docType.replace(/\s+/g, '_')}_Official.pdf`,
-                      fileSize: '1.4 MB',
-                      uploadedAt: selectedRecord.registrationDate,
-                      status: currentDocStatus === 'Verified' ? 'Valid' : currentDocStatus === 'Rejected' ? 'Invalid' : 'Pending',
-                      url: '#'
-                    };
-
-                    return (
-                      <div key={docType} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(29, 78, 216, 0.08)', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              <FileText size={18} />
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <span>{docType}</span>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '1px 6px', borderRadius: 4 }}>
-                                  ✓ Submitted
-                                </span>
+                      return (
+                        <div key={docItem.id} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(29, 78, 216, 0.08)', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <FileText size={18} />
                               </div>
-                              <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
-                                Doc No: <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{docNumber}</strong> • Expiry: <strong>{expiryDate}</strong> • Uploaded By: <strong>Customer Representative</strong>
+                              <div>
+                                <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span>{docType}</span>
+                                  <span style={{
+                                    fontSize: 10, fontWeight: 700,
+                                    color: isVerified ? '#10B981' : isRejected ? '#DC2626' : isReplacement ? '#DB2777' : '#D97706',
+                                    background: isVerified ? 'rgba(16, 185, 129, 0.1)' : isRejected ? '#FEF2F2' : isReplacement ? '#FDF2F8' : '#FFFBEB',
+                                    padding: '1px 6px', borderRadius: 4
+                                  }}>
+                                    {isVerified ? '✓ Verified' : isRejected ? '✕ Rejected' : isReplacement ? '⚠ Needs Replacement' : '⏳ Pending Review'}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                                  File: <strong style={{ color: '#0F172A' }}>{docItem.fileName}</strong> ({docItem.fileSize || '1.2 MB'}) • Uploaded: <strong>{new Date(docItem.uploadedAt).toLocaleDateString()}</strong>
+                                </div>
+                                {docItem.rejectionReason && (
+                                  <div style={{ marginTop: 4, fontSize: 11.5, color: '#DC2626', background: '#FEF2F2', padding: '3px 8px', borderRadius: 4, border: '1px solid #FECACA', display: 'inline-block' }}>
+                                    <strong>Rejection Reason:</strong> {docItem.rejectionReason}
+                                  </div>
+                                )}
                               </div>
                             </div>
-                          </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{
-                              padding: '4px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800,
-                              background: currentDocStatus === 'Verified' ? '#F0FDF4' : currentDocStatus === 'Rejected' ? '#FEF2F2' : currentDocStatus === 'Need Replacement' ? '#FDF2F8' : '#EFF6FF',
-                              color: currentDocStatus === 'Verified' ? '#16A34A' : currentDocStatus === 'Rejected' ? '#DC2626' : currentDocStatus === 'Need Replacement' ? '#DB2777' : '#1D4ED8',
-                              border: `1px solid ${currentDocStatus === 'Verified' ? '#BBF7D0' : currentDocStatus === 'Rejected' ? '#FECACA' : currentDocStatus === 'Need Replacement' ? '#FBCFE8' : '#BFDBFE'}`
-                            }}>
-                              Status: {currentDocStatus}
-                            </span>
-
-                            <button
-                              onClick={() => handleRunCustomerAiAnalysis(docType, selectedRecord)}
-                              disabled={analyzingDocType === docType}
-                              style={{
-                                padding: '5px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 700,
-                                background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #93C5FD',
-                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
-                              }}
-                            >
-                              <Sparkles size={12} /> {analyzingDocType === docType ? 'Analyzing...' : 'AI Analyse'}
-                            </button>
-
-                            <button
-                              onClick={() => setViewingDoc(docItem)}
-                              style={{
-                                height: 32, padding: '0 12px', background: '#1D4ED8', border: 'none', borderRadius: 6,
-                                fontSize: 11.5, fontWeight: 700, color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
-                              }}
-                            >
-                              <Eye size={13} /> View Document
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Inline Document Review Action Buttons (Hidden when Verified) */}
-                        {currentDocStatus !== 'Verified' && (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 6, borderTop: '1px solid #F1F5F9' }}>
-                            <button
-                              onClick={() => {
-                                setDocStatusesMap(prev => ({ ...prev, [docType]: 'Verified' }));
-                              }}
-                              style={{ height: 28, padding: '0 12px', borderRadius: 5, background: '#16A34A', color: '#FFFFFF', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                            >
-                              ✓ Verify
-                            </button>
-                            
-                            {currentDocStatus !== 'Rejected' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <button
-                                onClick={() => {
-                                  setDocStatusesMap(prev => ({ ...prev, [docType]: 'Rejected' }));
+                                onClick={() => handleRunCustomerAiAnalysis(docType, selectedRecord)}
+                                disabled={analyzingDocType === docType}
+                                style={{
+                                  padding: '5px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 700,
+                                  background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #93C5FD',
+                                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
                                 }}
+                              >
+                                <Sparkles size={12} /> {analyzingDocType === docType ? 'Analyzing...' : 'AI Analyse'}
+                              </button>
+
+                              <button
+                                onClick={() => setViewingDoc(docItem)}
+                                style={{
+                                  height: 32, padding: '0 12px', background: '#1D4ED8', border: 'none', borderRadius: 6,
+                                  fontSize: 11.5, fontWeight: 700, color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
+                                }}
+                              >
+                                <Eye size={13} /> View Document
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Inline Document Review Action Buttons */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 6, borderTop: '1px solid #F1F5F9' }}>
+                            {!isVerified && (
+                              <button
+                                onClick={() => handleReviewDocument(docItem.id, docType, 'APPROVED')}
+                                style={{ height: 28, padding: '0 12px', borderRadius: 5, background: '#16A34A', color: '#FFFFFF', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                              >
+                                ✓ Verify
+                              </button>
+                            )}
+                            
+                            {!isRejected && (
+                              <button
+                                onClick={() => handleReviewDocument(docItem.id, docType, 'REJECTED', true)}
                                 style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
                               >
                                 ✕ Reject
                               </button>
                             )}
 
-                            <button
-                              onClick={() => {
-                                setDocStatusesMap(prev => ({ ...prev, [docType]: 'Need Replacement' }));
-                              }}
-                              style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                            >
-                              Request Replacement
-                            </button>
+                            {!isReplacement && (
+                              <button
+                                onClick={() => handleReviewDocument(docItem.id, docType, 'NEEDS_REPLACEMENT', true)}
+                                style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                              >
+                                Request Replacement
+                              </button>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
@@ -1008,33 +1127,68 @@ export const CustomerVerificationModule: React.FC = () => {
               <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>BUSINESS VERIFICATION</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: 4 }}>
-                    4 / 4 Checks Passed
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? '#10B981' : '#D97706',
+                    background: selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
+                    padding: '2px 8px',
+                    borderRadius: 4
+                  }}>
+                    {selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? 'Verified' : 'Pending Manual Review'}
                   </span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, fontSize: 12.5 }}>
                   <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#64748B', fontWeight: 600 }}>1. GST Active Status</span>
-                    <span style={{ fontWeight: 800, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: 4 }}>
-                      Verified
+                    <span style={{
+                      fontWeight: 700,
+                      color: selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? '#10B981' : '#D97706',
+                      background: selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: 11
+                    }}>
+                      {selectedRecord.businessVerification?.gstActiveStatus || 'Pending Manual Review'}
                     </span>
                   </div>
                   <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#64748B', fontWeight: 600 }}>2. PAN Validation</span>
-                    <span style={{ fontWeight: 800, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: 4 }}>
-                      Verified
+                    <span style={{
+                      fontWeight: 700,
+                      color: selectedRecord.businessVerification?.panValidation === 'Verified' ? '#10B981' : '#D97706',
+                      background: selectedRecord.businessVerification?.panValidation === 'Verified' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: 11
+                    }}>
+                      {selectedRecord.businessVerification?.panValidation || 'Pending Manual Review'}
                     </span>
                   </div>
                   <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#64748B', fontWeight: 600 }}>3. Company Registration (ROC)</span>
-                    <span style={{ fontWeight: 800, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: 4 }}>
-                      Verified
+                    <span style={{
+                      fontWeight: 700,
+                      color: selectedRecord.businessVerification?.companyRegistrationValidation?.includes('Verified') ? '#10B981' : '#D97706',
+                      background: selectedRecord.businessVerification?.companyRegistrationValidation?.includes('Verified') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: 11
+                    }}>
+                      {selectedRecord.businessVerification?.companyRegistrationValidation || 'Pending Manual Review'}
                     </span>
                   </div>
                   <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#64748B', fontWeight: 600 }}>4. CIN Validation</span>
-                    <span style={{ fontWeight: 800, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: 4 }}>
-                      Verified
+                    <span style={{
+                      fontWeight: 700,
+                      color: selectedRecord.businessVerification?.cinValidation?.includes('Verified') ? '#10B981' : '#D97706',
+                      background: selectedRecord.businessVerification?.cinValidation?.includes('Verified') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: 11
+                    }}>
+                      {selectedRecord.businessVerification?.cinValidation || (selectedRecord.cinNumber ? 'Pending Manual Review' : 'N/A')}
                     </span>
                   </div>
                 </div>
@@ -1044,27 +1198,58 @@ export const CustomerVerificationModule: React.FC = () => {
               <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>REGULATORY VERIFICATION</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: 4 }}>
-                    3 / 3 Checks Passed
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? '#10B981' : '#D97706',
+                    background: selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
+                    padding: '2px 8px',
+                    borderRadius: 4
+                  }}>
+                    {selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? 'Verified' : 'Pending Manual Review'}
                   </span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 12 }}>
                   <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
                     <div style={{ color: '#64748B', fontWeight: 600 }}>1. Drug License Validity</div>
-                    <div style={{ fontWeight: 800, color: '#10B981', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <CheckCircle2 size={14} /> Verified (Form 20B/21B)
+                    <div style={{
+                      fontWeight: 800,
+                      color: selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? '#10B981' : '#D97706',
+                      marginTop: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}>
+                      {selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                      {selectedRecord.regulatoryVerification?.drugLicenseValidity || 'Pending Manual Review'}
                     </div>
                   </div>
                   <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
                     <div style={{ color: '#64748B', fontWeight: 600 }}>2. License Expiry Check</div>
-                    <div style={{ fontWeight: 800, color: '#10B981', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <CheckCircle2 size={14} /> Verified (Valid till 2027)
+                    <div style={{
+                      fontWeight: 800,
+                      color: selectedRecord.regulatoryVerification?.licenseExpiryCheck?.includes('Valid') ? '#10B981' : '#D97706',
+                      marginTop: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}>
+                      {selectedRecord.regulatoryVerification?.licenseExpiryCheck?.includes('Valid') ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                      {selectedRecord.regulatoryVerification?.licenseExpiryCheck || 'Pending Manual Review'}
                     </div>
                   </div>
                   <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
                     <div style={{ color: '#64748B', fontWeight: 600 }}>3. State FDA Validation</div>
-                    <div style={{ fontWeight: 800, color: '#10B981', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <CheckCircle2 size={14} /> Verified with State FDA
+                    <div style={{
+                      fontWeight: 800,
+                      color: selectedRecord.regulatoryVerification?.stateRegulatoryAuthorityValidation?.includes('Verified') ? '#10B981' : '#D97706',
+                      marginTop: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}>
+                      {selectedRecord.regulatoryVerification?.stateRegulatoryAuthorityValidation?.includes('Verified') ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                      {selectedRecord.regulatoryVerification?.stateRegulatoryAuthorityValidation || 'Pending Manual Review'}
                     </div>
                   </div>
                 </div>
@@ -1074,22 +1259,35 @@ export const CustomerVerificationModule: React.FC = () => {
               <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>FINANCIAL VERIFICATION</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: 4 }}>
-                    Low Risk Classification
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: selectedRecord.financialVerification?.bankVerification?.includes('Verified') ? '#10B981' : '#D97706',
+                    background: selectedRecord.financialVerification?.bankVerification?.includes('Verified') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
+                    padding: '2px 8px',
+                    borderRadius: 4
+                  }}>
+                    {selectedRecord.financialVerification?.bankVerification?.includes('Verified') ? 'Verified' : 'Pending Manual Review'}
                   </span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 12 }}>
                   <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
                     <div style={{ color: '#64748B', fontWeight: 600 }}>1. Bank Verification</div>
-                    <div style={{ fontWeight: 800, color: '#10B981', marginTop: 4 }}>Verified (Penny Drop Passed)</div>
+                    <div style={{ fontWeight: 800, color: selectedRecord.financialVerification?.bankVerification?.includes('Verified') ? '#10B981' : '#D97706', marginTop: 4 }}>
+                      {selectedRecord.financialVerification?.bankVerification || 'Pending Manual Review'}
+                    </div>
                   </div>
                   <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
                     <div style={{ color: '#64748B', fontWeight: 600 }}>2. Credit Rating</div>
-                    <div style={{ fontWeight: 800, color: '#1D4ED8', marginTop: 4 }}>AAA (Low Risk)</div>
+                    <div style={{ fontWeight: 800, color: selectedRecord.financialVerification?.creditRating?.includes('AAA') ? '#1D4ED8' : '#64748B', marginTop: 4 }}>
+                      {selectedRecord.financialVerification?.creditRating || 'Unrated (Under Review)'}
+                    </div>
                   </div>
                   <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
                     <div style={{ color: '#64748B', fontWeight: 600 }}>3. Risk Classification</div>
-                    <div style={{ fontWeight: 800, color: '#10B981', marginTop: 4 }}>LOW RISK</div>
+                    <div style={{ fontWeight: 800, color: selectedRecord.financialVerification?.riskClassification === 'LOW' ? '#10B981' : '#D97706', marginTop: 4 }}>
+                      {selectedRecord.financialVerification?.riskClassification || 'PENDING EVALUATION'}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1108,7 +1306,7 @@ export const CustomerVerificationModule: React.FC = () => {
                     <span style={{ fontSize: 12, color: '#64748B' }}>Re-assign:</span>
                     <select
                       value={selectedRecord.assignedComplianceOfficer}
-                      onChange={e => assignComplianceOfficer(selectedRecord.id, e.target.value)}
+                      onChange={e => handleAssignOfficer(e.target.value)}
                       style={{ height: 34, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12, color: '#0F172A', background: '#FFF' }}
                     >
                       {COMPLIANCE_OFFICERS.map(officer => (
@@ -1428,13 +1626,31 @@ export const CustomerVerificationModule: React.FC = () => {
                     <div key={docType} style={{ background: '#FFF', padding: '8px 12px', borderRadius: 6, border: '1px solid #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>{docType}</div>
-                        <div style={{ fontSize: 10.5, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <Check size={11} /> Attached ({uploadedFilesMap[docType]?.fileName || `${docType}.pdf`})
-                        </div>
+                        {uploadedFilesMap[docType] ? (
+                          <div style={{ fontSize: 10.5, color: '#16A34A', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Check size={11} /> Attached ({uploadedFilesMap[docType].fileName})
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 10.5, color: '#64748B' }}>No file attached</div>
+                        )}
                       </div>
-                      <button type="button" onClick={() => alert(`Browsing file for ${docType}`)} style={{ background: '#EFF6FF', color: '#2563EB', border: 'none', borderRadius: 4, padding: '4px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                      <label style={{ background: '#EFF6FF', color: '#2563EB', borderRadius: 4, padding: '4px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                         Browse
-                      </button>
+                        <input
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setUploadedFilesMap(prev => ({
+                                ...prev,
+                                [docType]: { fileName: file.name, fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB` }
+                              }));
+                            }
+                          }}
+                        />
+                      </label>
                     </div>
                   ))}
                 </div>
@@ -1600,85 +1816,151 @@ export const CustomerVerificationModule: React.FC = () => {
           </div>
         </div>
       )}
-      {/* ── DOCUMENT PREVIEW MODAL ────────────────────────────────── */}
+      {/* ── REAL STATUTORY DOCUMENT VIEWER MODAL ────────────────── */}
       {viewingDoc && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1400, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(3px)' }}>
-          <div style={{ width: '100%', maxWidth: 640, background: '#FFFFFF', borderRadius: 14, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-            <div style={{ padding: '16px 20px', background: '#0F172A', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1400, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', padding: 16 }}>
+          <div style={{ width: '100%', maxWidth: 880, background: '#FFFFFF', borderRadius: 14, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)', display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
+            {/* Modal Header */}
+            <div style={{ padding: '14px 20px', background: '#0F172A', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 16, fontWeight: 800 }}>Digitized Statutory Document Viewer</div>
-                <div style={{ fontSize: 11.5, color: '#94A3B8' }}>{viewingDoc.documentType} • File: {viewingDoc.fileName}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>{viewingDoc.documentType}</span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700,
+                    color: viewingDoc.status === 'Valid' ? '#10B981' : viewingDoc.status === 'Invalid' ? '#EF4444' : '#F59E0B',
+                    background: viewingDoc.status === 'Valid' ? 'rgba(16, 185, 129, 0.2)' : viewingDoc.status === 'Invalid' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                    padding: '1px 8px', borderRadius: 4
+                  }}>
+                    {viewingDoc.status === 'Valid' ? '✓ Verified' : viewingDoc.status === 'Invalid' ? '✗ Rejected' : '⏳ Pending Review'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11.5, color: '#94A3B8', marginTop: 2 }}>
+                  File: <strong style={{ color: '#E2E8F0' }}>{viewingDoc.fileName}</strong> • Uploaded: {viewingDoc.uploadedAt} • Size: {viewingDoc.fileSize || '1.2 MB'}
+                </div>
               </div>
-              <button onClick={() => setViewingDoc(null)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}>
-                <X size={20} />
-              </button>
-            </div>
 
-            <div style={{ padding: 24, background: '#F8FAFC' }}>
-              <div style={{ border: '2px dashed #CBD5E1', padding: 24, borderRadius: 10, background: '#FFFFFF', textAlign: 'center' }}>
-                <FileText size={44} style={{ color: '#1D4ED8', margin: '0 auto 12px' }} />
-                <h4 style={{ fontSize: 17, fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>{viewingDoc.documentType}</h4>
-                <div style={{ fontSize: 12, color: '#64748B', fontFamily: 'monospace' }}>Document File: {viewingDoc.fileName}</div>
-                <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 4 }}>Uploaded: {viewingDoc.uploadedAt} • File Size: {viewingDoc.fileSize || '1.2 MB'}</div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginTop: 20, textAlign: 'left', fontSize: 12 }}>
-                  <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                    <div style={{ color: '#64748B', fontSize: 11, fontWeight: 600 }}>DOCUMENT STATUS</div>
-                    <div style={{ fontWeight: 800, color: viewingDoc.status === 'Valid' ? '#10B981' : viewingDoc.status === 'Invalid' ? '#EF4444' : '#F59E0B', marginTop: 2 }}>
-                      {viewingDoc.status === 'Valid' ? '✓ Verified' : viewingDoc.status === 'Invalid' ? '✗ Failed' : 'Pending Verification'}
-                    </div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                    <div style={{ color: '#64748B', fontSize: 11, fontWeight: 600 }}>VERIFICATION SEAL</div>
-                    <div style={{ fontWeight: 700, color: '#10B981', marginTop: 2 }}>✓ CDSCO Repository Audited</div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 16, background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '10px 14px', borderRadius: 8, fontSize: 11.5, color: '#1E40AF', textAlign: 'left' }}>
-                  <strong>Digital Audit Hash:</strong> <code>0x9F44B8820A11029471C881902...8A01</code>
-                </div>
-
-                {/* Compliance Officer Review Actions */}
-                <div style={{ marginTop: 16, padding: 12, background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>Document Review Action:</span>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      onClick={() => {
-                        setViewingDoc({ ...viewingDoc, status: 'Valid' });
-                        alert(`✔ Document ${viewingDoc.documentType} marked as VERIFIED.`);
-                      }}
-                      style={{ padding: '6px 12px', background: '#10B981', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      ✓ Verify Document
-                    </button>
-                    <button
-                      onClick={() => {
-                        setViewingDoc({ ...viewingDoc, status: 'Invalid' });
-                        alert(`⚠ Document ${viewingDoc.documentType} marked as REJECTED.`);
-                      }}
-                      style={{ padding: '6px 12px', background: '#DC2626', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      ✗ Reject Document
-                    </button>
-                    <button
-                      onClick={() => {
-                        setViewingDoc({ ...viewingDoc, status: 'Invalid' });
-                        setDecisionModalType('NEED_MORE_DOCS');
-                        setViewingDoc(null);
-                      }}
-                      style={{ padding: '6px 12px', background: '#DB2777', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      Request Replacement
-                    </button>
-                  </div>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {docBlobUrl && (
+                  <a
+                    href={docBlobUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={viewingDoc.fileName}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '5px 10px', background: 'rgba(255, 255, 255, 0.1)', color: '#FFFFFF',
+                      borderRadius: 6, fontSize: 11.5, fontWeight: 600, textDecoration: 'none', border: '1px solid rgba(255,255,255,0.2)'
+                    }}
+                  >
+                    <ExternalLink size={12} /> Open in New Tab
+                  </a>
+                )}
+                <button
+                  onClick={() => setViewingDoc(null)}
+                  style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 4 }}
+                >
+                  <X size={20} />
+                </button>
               </div>
             </div>
 
-            <div style={{ padding: '14px 20px', background: '#F1F5F9', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #E2E8F0' }}>
-              <button onClick={() => setViewingDoc(null)} style={{ padding: '6px 18px', fontSize: 12.5, fontWeight: 700, borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', cursor: 'pointer' }}>
-                Close Viewer
-              </button>
+            {/* Document Content Canvas */}
+            <div style={{ flex: 1, overflowY: 'auto', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 480, position: 'relative' }}>
+              {isDocLoading && (
+                <div style={{ textAlign: 'center', color: '#CBD5E1', padding: 40 }}>
+                  <RefreshCw size={36} className="animate-spin" style={{ margin: '0 auto 12px', color: '#38BDF8', animation: 'spin 1s linear infinite' }} />
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>Retrieving uploaded statutory document...</div>
+                  <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>Streaming verified binary bytes from private MinIO storage</div>
+                </div>
+              )}
+
+              {docLoadError && !isDocLoading && (
+                <div style={{ textAlign: 'center', color: '#F87171', background: '#1E293B', padding: 32, borderRadius: 10, margin: 24, border: '1px solid #7F1D1D' }}>
+                  <AlertCircle size={40} style={{ margin: '0 auto 12px', color: '#EF4444' }} />
+                  <h4 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 6px 0', color: '#FCA5A5' }}>Document Storage Error</h4>
+                  <div style={{ fontSize: 13, color: '#E2E8F0' }}>{docLoadError}</div>
+                  <div style={{ fontSize: 11.5, color: '#94A3B8', marginTop: 8 }}>
+                    File reference: <code>{viewingDoc.fileName}</code>
+                  </div>
+                </div>
+              )}
+
+              {docBlobUrl && !isDocLoading && (
+                docBlobType.startsWith('image/') ? (
+                  <div style={{ padding: 16, textAlign: 'center', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <img
+                      src={docBlobUrl}
+                      alt={viewingDoc.fileName}
+                      style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}
+                    />
+                  </div>
+                ) : (
+                  <iframe
+                    src={`${docBlobUrl}#toolbar=1&navpanes=0`}
+                    title={viewingDoc.fileName}
+                    style={{ width: '100%', height: '65vh', border: 'none', background: '#525659' }}
+                  />
+                )
+              )}
+            </div>
+
+            {/* Rejection / Note banner if present */}
+            {viewingDoc.rejectionReason && (
+              <div style={{ padding: '8px 20px', background: '#FEF2F2', borderTop: '1px solid #FECACA', borderBottom: '1px solid #FECACA', fontSize: 12, color: '#991B1B', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <strong>Rejection Reason:</strong> {viewingDoc.rejectionReason}
+              </div>
+            )}
+
+            {/* Compliance Reviewer Action Controls Bar */}
+            <div style={{ padding: '12px 20px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
+                Compliance Officer Audit Action:
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'APPROVED')}
+                  disabled={viewingDoc.status === 'Valid'}
+                  style={{
+                    padding: '7px 16px', background: viewingDoc.status === 'Valid' ? '#94A3B8' : '#16A34A',
+                    color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                    cursor: viewingDoc.status === 'Valid' ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5
+                  }}
+                >
+                  <CheckCircle2 size={13} /> {viewingDoc.status === 'Valid' ? 'Verified' : 'Verify Document'}
+                </button>
+
+                <button
+                  onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'REJECTED', true)}
+                  disabled={viewingDoc.status === 'Invalid'}
+                  style={{
+                    padding: '7px 14px', background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA',
+                    borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5
+                  }}
+                >
+                  <XCircle size={13} /> Reject
+                </button>
+
+                <button
+                  onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'NEEDS_REPLACEMENT', true)}
+                  style={{
+                    padding: '7px 14px', background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8',
+                    borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                  }}
+                >
+                  Request Replacement
+                </button>
+
+                <button
+                  onClick={() => setViewingDoc(null)}
+                  style={{
+                    padding: '7px 16px', background: '#FFFFFF', color: '#334155', border: '1px solid #CBD5E1',
+                    borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                  }}
+                >
+                  Close Viewer
+                </button>
+              </div>
             </div>
           </div>
         </div>

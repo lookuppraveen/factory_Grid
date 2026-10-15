@@ -569,6 +569,37 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
   };
 
   const renderContent = () => {
+    const isBuyerUnapproved = currentRole === 'BUYER' && userProfile?.accountStatus && userProfile.accountStatus.toUpperCase() !== 'ACTIVE';
+    const isProtectedProcurementRoute = [
+      'rfqs', 'quotes', 'orders', 'sub-orders', 'my-orders',
+      'buyer-catalog', 'buyer-product-catalog', 'buyer-tracking',
+      'invoices', 'payment-history', 'buyer-advance-payments'
+    ].includes(activeTab);
+
+    if (isBuyerUnapproved && isProtectedProcurementRoute) {
+      return (
+        <div style={{ background: 'var(--bg-surface)', padding: 48, borderRadius: 14, border: '1px solid var(--border-subtle)', textAlign: 'center', maxWidth: 620, margin: '48px auto', boxShadow: '0 10px 30px rgba(0,0,0,0.06)' }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+            <ShieldAlert size={28} />
+          </div>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 10px' }}>
+            Ordering & Procurement Access Restricted
+          </h2>
+          <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 24 }}>
+            Your buyer account is currently in <strong>{userProfile.accountStatus}</strong> status. Protected ordering, procurement, and commercial bidding features will be enabled once your statutory documents are approved by an administrator.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+            <button className="ent-btn-primary" onClick={() => handleTabClick('profile-documents')}>
+              <FileCheck size={14} /> Review & Re-upload Documents
+            </button>
+            <button className="ent-btn-secondary" onClick={() => handleTabClick('dashboard')}>
+              Go to Dashboard
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     switch (activeTab) {
       case 'dashboard': return currentRole === 'BUYER' ? <BuyerWorkspaceModule /> : currentRole === 'SUPPLIER' ? <ManufacturerDashboardModule /> : currentRole === 'COMPLIANCE_OFFICER' ? <CustomerVerificationModule /> : <Dashboards />;
       case 'profile':

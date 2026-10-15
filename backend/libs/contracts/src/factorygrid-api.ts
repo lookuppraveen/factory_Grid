@@ -21,6 +21,265 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/buyer/registration/step-1": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step 1: Save Company & Regulatory Information
+         * @description Saves company name, business type, GST, PAN, and drug license number.
+         */
+        post: operations["BuyerRegistrationController_saveStep1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/registration/step-2": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step 2: Save Contact Information
+         * @description Saves primary contact person, designation, mobile number, and email address.
+         */
+        post: operations["BuyerRegistrationController_saveStep2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/registration/step-3": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step 3: Save Business Details, Addresses & Customer-Type Specifics
+         * @description Saves billing/shipping addresses, state, pincode, and customer-type-specific parameters (e.g. PCD territory/portfolio).
+         */
+        post: operations["BuyerRegistrationController_saveStep3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/documents/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step 4: Upload Mandatory Regulatory Document
+         * @description Accepts multipart/form-data file upload for one of the 6 regulatory categories. Stores file in MinIO/S3 and records metadata in database.
+         */
+        post: operations["BuyerRegistrationController_uploadDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all regulatory documents for a registration (compliance staff only) */
+        get: operations["BuyerRegistrationController_getDocuments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/documents/download/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download a regulatory document from private storage (compliance staff only) */
+        get: operations["BuyerRegistrationController_downloadDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/registration/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step 5: Review & Submit Complete Buyer Registration
+         * @description Submits all 5 registration steps, executes server-side auto-validation, persists details in PostgreSQL, and enqueues customer verification.
+         */
+        post: operations["BuyerRegistrationController_submitRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/registration/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get buyer registration details by code or email (compliance staff only) */
+        get: operations["BuyerRegistrationController_getRegistration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/customer-verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all customer verification requests
+         * @description Retrieves onboarding buyer verification cases with filters for status and search query.
+         */
+        get: operations["ComplianceController_listVerifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/customer-verifications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get details of a specific customer verification case */
+        get: operations["ComplianceController_getVerification"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/customer-verifications/{id}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assign a compliance officer to a verification case */
+        post: operations["ComplianceController_assignOfficer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/customer-verifications/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve customer verification case
+         * @description Generates official customer code (CUS000...), marks case as Active, and activates portal buyer user account.
+         */
+        post: operations["ComplianceController_approveVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/customer-verifications/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject customer verification case with reason */
+        post: operations["ComplianceController_rejectVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/customer-verifications/{id}/request-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request additional regulatory documents from customer */
+        post: operations["ComplianceController_requestMoreDocs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/register/buyer": {
         parameters: {
             query?: never;
@@ -230,6 +489,385 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Step1CompanyDto: {
+            /**
+             * @description Registered company name
+             * @example Apex Care Pharma Ltd
+             */
+            companyName: string;
+            /**
+             * @description Business model type
+             * @example PCD Franchise
+             * @enum {string}
+             */
+            businessType: "PCD Franchise" | "Third Party Manufacturing (TPM)" | "Distributor" | "Wholesaler" | "Hospital" | "Export";
+            /**
+             * @description 15-character Goods and Services Tax Identification Number (GSTIN)
+             * @example 07AAAAA0000A1Z5
+             */
+            gstNumber: string;
+            /**
+             * @description 10-character Permanent Account Number (PAN)
+             * @example AAAAA0000A
+             */
+            panNumber: string;
+            /**
+             * @description State / Central Drug License number (Form 20B/21B)
+             * @example DL-20B/21B/2024/991
+             */
+            drugLicenseNumber: string;
+            /**
+             * @description Corporate Identification Number (CIN)
+             * @example U24232DL2020PTC361234
+             */
+            cinNumber?: string;
+            /**
+             * @description Official corporate website URL
+             * @example https://apexpharma.in
+             */
+            website?: string;
+        };
+        StepResponseDto: {
+            /** @example true */
+            success: boolean;
+            /** @example Step saved successfully */
+            message: string;
+            /** @example REG-BUYER-172889201923 */
+            registrationCode: string;
+            /** @example 1 */
+            currentStep: number;
+        };
+        Step2ContactDto: {
+            /**
+             * @description Primary contact person or representative
+             * @example Vikram Mehta
+             */
+            contactPerson: string;
+            /**
+             * @description Designation / job title of contact person
+             * @example Director
+             */
+            designation: string;
+            /**
+             * @description Mobile / Phone number
+             * @example +91 98765 43210
+             */
+            mobileNumber: string;
+            /**
+             * Format: email
+             * @description Corporate email address
+             * @example vikram@apexpharma.in
+             */
+            email: string;
+        };
+        PcdDetailsDto: {
+            /** @example North Zone */
+            territory?: string;
+            /** @example Delhi NCR */
+            state?: string;
+            /** @example South Delhi */
+            district?: string;
+            /** @example true */
+            monopolyRights?: boolean;
+            /** @example Cardiology, Diabetology, General Formulations */
+            brandPortfolio?: string;
+        };
+        TpmDetailsDto: {
+            /** @example BioCure Formulations */
+            brandName?: string;
+            /** @example Alu-Alu Packaging */
+            packagingRequirements?: string;
+            /** @example true */
+            artworkApproval?: boolean;
+            /** @example Form 25/28 License Required */
+            regulatoryRequirements?: string;
+            /** @example true */
+            moqAgreement?: boolean;
+        };
+        DistributorDetailsDto: {
+            /** @example Regional Territory */
+            distributionTerritory?: string;
+            /** @example Retail Pharmacy & Hospitals */
+            salesChannel?: string;
+            /** @example Central Warehouse (10,000 sq ft) */
+            warehouseLocations?: string;
+        };
+        HospitalDetailsDto: {
+            /** @example Central Clinical Procurement */
+            procurementDepartment?: string;
+            /** @example TENDER-2026-88 */
+            tenderReference?: string;
+            /** @example Valid till Dec 2027 */
+            contractValidity?: string;
+        };
+        WholesalerDetailsDto: {
+            /** @example 5,000 sq ft */
+            storageCapacitySqFt?: string;
+            /** @example true */
+            coldChainStorage?: boolean;
+            /** @example 25 Retail Outlets */
+            networkSize?: string;
+        };
+        ExportDetailsDto: {
+            /** @example LATAM, Southeast Asia */
+            targetRegions?: string;
+            /** @example 0304991204 */
+            iecCode?: string;
+        };
+        Step3AddressDto: {
+            /**
+             * @description Registered Billing Address
+             * @example Plot 45, Okhla Industrial Area Phase III
+             */
+            billingAddress: string;
+            /**
+             * @description Shipping / Delivery Warehouse Address
+             * @example Warehouse 2, Kundli Industrial Corridor
+             */
+            shippingAddress: string;
+            /**
+             * @description State
+             * @example Delhi
+             */
+            state: string;
+            /**
+             * @description Country
+             * @default India
+             * @example India
+             */
+            country: string;
+            /**
+             * @description 6-digit Postal Pincode
+             * @example 110020
+             */
+            pincode: string;
+            /** @description PCD Franchise specific details */
+            pcdDetails?: components["schemas"]["PcdDetailsDto"];
+            /** @description Third Party Manufacturing specific details */
+            tpmDetails?: components["schemas"]["TpmDetailsDto"];
+            /** @description Distributor specific details */
+            distributorDetails?: components["schemas"]["DistributorDetailsDto"];
+            /** @description Hospital specific details */
+            hospitalDetails?: components["schemas"]["HospitalDetailsDto"];
+            /** @description Wholesaler specific details */
+            wholesalerDetails?: components["schemas"]["WholesalerDetailsDto"];
+            /** @description Export specific details */
+            exportDetails?: components["schemas"]["ExportDetailsDto"];
+        };
+        UploadDocumentResponseDto: {
+            /** @example 1 */
+            id: string;
+            /** @example DOC-GST-172889201923 */
+            documentCode: string;
+            /** @example 1 */
+            registrationId: string;
+            /**
+             * @example GST Certificate
+             * @enum {string}
+             */
+            category: "GST Certificate" | "Drug License" | "PAN Card" | "Incorporation Certificate" | "Cancelled Cheque" | "Signed Agreement";
+            /** @example GST Certificate */
+            categoryDisplayName: string;
+            /** @example GST_Registration_Cert.pdf */
+            fileName: string;
+            /** @example 1258291 */
+            fileSize: number;
+            /** @example application/pdf */
+            mimeType: string;
+            /** @example VALID */
+            status: string;
+            /** @example 2026-10-13T10:00:00.000Z */
+            uploadedAt: string;
+        };
+        BuyerFullRegistrationDto: {
+            /**
+             * @description Registration code returned by step-1; links the submission to the saved draft and uploaded documents
+             * @example REG-BUYER-3F9A1C7D2B4E6A80
+             */
+            registrationCode: string;
+            /**
+             * @description Registered company name
+             * @example Apex Care Pharma Ltd
+             */
+            companyName: string;
+            /**
+             * @description Business model type
+             * @example PCD Franchise
+             * @enum {string}
+             */
+            businessType: "PCD Franchise" | "Third Party Manufacturing (TPM)" | "Distributor" | "Wholesaler" | "Hospital" | "Export";
+            /**
+             * @description Goods and Services Tax Identification Number (GSTIN)
+             * @example 07AAAAA0000A1Z5
+             */
+            gstNumber: string;
+            /**
+             * @description Permanent Account Number (PAN)
+             * @example AAAAA0000A
+             */
+            panNumber: string;
+            /**
+             * @description State / Central Drug License number (Form 20B/21B)
+             * @example DL-20B/21B/2024/991
+             */
+            drugLicenseNumber: string;
+            /**
+             * @description Corporate Identification Number (CIN)
+             * @example U24232DL2020PTC361234
+             */
+            cinNumber?: string;
+            /**
+             * @description Official corporate website URL
+             * @example https://apexpharma.in
+             */
+            website?: string;
+            /**
+             * @description Primary contact person or representative
+             * @example Vikram Mehta
+             */
+            contactPerson: string;
+            /**
+             * @description Designation / job title of contact person
+             * @example Director
+             */
+            designation: string;
+            /**
+             * @description Mobile / Phone number
+             * @example +91 98765 43210
+             */
+            mobileNumber: string;
+            /**
+             * Format: email
+             * @description Corporate email address
+             * @example vikram@apexpharma.in
+             */
+            email: string;
+            /**
+             * @description Account username (generated from email if omitted)
+             * @example vikram_apex
+             */
+            username?: string;
+            /**
+             * @description Account password (default generated if omitted)
+             * @example Password@123
+             */
+            password?: string;
+            /**
+             * @description Company code (auto-generated if omitted)
+             * @example APEX01
+             */
+            companyCode?: string;
+            /**
+             * @description Department
+             * @example Procurement
+             */
+            department?: string;
+            /**
+             * @description Registered Billing Address
+             * @example Plot 45, Okhla Industrial Area Phase III
+             */
+            billingAddress: string;
+            /**
+             * @description Shipping / Warehouse Address
+             * @example Warehouse 2, Kundli Industrial Corridor
+             */
+            shippingAddress: string;
+            /**
+             * @description State
+             * @example Delhi
+             */
+            state: string;
+            /**
+             * @description Country
+             * @default India
+             * @example India
+             */
+            country: string;
+            /**
+             * @description 6-digit Postal Pincode
+             * @example 110020
+             */
+            pincode: string;
+            /** @description PCD Franchise specific details */
+            pcdDetails?: components["schemas"]["PcdDetailsDto"];
+            /** @description Third Party Manufacturing specific details */
+            tpmDetails?: components["schemas"]["TpmDetailsDto"];
+            /** @description Distributor specific details */
+            distributorDetails?: components["schemas"]["DistributorDetailsDto"];
+            /** @description Hospital specific details */
+            hospitalDetails?: components["schemas"]["HospitalDetailsDto"];
+            /** @description Wholesaler specific details */
+            wholesalerDetails?: components["schemas"]["WholesalerDetailsDto"];
+            /** @description Export specific details */
+            exportDetails?: components["schemas"]["ExportDetailsDto"];
+            /**
+             * @description Confirmation of data accuracy checkbox
+             * @default true
+             */
+            confirmAccurate: boolean;
+        };
+        AutoValidationResultDto: {
+            /** @example Valid */
+            gstCheck: string;
+            /** @example Valid */
+            panCheck: string;
+            /** @example Valid */
+            requiredDocsCheck: string;
+            /** @example Valid */
+            requiredFieldsCheck: string;
+            /** @example Valid */
+            overallStatus: string;
+            /**
+             * @example [
+             *       "GSTIN structure format verified.",
+             *       "PAN structure format verified.",
+             *       "All 6 required onboarding documents present.",
+             *       "Required corporate details populated."
+             *     ]
+             */
+            validationDetails: string[];
+        };
+        CustomerVerificationResponseDto: {
+            /** @example CUS-VER-101 */
+            requestCode: string;
+            /** @example Vikram Mehta */
+            customerName: string;
+            /** @example Apex Care Pharma Ltd */
+            companyName: string;
+            /** @example PCD */
+            customerType: string;
+            /** @example Under Review */
+            verificationStatus: string;
+            /** @example Rajesh Kumar (Compliance Desk A) */
+            assignedComplianceOfficer?: string;
+            autoValidation: components["schemas"]["AutoValidationResultDto"];
+            /** @example CUS000101 */
+            customerCode?: string;
+            /** @example 2026-10-13T10:00:00.000Z */
+            createdAt: string;
+        };
+        ApproveVerificationDto: {
+            /**
+             * @description Generated customer code if custom
+             * @example CUS000101
+             */
+            customerCode?: string;
+        };
+        RejectVerificationDto: {
+            /**
+             * @description Reason for rejection
+             * @example Drug License expired or invalid
+             */
+            rejectionReason: string;
+        };
+        RequestMoreDocsDto: {
+            /**
+             * @example [
+             *       "Please provide updated Form 20B/21B renewal certificate"
+             *     ]
+             */
+            notes: string[];
+        };
         BuyerRegistrationDto: {
             /** @example buyer_pharma_01 */
             username: string;
@@ -413,6 +1051,449 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    BuyerRegistrationController_saveStep1: {
+        parameters: {
+            query?: {
+                registrationCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Step1CompanyDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepResponseDto"];
+                };
+            };
+            /** @description Invalid GSTIN, PAN, or required fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuyerRegistrationController_saveStep2: {
+        parameters: {
+            query: {
+                /** @description Existing registration code from Step 1 */
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Step2ContactDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepResponseDto"];
+                };
+            };
+            /** @description Missing required contact fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuyerRegistrationController_saveStep3: {
+        parameters: {
+            query: {
+                /** @description Existing registration code */
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Step3AddressDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepResponseDto"];
+                };
+            };
+            /** @description Missing required address fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuyerRegistrationController_uploadDocument: {
+        parameters: {
+            query: {
+                /** @description Regulatory document category */
+                category: "GST Certificate" | "Drug License" | "PAN Card" | "Incorporation Certificate" | "Cancelled Cheque" | "Signed Agreement";
+                /** @description Registration code returned by step-1; the draft must exist and not yet be submitted */
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description Regulatory document PDF/Image (max 10MB)
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadDocumentResponseDto"];
+                };
+            };
+            /** @description File missing, oversized, or invalid category */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuyerRegistrationController_getDocuments: {
+        parameters: {
+            query: {
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadDocumentResponseDto"][];
+                };
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requires ADMIN or COMPLIANCE_OFFICER */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Registration not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuyerRegistrationController_downloadDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requires ADMIN or COMPLIANCE_OFFICER */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuyerRegistrationController_submitRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuyerFullRegistrationDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerVerificationResponseDto"];
+                };
+            };
+            /** @description Validation failed or required documents missing */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Registration draft not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already submitted, or an account with this email/username exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuyerRegistrationController_getRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code (REG-BUYER-...) or Email */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requires ADMIN or COMPLIANCE_OFFICER */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Registration not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ComplianceController_listVerifications: {
+        parameters: {
+            query?: {
+                /** @description Filter by verificationStatus (e.g. Under Review, Active) */
+                status?: string;
+                /** @description Search term for company, customer name, GSTIN, etc. */
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
+                };
+            };
+        };
+    };
+    ComplianceController_getVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Request Code (e.g. CUS-VER-101) or database ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    ComplianceController_assignOfficer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Request Code or database ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    ComplianceController_approveVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Request Code or database ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveVerificationDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    ComplianceController_rejectVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Request Code or database ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectVerificationDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    ComplianceController_requestMoreDocs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Request Code or database ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestMoreDocsDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
             };
         };
     };

@@ -4,9 +4,16 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { DocumentBuilder, OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
+import fastifyMultipart from '@fastify/multipart';
 import { createValidationPipe, HttpExceptionFilter } from '@factorygrid/errors';
 import { AppModule } from './app.module';
 import { Env } from './config/env';
+
+if (!(BigInt.prototype as any).toJSON) {
+  (BigInt.prototype as any).toJSON = function () {
+    return this.toString();
+  };
+}
 
 export const API_PREFIX = 'api/v1';
 
@@ -25,6 +32,14 @@ export async function createApp(options: { logger?: boolean } = {}): Promise<Nes
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
     logger: options.logger === false ? false : undefined,
   });
+
+  await app.register(fastifyMultipart as any, {
+    limits: {
+      fileSize: 10 * 1024 * 1024,
+      files: 10,
+    },
+  });
+
 
   const config = app.get(ConfigService<Env, true>);
   app.enableCors({

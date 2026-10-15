@@ -384,6 +384,44 @@ export const BuyerWorkspaceModule: React.FC = () => {
       {activeTabLocal === 'DASHBOARD' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
+          {/* Verification Status Notice when not yet fully active */}
+          {userProfile?.accountStatus && userProfile.accountStatus.toUpperCase() !== 'ACTIVE' && (
+            <div style={{
+              background: 'rgba(234, 88, 12, 0.08)',
+              border: '1px solid rgba(234, 88, 12, 0.3)',
+              borderRadius: 10,
+              padding: '14px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(234, 88, 12, 0.15)', color: '#EA580C', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#C2410C' }}>
+                    Account Status: {userProfile.accountStatus.toUpperCase() === 'REJECTED' ? 'Documents Require Action / Replacement' : 'Pending Compliance Verification'}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                    {userProfile.accountStatus.toUpperCase() === 'REJECTED'
+                      ? 'One or more regulatory documents require replacement. Please check rejection reasons and re-upload documents.'
+                      : 'Your regulatory documents are currently undergoing verification. Procurement and ordering will be enabled upon admin approval.'}
+                  </div>
+                </div>
+              </div>
+              <button
+                className="ent-btn-primary"
+                style={{ height: 34, padding: '0 16px', fontSize: 12, background: '#EA580C' }}
+                onClick={() => setActiveTab('profile-documents')}
+              >
+                View & Re-upload Documents →
+              </button>
+            </div>
+          )}
+
           {/* 1. Key Procurement Summary (Enterprise Metric Bar) */}
           <EnterpriseMetricBar
             title="BUYER PROCUREMENT SUMMARY"

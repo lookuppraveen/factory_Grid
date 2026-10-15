@@ -11,6 +11,807 @@ paths:
       summary: Liveness and database check for load balancers and uptime monitors.
       tags:
         - Health
+  /api/v1/buyer/registration/step-1:
+    post:
+      description: Saves company name, business type, GST, PAN, and drug license number.
+      operationId: BuyerRegistrationController_saveStep1
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Step1CompanyDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepResponseDto'
+        '400':
+          description: Invalid GSTIN, PAN, or required fields
+      summary: 'Step 1: Save Company & Regulatory Information'
+      tags:
+        - Buyer Onboarding & Registration
+  /api/v1/buyer/registration/step-2:
+    post:
+      description: Saves primary contact person, designation, mobile number, and email address.
+      operationId: BuyerRegistrationController_saveStep2
+      parameters:
+        - name: registrationCode
+          required: true
+          in: query
+          description: Existing registration code from Step 1
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Step2ContactDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepResponseDto'
+        '400':
+          description: Missing required contact fields
+      summary: 'Step 2: Save Contact Information'
+      tags:
+        - Buyer Onboarding & Registration
+  /api/v1/buyer/registration/step-3:
+    post:
+      description: >-
+        Saves billing/shipping addresses, state, pincode, and customer-type-specific parameters (e.g. PCD
+        territory/portfolio).
+      operationId: BuyerRegistrationController_saveStep3
+      parameters:
+        - name: registrationCode
+          required: true
+          in: query
+          description: Existing registration code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Step3AddressDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepResponseDto'
+        '400':
+          description: Missing required address fields
+      summary: 'Step 3: Save Business Details, Addresses & Customer-Type Specifics'
+      tags:
+        - Buyer Onboarding & Registration
+  /api/v1/buyer/documents/upload:
+    post:
+      description: >-
+        Accepts multipart/form-data file upload for one of the 6 regulatory categories. Stores file in MinIO/S3 and
+        records metadata in database.
+      operationId: BuyerRegistrationController_uploadDocument
+      parameters:
+        - name: category
+          required: true
+          in: query
+          description: Regulatory document category
+          schema:
+            enum:
+              - GST Certificate
+              - Drug License
+              - PAN Card
+              - Incorporation Certificate
+              - Cancelled Cheque
+              - Signed Agreement
+            type: string
+        - name: registrationCode
+          required: true
+          in: query
+          description: Registration code returned by step-1; allows draft uploads and post-review replacement uploads
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Regulatory document PDF/Image (max 10MB)
+              required:
+                - file
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadDocumentResponseDto'
+        '400':
+          description: File missing, oversized, or invalid category
+      summary: 'Step 4 & Document Re-upload: Upload Mandatory Regulatory Document'
+      tags:
+        - Buyer Onboarding & Registration
+  /api/v1/buyer/documents:
+    get:
+      operationId: BuyerRegistrationController_getDocuments
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional for authenticated buyer
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UploadDocumentResponseDto'
+        '401':
+          description: Missing or invalid token
+        '403':
+          description: Access denied
+        '404':
+          description: Registration not found
+      security:
+        - bearer: []
+      summary: List all regulatory documents for a registration
+      tags:
+        - Buyer Onboarding & Registration
+  /api/v1/buyer/documents/download/{path}:
+    get:
+      operationId: BuyerRegistrationController_downloadDocument
+      parameters: []
+      responses:
+        '200':
+          description: ''
+        '401':
+          description: Missing or invalid token
+        '403':
+          description: Access denied
+      security:
+        - bearer: []
+      summary: Download a regulatory document from private storage
+      tags:
+        - Buyer Onboarding & Registration
+  /api/v1/buyer/registration/submit:
+    post:
+      description: >-
+        Submits all 5 registration steps, executes server-side auto-validation, persists details in PostgreSQL, and
+        enqueues customer verification.
+      operationId: BuyerRegistrationController_submitRegistration
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuyerFullRegistrationDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerVerificationResponseDto'
+        '400':
+          description: Validation failed or required documents missing
+        '404':
+          description: Registration draft not found
+        '409':
+          description: Already submitted, or an account with this email/username exists
+      summary: 'Step 5: Review & Submit Complete Buyer Registration'
+      tags:
+        - Buyer Onboarding & Registration
+  /api/v1/buyer/my-registration:
+    get:
+      operationId: BuyerRegistrationController_getMyRegistration
+      parameters: []
+      responses:
+        '200':
+          description: Current buyer registration details
+      security:
+        - bearer: []
+      summary: Get current authenticated buyer registration, documents, and verification status
+      tags:
+        - Buyer Onboarding & Registration
+  /api/v1/buyer/registration/{code}:
+    get:
+      operationId: BuyerRegistrationController_getRegistration
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code (REG-BUYER-...) or Email
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+        '401':
+          description: Missing or invalid token
+        '403':
+          description: Requires ADMIN, COMPLIANCE_OFFICER, or owning BUYER
+        '404':
+          description: Registration not found
+      security:
+        - bearer: []
+      summary: Get buyer registration details by code or email
+      tags:
+        - Buyer Onboarding & Registration
+  /api/v1/manufacturer/catalog:
+    get:
+      operationId: ManufacturerRegistrationController_listCatalog
+      parameters:
+        - name: search
+          required: false
+          in: query
+          description: Filter by name, generic name, category
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: List master product catalogue for manufacturer capabilities
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/registration/step-1:
+    post:
+      operationId: ManufacturerRegistrationController_saveStep1
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional code when updating an existing draft
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerStep1Dto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerStepResponseDto'
+      summary: 'Step 1: Save Company & Plant Information'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/documents/upload:
+    post:
+      description: >-
+        Accepts multipart/form-data for one of the 6 mandatory certification categories. Stores file in MinIO/S3 and
+        records metadata.
+      operationId: ManufacturerRegistrationController_uploadDocument
+      parameters:
+        - name: category
+          required: true
+          in: query
+          schema:
+            enum:
+              - mfgLicense
+              - gmpCert
+              - whoGmpCert
+              - isoCert
+              - factoryReg
+              - pollutionCert
+            type: string
+        - name: registrationCode
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: issueDate
+          required: true
+          in: query
+          schema:
+            example: '2023-04-15'
+            type: string
+        - name: expiryDate
+          required: true
+          in: query
+          schema:
+            example: '2028-04-14'
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Certification PDF/Image (max 10MB)
+              required:
+                - file
+      responses:
+        '201':
+          description: ''
+      summary: 'Step 2 & Document Re-upload: Upload Mandatory Certification Document'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/documents/{id}:
+    delete:
+      operationId: ManufacturerRegistrationController_removeDocument
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Remove an uploaded document before submission
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/registration/step-2:
+    post:
+      operationId: ManufacturerRegistrationController_saveStep2
+      parameters:
+        - name: registrationCode
+          required: true
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerStep2Dto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerStepResponseDto'
+      summary: 'Step 2: Save Certification Expiry and Issue Dates'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/registration/step-3:
+    post:
+      operationId: ManufacturerRegistrationController_saveStep3
+      parameters:
+        - name: registrationCode
+          required: true
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerStep3Dto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerStepResponseDto'
+      summary: 'Step 3: Save Product Manufacturing Capabilities'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/registration/step-4:
+    post:
+      operationId: ManufacturerRegistrationController_saveStep4
+      parameters:
+        - name: registrationCode
+          required: true
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerStep4Dto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerStepResponseDto'
+      summary: 'Step 4: Save MOQ and Delivery Schedule'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/registration/submit:
+    post:
+      operationId: ManufacturerRegistrationController_submit
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerSubmitDto'
+      responses:
+        '201':
+          description: ''
+      summary: 'Step 5: Review & Submit Complete Manufacturer Registration'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/my-registration:
+    get:
+      operationId: ManufacturerRegistrationController_getMyRegistration
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get current authenticated manufacturer registration details, documents, and status
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/registration/{code}:
+    get:
+      operationId: ManufacturerRegistrationController_getRegistration
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration code (REG-MFG-...)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get manufacturer registration by registration code
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/documents:
+    get:
+      operationId: ManufacturerRegistrationController_getDocuments
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional for authenticated manufacturer
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: List certifications for a registration
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/documents/{id}/download:
+    get:
+      operationId: ManufacturerRegistrationController_downloadDocument
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download a manufacturer certification document
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/review/verifications:
+    get:
+      operationId: ManufacturerRegistrationController_listForReview
+      parameters:
+        - name: status
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: search
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: List submitted manufacturer registrations for review'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/review/verifications/{code}:
+    get:
+      operationId: ManufacturerRegistrationController_getForReview
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Get single manufacturer registration with documents for audit'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/review/verifications/{code}/documents/{docId}/review:
+    post:
+      operationId: ManufacturerRegistrationController_reviewDocument
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+        - name: docId
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerReviewDocumentDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Approve, reject, or request replacement for a manufacturer certification'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/review/verifications/{code}/approve:
+    post:
+      operationId: ManufacturerRegistrationController_approve
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Final approve manufacturer registration and activate account'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/compliance/customer-verifications:
+    get:
+      description: Retrieves onboarding buyer verification cases with filters for status and search query.
+      operationId: ComplianceController_listVerifications
+      parameters:
+        - name: status
+          required: false
+          in: query
+          description: Filter by verificationStatus (e.g. Under Review, Active)
+          schema:
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search term for company, customer name, GSTIN, etc.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+      security:
+        - bearer: []
+      summary: List all customer verification requests
+      tags:
+        - Compliance & Customer Verification
+  /api/v1/compliance/customer-verifications/{id}:
+    get:
+      operationId: ComplianceController_getVerification
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Request Code (e.g. CUS-VER-101) or database ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+        - bearer: []
+      summary: Get details of a specific customer verification case
+      tags:
+        - Compliance & Customer Verification
+  /api/v1/compliance/customer-verifications/{id}/assign:
+    post:
+      operationId: ComplianceController_assignOfficer
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Request Code or database ID
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+        - bearer: []
+      summary: Assign a compliance officer to a verification case
+      tags:
+        - Compliance & Customer Verification
+  /api/v1/compliance/customer-verifications/{id}/approve:
+    post:
+      description: Generates official customer code (CUS000...), marks case as Active, and activates portal buyer user account.
+      operationId: ComplianceController_approveVerification
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Request Code or database ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveVerificationDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+        - bearer: []
+      summary: Approve customer verification case
+      tags:
+        - Compliance & Customer Verification
+  /api/v1/compliance/customer-verifications/{id}/reject:
+    post:
+      operationId: ComplianceController_rejectVerification
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Request Code or database ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectVerificationDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+        - bearer: []
+      summary: Reject customer verification case with reason
+      tags:
+        - Compliance & Customer Verification
+  /api/v1/compliance/customer-verifications/{id}/request-docs:
+    post:
+      operationId: ComplianceController_requestMoreDocs
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Request Code or database ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestMoreDocsDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+        - bearer: []
+      summary: Request additional regulatory documents from customer
+      tags:
+        - Compliance & Customer Verification
+  /api/v1/compliance/customer-verifications/{id}/documents/{docId}/review:
+    post:
+      description: Allows Admin/Compliance Officer to approve, reject, or request replacement for a specific document with reason.
+      operationId: ComplianceController_reviewDocument
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Request Code or database ID
+          schema:
+            type: string
+        - name: docId
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDocumentDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Review an individual uploaded regulatory document
+      tags:
+        - Compliance & Customer Verification
   /api/v1/auth/register/buyer:
     post:
       description: Creates a user with ROLE_BUYER only.
@@ -311,6 +1112,797 @@ components:
       bearerFormat: JWT
       type: http
   schemas:
+    Step1CompanyDto:
+      type: object
+      properties:
+        companyName:
+          type: string
+          description: Registered company name
+          example: Apex Care Pharma Ltd
+        businessType:
+          enum:
+            - PCD Franchise
+            - PCD Franchise Customer
+            - PCD
+            - Third Party Manufacturing (TPM)
+            - Third Party Manufacturing
+            - TPM
+            - Distributor
+            - DISTRIBUTOR
+            - Wholesaler
+            - WHOLESALER
+            - Hospital
+            - HOSPITAL
+            - Export
+            - Export Customer
+            - EXPORT
+            - Export House
+            - Private Limited
+            - Public Limited
+            - Partnership Firm
+            - Proprietorship
+            - Healthcare Institution
+            - Registered Enterprise
+          type: string
+          description: Business model type
+          example: PCD Franchise
+        gstNumber:
+          type: string
+          description: 15-character Goods and Services Tax Identification Number (GSTIN)
+          example: 07AAAAA0000A1Z5
+        panNumber:
+          type: string
+          description: 10-character Permanent Account Number (PAN)
+          example: AAAAA0000A
+        drugLicenseNumber:
+          type: string
+          description: State / Central Drug License number (Form 20B/21B)
+          example: DL-20B/21B/2024/991
+        cinNumber:
+          type: string
+          description: Corporate Identification Number (CIN)
+          example: U24232DL2020PTC361234
+        website:
+          type: string
+          description: Official corporate website URL
+          example: https://apexpharma.in
+      required:
+        - companyName
+        - businessType
+        - gstNumber
+        - panNumber
+        - drugLicenseNumber
+    StepResponseDto:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Step saved successfully
+        registrationCode:
+          type: string
+          example: REG-BUYER-172889201923
+        currentStep:
+          type: number
+          example: 1
+      required:
+        - success
+        - message
+        - registrationCode
+        - currentStep
+    Step2ContactDto:
+      type: object
+      properties:
+        contactPerson:
+          type: string
+          description: Primary contact person or representative
+          example: Vikram Mehta
+        designation:
+          type: string
+          description: Designation / job title of contact person
+          example: Director
+        mobileNumber:
+          type: string
+          description: Mobile / Phone number
+          example: +91 98765 43210
+        email:
+          type: string
+          format: email
+          description: Corporate email address
+          example: vikram@apexpharma.in
+        password:
+          type: string
+          description: Buyer account password
+          example: Password@123
+      required:
+        - contactPerson
+        - designation
+        - mobileNumber
+        - email
+    PcdDetailsDto:
+      type: object
+      properties:
+        territory:
+          type: string
+          example: North Zone
+        state:
+          type: string
+          example: Delhi NCR
+        district:
+          type: string
+          example: South Delhi
+        monopolyRights:
+          type: boolean
+          example: true
+        brandPortfolio:
+          type: string
+          example: Cardiology, Diabetology, General Formulations
+    TpmDetailsDto:
+      type: object
+      properties:
+        brandName:
+          type: string
+          example: BioCure Formulations
+        packagingRequirements:
+          type: string
+          example: Alu-Alu Packaging
+        artworkApproval:
+          type: boolean
+          example: true
+        regulatoryRequirements:
+          type: string
+          example: Form 25/28 License Required
+        moqAgreement:
+          type: boolean
+          example: true
+    DistributorDetailsDto:
+      type: object
+      properties:
+        distributionTerritory:
+          type: string
+          example: Regional Territory
+        salesChannel:
+          type: string
+          example: Retail Pharmacy & Hospitals
+        warehouseLocations:
+          type: string
+          example: Central Warehouse (10,000 sq ft)
+    HospitalDetailsDto:
+      type: object
+      properties:
+        procurementDepartment:
+          type: string
+          example: Central Clinical Procurement
+        tenderReference:
+          type: string
+          example: TENDER-2026-88
+        contractValidity:
+          type: string
+          example: Valid till Dec 2027
+    WholesalerDetailsDto:
+      type: object
+      properties:
+        storageCapacitySqFt:
+          type: string
+          example: 5,000 sq ft
+        coldChainStorage:
+          type: boolean
+          example: true
+        networkSize:
+          type: string
+          example: 25 Retail Outlets
+    ExportDetailsDto:
+      type: object
+      properties:
+        targetRegions:
+          type: string
+          example: LATAM, Southeast Asia
+        iecCode:
+          type: string
+          example: '0304991204'
+    Step3AddressDto:
+      type: object
+      properties:
+        billingAddress:
+          type: string
+          description: Registered Billing Address
+          example: Plot 45, Okhla Industrial Area Phase III
+        shippingAddress:
+          type: string
+          description: Shipping / Delivery Warehouse Address
+          example: Warehouse 2, Kundli Industrial Corridor
+        state:
+          type: string
+          description: State
+          example: Delhi
+        country:
+          type: string
+          default: India
+          description: Country
+          example: India
+        pincode:
+          type: string
+          description: 6-digit Postal Pincode
+          example: '110020'
+        pcdDetails:
+          description: PCD Franchise specific details
+          allOf:
+            - $ref: '#/components/schemas/PcdDetailsDto'
+        tpmDetails:
+          description: Third Party Manufacturing specific details
+          allOf:
+            - $ref: '#/components/schemas/TpmDetailsDto'
+        distributorDetails:
+          description: Distributor specific details
+          allOf:
+            - $ref: '#/components/schemas/DistributorDetailsDto'
+        hospitalDetails:
+          description: Hospital specific details
+          allOf:
+            - $ref: '#/components/schemas/HospitalDetailsDto'
+        wholesalerDetails:
+          description: Wholesaler specific details
+          allOf:
+            - $ref: '#/components/schemas/WholesalerDetailsDto'
+        exportDetails:
+          description: Export specific details
+          allOf:
+            - $ref: '#/components/schemas/ExportDetailsDto'
+      required:
+        - billingAddress
+        - shippingAddress
+        - state
+        - country
+        - pincode
+    UploadDocumentResponseDto:
+      type: object
+      properties:
+        id:
+          type: string
+          example: '1'
+        documentCode:
+          type: string
+          example: DOC-GST-172889201923
+        registrationId:
+          type: string
+          example: '1'
+        category:
+          type: string
+          example: GST Certificate
+          enum:
+            - GST Certificate
+            - Drug License
+            - PAN Card
+            - Incorporation Certificate
+            - Cancelled Cheque
+            - Signed Agreement
+        categoryDisplayName:
+          type: string
+          example: GST Certificate
+        fileName:
+          type: string
+          example: GST_Registration_Cert.pdf
+        fileSize:
+          type: number
+          example: 1258291
+        mimeType:
+          type: string
+          example: application/pdf
+        status:
+          type: string
+          example: VALID
+        rejectionReason:
+          type: string
+          example: Document illegible or missing seal
+        reviewedBy:
+          type: string
+          example: Rajesh Kumar (Compliance Desk A)
+        reviewedAt:
+          type: string
+          example: '2026-10-14T10:00:00.000Z'
+        reviewDecision:
+          type: string
+          example: REJECTED
+        version:
+          type: number
+          example: 1
+        uploadedAt:
+          type: string
+          example: '2026-10-13T10:00:00.000Z'
+      required:
+        - id
+        - documentCode
+        - registrationId
+        - category
+        - categoryDisplayName
+        - fileName
+        - fileSize
+        - mimeType
+        - status
+        - uploadedAt
+    BuyerFullRegistrationDto:
+      type: object
+      properties:
+        registrationCode:
+          type: string
+          description: Registration code returned by step-1; links the submission to the saved draft and uploaded documents
+          example: REG-BUYER-3F9A1C7D2B4E6A80
+        companyName:
+          type: string
+          description: Registered company name
+          example: Apex Care Pharma Ltd
+        businessType:
+          enum:
+            - PCD Franchise
+            - PCD Franchise Customer
+            - PCD
+            - Third Party Manufacturing (TPM)
+            - Third Party Manufacturing
+            - TPM
+            - Distributor
+            - DISTRIBUTOR
+            - Wholesaler
+            - WHOLESALER
+            - Hospital
+            - HOSPITAL
+            - Export
+            - Export Customer
+            - EXPORT
+            - Export House
+            - Private Limited
+            - Public Limited
+            - Partnership Firm
+            - Proprietorship
+            - Healthcare Institution
+            - Registered Enterprise
+          type: string
+          description: Business model type
+          example: PCD Franchise
+        gstNumber:
+          type: string
+          description: Goods and Services Tax Identification Number (GSTIN)
+          example: 07AAAAA0000A1Z5
+        panNumber:
+          type: string
+          description: Permanent Account Number (PAN)
+          example: AAAAA0000A
+        drugLicenseNumber:
+          type: string
+          description: State / Central Drug License number (Form 20B/21B)
+          example: DL-20B/21B/2024/991
+        cinNumber:
+          type: string
+          description: Corporate Identification Number (CIN)
+          example: U24232DL2020PTC361234
+        website:
+          type: string
+          description: Official corporate website URL
+          example: https://apexpharma.in
+        contactPerson:
+          type: string
+          description: Primary contact person or representative
+          example: Vikram Mehta
+        designation:
+          type: string
+          description: Designation / job title of contact person
+          example: Director
+        mobileNumber:
+          type: string
+          description: Mobile / Phone number
+          example: +91 98765 43210
+        email:
+          type: string
+          format: email
+          description: Corporate email address
+          example: vikram@apexpharma.in
+        username:
+          type: string
+          description: Account username (generated from email if omitted)
+          example: vikram_apex
+        password:
+          type: string
+          description: Account password (default generated if omitted)
+          example: Password@123
+        companyCode:
+          type: string
+          description: Company code (auto-generated if omitted)
+          example: APEX01
+        department:
+          type: string
+          description: Department
+          example: Procurement
+        billingAddress:
+          type: string
+          description: Registered Billing Address
+          example: Plot 45, Okhla Industrial Area Phase III
+        shippingAddress:
+          type: string
+          description: Shipping / Warehouse Address
+          example: Warehouse 2, Kundli Industrial Corridor
+        state:
+          type: string
+          description: State
+          example: Delhi
+        country:
+          type: string
+          default: India
+          description: Country
+          example: India
+        pincode:
+          type: string
+          description: 6-digit Postal Pincode
+          example: '110020'
+        pcdDetails:
+          description: PCD Franchise specific details
+          allOf:
+            - $ref: '#/components/schemas/PcdDetailsDto'
+        tpmDetails:
+          description: Third Party Manufacturing specific details
+          allOf:
+            - $ref: '#/components/schemas/TpmDetailsDto'
+        distributorDetails:
+          description: Distributor specific details
+          allOf:
+            - $ref: '#/components/schemas/DistributorDetailsDto'
+        hospitalDetails:
+          description: Hospital specific details
+          allOf:
+            - $ref: '#/components/schemas/HospitalDetailsDto'
+        wholesalerDetails:
+          description: Wholesaler specific details
+          allOf:
+            - $ref: '#/components/schemas/WholesalerDetailsDto'
+        exportDetails:
+          description: Export specific details
+          allOf:
+            - $ref: '#/components/schemas/ExportDetailsDto'
+        confirmAccurate:
+          type: boolean
+          description: Confirmation of data accuracy checkbox
+          default: true
+      required:
+        - registrationCode
+        - companyName
+        - businessType
+        - gstNumber
+        - panNumber
+        - drugLicenseNumber
+        - contactPerson
+        - designation
+        - mobileNumber
+        - email
+        - billingAddress
+        - shippingAddress
+        - state
+        - country
+        - pincode
+    AutoValidationResultDto:
+      type: object
+      properties:
+        gstCheck:
+          type: string
+          example: Valid
+        panCheck:
+          type: string
+          example: Valid
+        requiredDocsCheck:
+          type: string
+          example: Valid
+        requiredFieldsCheck:
+          type: string
+          example: Valid
+        overallStatus:
+          type: string
+          example: Valid
+        validationDetails:
+          example:
+            - GSTIN structure format verified.
+            - PAN structure format verified.
+            - All 6 required onboarding documents present.
+            - Required corporate details populated.
+          type: array
+          items:
+            type: string
+        governmentVerified:
+          type: boolean
+          example: false
+          description: True if verified against official government portal
+        testingAccepted:
+          type: boolean
+          example: true
+          description: True if accepted for testing purpose
+      required:
+        - gstCheck
+        - panCheck
+        - requiredDocsCheck
+        - requiredFieldsCheck
+        - overallStatus
+        - validationDetails
+    CustomerVerificationResponseDto:
+      type: object
+      properties:
+        requestCode:
+          type: string
+          example: CUS-VER-101
+        customerName:
+          type: string
+          example: Vikram Mehta
+        companyName:
+          type: string
+          example: Apex Care Pharma Ltd
+        customerType:
+          type: string
+          example: PCD
+        verificationStatus:
+          type: string
+          example: Under Review
+        assignedComplianceOfficer:
+          type: string
+          example: Rajesh Kumar (Compliance Desk A)
+        autoValidation:
+          $ref: '#/components/schemas/AutoValidationResultDto'
+        customerCode:
+          type: string
+          example: CUS000101
+        createdAt:
+          type: string
+          example: '2026-10-13T10:00:00.000Z'
+      required:
+        - requestCode
+        - customerName
+        - companyName
+        - customerType
+        - verificationStatus
+        - autoValidation
+        - createdAt
+    ManufacturerStep1Dto:
+      type: object
+      properties:
+        companyName:
+          type: string
+          maxLength: 150
+          example: SunBio LifeSciences Pvt. Ltd.
+        facilityAddress:
+          type: string
+          maxLength: 500
+          example: Plot 42, IDA Pashamylaram, Phase III
+        city:
+          type: string
+          maxLength: 100
+          example: Hyderabad
+        state:
+          type: string
+          maxLength: 100
+          example: Telangana
+        pincode:
+          type: string
+          pattern: ^[1-9][0-9]{5}$
+          example: '502307'
+          description: 6-digit Indian pincode
+        mfgCapacity:
+          type: string
+          maxLength: 150
+          example: 10,000,000 Units / Month
+          description: Monthly installed manufacturing capacity
+        contactPerson:
+          type: string
+          maxLength: 150
+          example: Dr. Vikram Sethi
+        designation:
+          type: string
+          maxLength: 100
+          example: Plant Head / Director
+        email:
+          type: string
+          maxLength: 150
+          format: email
+          example: plant@sunbiolabs.com
+          description: Official plant email (also the login identifier)
+        phone:
+          type: string
+          example: +91 98765 43210
+      required:
+        - companyName
+        - facilityAddress
+        - city
+        - state
+        - pincode
+        - mfgCapacity
+        - contactPerson
+        - designation
+        - email
+        - phone
+    ManufacturerStepResponseDto:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Company details saved successfully
+        registrationCode:
+          type: string
+          example: REG-MFG-1A2B3C4D5E6F7A8B
+        currentStep:
+          type: number
+          example: 1
+      required:
+        - success
+        - message
+        - registrationCode
+        - currentStep
+    ManufacturerDocumentDatesDto:
+      type: object
+      properties:
+        category:
+          type: string
+          example: mfgLicense
+          enum:
+            - mfgLicense
+            - gmpCert
+            - whoGmpCert
+            - isoCert
+            - factoryReg
+            - pollutionCert
+        issueDate:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2023-04-15'
+          description: ISO date (YYYY-MM-DD); must not be in the future
+        expiryDate:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          example: '2028-04-14'
+          description: ISO date (YYYY-MM-DD); must be after issueDate and not already expired
+      required:
+        - category
+        - issueDate
+        - expiryDate
+    ManufacturerStep2Dto:
+      type: object
+      properties:
+        documents:
+          description: Issue/expiry dates for the uploaded certifications
+          type: array
+          items:
+            $ref: '#/components/schemas/ManufacturerDocumentDatesDto'
+      required:
+        - documents
+    ManufacturerStep3Dto:
+      type: object
+      properties:
+        productIds:
+          uniqueItems: true
+          example:
+            - p1
+            - p2
+          description: Catalogue product IDs; replaces the saved selection
+          type: array
+          items:
+            type: string
+      required:
+        - productIds
+    ManufacturerSupplyItemDto:
+      type: object
+      properties:
+        productId:
+          type: string
+          example: p1
+        moq:
+          type: number
+          minimum: 1
+          maximum: 2000000000
+          example: 1000
+          description: Minimum order quantity (positive integer)
+        leadTimeDays:
+          type: number
+          minimum: 1
+          maximum: 3650
+          example: 14
+          description: Typical production delivery schedule in days (positive integer)
+      required:
+        - productId
+        - moq
+        - leadTimeDays
+    ManufacturerStep4Dto:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManufacturerSupplyItemDto'
+      required:
+        - items
+    ManufacturerSubmitDto:
+      type: object
+      properties:
+        registrationCode:
+          type: string
+          example: REG-MFG-1A2B3C4D5E6F7A8B
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          example: Str0ngPass!
+          description: Password for the manufacturer portal login (stored as a bcrypt hash)
+        confirmAccurate:
+          type: boolean
+          example: true
+          description: Declaration that all information and documents are accurate
+      required:
+        - registrationCode
+        - password
+        - confirmAccurate
+    ManufacturerReviewDocumentDto:
+      type: object
+      properties:
+        decision:
+          enum:
+            - APPROVED
+            - REJECTED
+            - NEEDS_REPLACEMENT
+          type: string
+          example: REJECTED
+        reason:
+          type: string
+          maxLength: 500
+          example: Certificate is blurred
+          description: Mandatory when rejected or replacement is requested
+      required:
+        - decision
+    ApproveVerificationDto:
+      type: object
+      properties:
+        customerCode:
+          type: string
+          example: CUS000101
+          description: Generated customer code if custom
+    RejectVerificationDto:
+      type: object
+      properties:
+        rejectionReason:
+          type: string
+          example: Drug License expired or invalid
+          description: Reason for rejection
+      required:
+        - rejectionReason
+    RequestMoreDocsDto:
+      type: object
+      properties:
+        notes:
+          example:
+            - Please provide updated Form 20B/21B renewal certificate
+          type: array
+          items:
+            type: string
+      required:
+        - notes
+    ReviewDocumentDto:
+      type: object
+      properties:
+        decision:
+          enum:
+            - APPROVED
+            - REJECTED
+            - NEEDS_REPLACEMENT
+          type: string
+          example: REJECTED
+          description: Review decision for document
+        reason:
+          type: string
+          maxLength: 500
+          example: Seal missing or document blurred
+          description: Mandatory if rejected or replacement requested
+        reviewer:
+          type: string
+          maxLength: 150
+          example: Rajesh Kumar (Compliance Desk A)
+          description: Auditor or officer who reviewed the document (defaults to the authenticated reviewer)
+      required:
+        - decision
     BuyerRegistrationDto:
       type: object
       properties:

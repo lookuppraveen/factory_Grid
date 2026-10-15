@@ -1,12 +1,8 @@
-// FactoryGrid API database schema.
-// IAM tables keep the exact names and columns of the retired Java iam-service,
-// so an existing database and its BCrypt password hashes carry over unchanged.
-
 generator client {
   provider            = "prisma-client"
   output              = "../src/generated/prisma"
-  moduleFormat        = "cjs"
   importFileExtension = ""
+  moduleFormat        = "cjs"
 }
 
 datasource db {
@@ -25,25 +21,28 @@ model Role {
 }
 
 model User {
-  id                  BigInt         @id @default(autoincrement())
-  userCode            String         @unique @map("user_code") @db.VarChar(50)
-  username            String         @unique @db.VarChar(100)
-  email               String         @unique @db.VarChar(150)
-  passwordHash        String         @map("password_hash") @db.VarChar(255)
-  fullName            String         @map("full_name") @db.VarChar(150)
-  phone               String?        @db.VarChar(30)
-  companyName         String?        @map("company_name") @db.VarChar(150)
-  companyCode         String?        @map("company_code") @db.VarChar(50)
-  department          String?        @db.VarChar(100)
-  jobTitle            String?        @map("job_title") @db.VarChar(100)
-  accountStatus       String         @default("ACTIVE") @map("account_status") @db.VarChar(30)
-  failedLoginAttempts Int            @default(0) @map("failed_login_attempts")
-  accountLockedUntil  DateTime?      @map("account_locked_until") @db.Timestamptz(6)
-  lastLoginAt         DateTime?      @map("last_login_at") @db.Timestamptz(6)
-  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  roles               UserRole[]
-  refreshTokens       RefreshToken[]
+  id                   BigInt                        @id @default(autoincrement())
+  userCode             String                        @unique @map("user_code") @db.VarChar(50)
+  username             String                        @unique @db.VarChar(100)
+  email                String                        @unique @db.VarChar(150)
+  passwordHash         String                        @map("password_hash") @db.VarChar(255)
+  fullName             String                        @map("full_name") @db.VarChar(150)
+  phone                String?                       @db.VarChar(30)
+  companyName          String?                       @map("company_name") @db.VarChar(150)
+  companyCode          String?                       @map("company_code") @db.VarChar(50)
+  department           String?                       @db.VarChar(100)
+  jobTitle             String?                       @map("job_title") @db.VarChar(100)
+  accountStatus        String                        @default("ACTIVE") @map("account_status") @db.VarChar(30)
+  failedLoginAttempts  Int                           @default(0) @map("failed_login_attempts")
+  accountLockedUntil   DateTime?                     @map("account_locked_until") @db.Timestamptz(6)
+  lastLoginAt          DateTime?                     @map("last_login_at") @db.Timestamptz(6)
+  createdAt            DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  buyerRegistrations   BuyerRegistration[]
+  manufacturerRegistrations ManufacturerRegistration[]
+  verificationRequests CustomerVerificationRequest[]
+  refreshTokens        RefreshToken[]
+  roles                UserRole[]
 
   @@index([username], map: "idx_users_username")
   @@index([email], map: "idx_users_email")
@@ -54,8 +53,8 @@ model User {
 model UserRole {
   userId BigInt @map("user_id")
   roleId BigInt @map("role_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([userId, roleId])
   @@map("user_roles")
@@ -68,9 +67,216 @@ model RefreshToken {
   expiryDate DateTime @map("expiry_date") @db.Timestamptz(6)
   revoked    Boolean  @default(false)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([token], map: "idx_refresh_tokens_token")
   @@index([userId], map: "idx_refresh_tokens_user_id")
   @@map("refresh_tokens")
+}
+
+model BuyerRegistration {
+  id                  BigInt                        @id @default(autoincrement())
+  registrationCode    String                        @unique @map("registration_code") @db.VarChar(50)
+  userId              BigInt?                       @map("user_id")
+  companyName         String                        @map("company_name") @db.VarChar(150)
+  businessType        String                        @map("business_type") @db.VarChar(100)
+  gstNumber           String                        @map("gst_number") @db.VarChar(30)
+  panNumber           String                        @map("pan_number") @db.VarChar(30)
+  drugLicenseNumber   String                        @map("drug_license_number") @db.VarChar(100)
+  cinNumber           String?                       @map("cin_number") @db.VarChar(50)
+  website             String?                       @db.VarChar(255)
+  contactPerson       String                        @map("contact_person") @db.VarChar(150)
+  designation         String                        @db.VarChar(100)
+  mobileNumber        String                        @map("mobile_number") @db.VarChar(30)
+  email               String                        @db.VarChar(150)
+  billingAddress      String                        @map("billing_address") @db.VarChar(500)
+  shippingAddress     String                        @map("shipping_address") @db.VarChar(500)
+  state               String                        @db.VarChar(100)
+  country             String                        @default("India") @db.VarChar(100)
+  pincode             String                        @db.VarChar(20)
+  customerTypeDetails Json?                         @map("customer_type_details")
+  currentStep         Int                           @default(1) @map("current_step")
+  status              String                        @default("DRAFT") @db.VarChar(50)
+  submittedAt         DateTime?                     @map("submitted_at") @db.Timestamptz(6)
+  reviewedAt          DateTime?                     @map("reviewed_at") @db.Timestamptz(6)
+  assignedOfficer     String?                       @map("assigned_officer") @db.VarChar(150)
+  autoValidation      Json?                         @map("auto_validation")
+  rejectionReason     String?                       @map("rejection_reason") @db.VarChar(500)
+  createdAt           DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  documents           BuyerDocument[]
+  user                User?                         @relation(fields: [userId], references: [id])
+  verificationRequests CustomerVerificationRequest[]
+
+  @@index([email], map: "idx_buyer_reg_email")
+  @@index([gstNumber], map: "idx_buyer_reg_gst")
+  @@index([panNumber], map: "idx_buyer_reg_pan")
+  @@index([userId], map: "idx_buyer_reg_user_id")
+  @@index([registrationCode], map: "idx_buyer_reg_code")
+  @@index([status], map: "idx_buyer_reg_status")
+  @@map("buyer_registrations")
+}
+
+model BuyerDocument {
+  id                  BigInt            @id @default(autoincrement())
+  registrationId      BigInt            @map("registration_id")
+  category            String            @db.VarChar(50)
+  categoryDisplayName String            @map("category_display_name") @db.VarChar(100)
+  fileName            String            @map("file_name") @db.VarChar(255)
+  fileSize            BigInt            @map("file_size")
+  mimeType            String            @map("mime_type") @db.VarChar(100)
+  storageKey          String            @map("storage_key") @db.VarChar(500)
+  storageBucket       String            @map("storage_bucket") @db.VarChar(100)
+  status              String            @default("PENDING") @db.VarChar(50)
+  rejectionReason     String?           @map("rejection_reason") @db.VarChar(500)
+  reviewedBy          String?           @map("reviewed_by") @db.VarChar(150)
+  reviewedAt          DateTime?         @map("reviewed_at") @db.Timestamptz(6)
+  reviewDecision      String?           @map("review_decision") @db.VarChar(50)
+  version             Int               @default(1)
+
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  registration          BuyerRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([category], map: "idx_buyer_doc_category")
+  @@index([registrationId], map: "idx_buyer_doc_registration_id")
+  @@index([storageKey], map: "idx_buyer_doc_storage_key")
+  @@map("buyer_documents")
+}
+
+model CustomerVerificationRequest {
+  id                        BigInt             @id @default(autoincrement())
+  requestCode               String             @unique @map("request_code") @db.VarChar(50)
+  registrationId            BigInt?            @map("registration_id")
+  userId                    BigInt?            @map("user_id")
+  customerName              String             @map("customer_name") @db.VarChar(150)
+  companyName               String             @map("company_name") @db.VarChar(150)
+  customerType              String             @map("customer_type") @db.VarChar(50)
+  customerClassification    String             @default("REGULAR") @map("customer_classification") @db.VarChar(50)
+  verificationStatus        String             @default("Under Review") @map("verification_status") @db.VarChar(50)
+  assignedComplianceOfficer String?            @map("assigned_compliance_officer") @db.VarChar(150)
+  gstNumber                 String             @map("gst_number") @db.VarChar(30)
+  panNumber                 String             @map("pan_number") @db.VarChar(20)
+  drugLicenseNumber         String             @map("drug_license_number") @db.VarChar(50)
+  cinNumber                 String?            @map("cin_number") @db.VarChar(50)
+  website                   String?            @db.VarChar(255)
+  email                     String             @db.VarChar(150)
+  phone                     String             @db.VarChar(30)
+  contactPerson             String             @map("contact_person") @db.VarChar(150)
+  designation               String             @db.VarChar(100)
+  billingAddress            String             @map("billing_address")
+  shippingAddress           String             @map("shipping_address")
+  state                     String             @db.VarChar(100)
+  country                   String             @default("India") @db.VarChar(100)
+  pincode                   String             @db.VarChar(20)
+  customerTypeDetails       Json?              @map("customer_type_details")
+  autoValidation            Json               @map("auto_validation")
+  businessVerification      Json?              @map("business_verification")
+  regulatoryVerification    Json?              @map("regulatory_verification")
+  financialVerification     Json?              @map("financial_verification")
+  requestedDocumentsNotes   Json?              @map("requested_documents_notes")
+  rejectionReason           String?            @map("rejection_reason")
+  reviewNotes               Json?              @map("review_notes")
+  customerCode              String?            @map("customer_code") @db.VarChar(50)
+  portalLoginCreated        Boolean            @default(false) @map("portal_login_created")
+  portalUsername            String?            @map("portal_username") @db.VarChar(100)
+  approvedAt                DateTime?          @map("approved_at") @db.Timestamptz(6)
+  createdAt                 DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  registration              BuyerRegistration? @relation(fields: [registrationId], references: [id], onUpdate: NoAction)
+  user                      User?              @relation(fields: [userId], references: [id], onUpdate: NoAction)
+
+  @@map("customer_verification_requests")
+}
+
+/// Master product catalogue that manufacturers pick their capabilities from.
+model CatalogProduct {
+  id                   String                @id @db.VarChar(50)
+  productCode          String                @unique @map("product_code") @db.VarChar(50)
+  name                 String                @db.VarChar(200)
+  genericName          String                @map("generic_name") @db.VarChar(250)
+  dosageForm           String                @map("dosage_form") @db.VarChar(100)
+  category             String                @db.VarChar(100)
+  packSize             String                @map("pack_size") @db.VarChar(100)
+  active               Boolean               @default(true)
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  manufacturerProducts ManufacturerProduct[]
+
+  @@index([category], map: "idx_catalog_products_category")
+  @@map("catalog_products")
+}
+
+model ManufacturerRegistration {
+  id               BigInt                 @id @default(autoincrement())
+  registrationCode String                 @unique @map("registration_code") @db.VarChar(50)
+  userId           BigInt?                @map("user_id")
+  companyName      String                 @map("company_name") @db.VarChar(150)
+  facilityAddress  String                 @map("facility_address") @db.VarChar(500)
+  city             String                 @db.VarChar(100)
+  state            String                 @db.VarChar(100)
+  pincode          String                 @db.VarChar(20)
+  mfgCapacity      String                 @map("mfg_capacity") @db.VarChar(150)
+  contactPerson    String                 @map("contact_person") @db.VarChar(150)
+  designation      String                 @db.VarChar(100)
+  email            String                 @db.VarChar(150)
+  phone            String                 @db.VarChar(30)
+  currentStep      Int                    @default(1) @map("current_step")
+  status           String                 @default("DRAFT") @db.VarChar(50)
+  submittedAt      DateTime?              @map("submitted_at") @db.Timestamptz(6)
+  reviewedAt       DateTime?              @map("reviewed_at") @db.Timestamptz(6)
+  reviewedBy       String?                @map("reviewed_by") @db.VarChar(150)
+  rejectionReason  String?                @map("rejection_reason") @db.VarChar(500)
+  manufacturerCode String?                @map("manufacturer_code") @db.VarChar(50)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user             User?                  @relation(fields: [userId], references: [id])
+  documents        ManufacturerDocument[]
+  products         ManufacturerProduct[]
+
+  @@index([userId], map: "idx_mfg_reg_user_id")
+  @@index([email], map: "idx_mfg_reg_email")
+  @@index([status], map: "idx_mfg_reg_status")
+  @@map("manufacturer_registrations")
+}
+
+model ManufacturerDocument {
+  id                  BigInt                   @id @default(autoincrement())
+  registrationId      BigInt                   @map("registration_id")
+  category            String                   @db.VarChar(50)
+  categoryDisplayName String                   @map("category_display_name") @db.VarChar(100)
+  fileName            String                   @map("file_name") @db.VarChar(255)
+  fileSize            BigInt                   @map("file_size")
+  mimeType            String                   @map("mime_type") @db.VarChar(100)
+  storageKey          String                   @map("storage_key") @db.VarChar(500)
+  storageBucket       String                   @map("storage_bucket") @db.VarChar(100)
+  issueDate           DateTime                 @map("issue_date") @db.Date
+  expiryDate          DateTime                 @map("expiry_date") @db.Date
+  status              String                   @default("PENDING") @db.VarChar(50)
+  rejectionReason     String?                  @map("rejection_reason") @db.VarChar(500)
+  reviewedBy          String?                  @map("reviewed_by") @db.VarChar(150)
+  reviewedAt          DateTime?                @map("reviewed_at") @db.Timestamptz(6)
+  reviewDecision      String?                  @map("review_decision") @db.VarChar(50)
+  version             Int                      @default(1)
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  registration        ManufacturerRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([registrationId], map: "idx_mfg_doc_registration_id")
+  @@index([category], map: "idx_mfg_doc_category")
+  @@map("manufacturer_documents")
+}
+
+model ManufacturerProduct {
+  id             BigInt                   @id @default(autoincrement())
+  registrationId BigInt                   @map("registration_id")
+  productId      String                   @map("product_id") @db.VarChar(50)
+  moq            Int?
+  leadTimeDays   Int?                     @map("lead_time_days")
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  registration   ManufacturerRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  product        CatalogProduct           @relation(fields: [productId], references: [id])
+
+  @@unique([registrationId, productId], map: "uq_mfg_product_registration_product")
+  @@map("manufacturer_products")
 }

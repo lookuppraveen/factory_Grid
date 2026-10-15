@@ -15,6 +15,7 @@ export interface AuthUser {
   department?: string;
   jobTitle?: string;
   roles: string[];
+  accountStatus?: string;
 }
 
 export interface AuthResponse {

@@ -25,31 +25,56 @@ async function main(): Promise<void> {
 
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
   try {
-    const existing = await prisma.user.findFirst({ where: { OR: [{ username }, { email }] } });
-    if (existing) {
-      console.log(`Admin "${existing.username}" already exists; nothing changed.`);
-      return;
-    }
     const role = await prisma.role.upsert({
       where: { name: 'ROLE_ADMIN' },
       update: {},
       create: { name: 'ROLE_ADMIN', description: 'Platform System Administrator with governance access' },
     });
+
+    const existing = await prisma.user.findFirst({ where: { OR: [{ username }, { email }] } });
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    if (existing) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          passwordHash,
+          accountStatus: 'ACTIVE',
+          failedLoginAttempts: 0,
+          accountLockedUntil: null,
+        },
+      });
+
+      // Ensure user has ROLE_ADMIN assigned
+      const hasRole = await prisma.userRole.findUnique({
+        where: { userId_roleId: { userId: existing.id, roleId: role.id } },
+      });
+      if (!hasRole) {
+        await prisma.userRole.create({
+          data: { userId: existing.id, roleId: role.id },
+        });
+      }
+
+      console.log(`Admin "${existing.username}" (${existing.email}) credentials synchronized and account verified active.`);
+      return;
+    }
+
     await prisma.user.create({
       data: {
         userCode: 'USR-ADM-001',
         username,
         email,
-        passwordHash: await bcrypt.hash(password, 12),
+        passwordHash,
         fullName: 'System Administrator',
         companyName: 'FactoryGrid Platform',
         companyCode: 'FG-HQ-001',
         department: 'Executive IT & Security',
         jobTitle: 'Super Administrator',
+        accountStatus: 'ACTIVE',
         roles: { create: [{ roleId: role.id }] },
       },
     });
-    console.log(`Admin "${username}" created.`);
+    console.log(`Admin "${username}" created successfully.`);
   } finally {
     await prisma.$disconnect();
   }

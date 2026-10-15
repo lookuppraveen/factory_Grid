@@ -84,7 +84,18 @@ export class AuthService {
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
     if (!isActive(user)) {
-      throw new ForbiddenException(`Account is ${user.accountStatus}. Please contact administrator.`);
+      const isRegisteredBuyer =
+        roleNames(user).includes('ROLE_BUYER') &&
+        (await this.prisma.buyerRegistration.count({ where: { userId: user.id } })) > 0;
+      const isRegisteredMfg =
+        (roleNames(user).includes('ROLE_MANUFACTURER') || roleNames(user).includes('ROLE_SUPPLIER')) &&
+        (await this.prisma.manufacturerRegistration.count({ where: { userId: user.id } })) > 0;
+      const isPermittedState =
+        (isRegisteredBuyer || isRegisteredMfg) &&
+        !['SUSPENDED', 'BANNED', 'DELETED'].includes(user.accountStatus.toUpperCase());
+      if (!isPermittedState) {
+        throw new ForbiddenException(`Account is ${user.accountStatus}. Please contact administrator.`);
+      }
     }
     if (isLocked(user)) {
       throw new LockedException('Account is temporarily locked due to multiple failed attempts. Try again later.');

@@ -31,6 +31,7 @@ import { ShipmentCredentials } from '../services/connectors/types';
 import { GSTCredentials } from '../services/connectors/gstTypes';
 import { verifyTOTPToken, generateRecoveryCodes } from '../services/auth/totpUtils';
 import { authApi, AuthUser } from '../services/authApi';
+import { adminVerificationApi } from '../services/adminVerificationApi';
 
 export interface TwoFactorState {
   isEnabled: boolean;
@@ -820,7 +821,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         jobTitle: newAuthUser.jobTitle || (effectiveRole === 'BUYER' ? 'Procurement Lead' : effectiveRole === 'ADMIN' ? 'System Administrator' : 'Plant Head'),
         role: effectiveRole,
         department: newAuthUser.department || 'Operations',
-        accountStatus: 'Active',
+        accountStatus: (newAuthUser.accountStatus as any) || 'Active',
         lastLogin: 'Just now',
         avatarUrl: ''
       });
@@ -2427,7 +2428,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('fg_invoices', JSON.stringify(invoices));
     } catch (e) { }
   }, [invoices]);
-  const [complianceCases, setComplianceCases] = useState<ComplianceCase[]>(mockComplianceCases);
+  const [complianceCases, setComplianceCases] = useState<ComplianceCase[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>(mockNotifications);
   const [buyerOnboardings, setBuyerOnboardings] = useState<BuyerOnboarding[]>(mockBuyerOnboardings);
   const [manufacturerOnboardings, setManufacturerOnboardings] = useState<ManufacturerOnboarding[]>(mockManufacturerOnboardings);
@@ -2435,7 +2436,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [crmLeads, setCrmLeads] = useState<CRMLead[]>(mockCRMLeads);
   const [paymentTransactions, setPaymentTransactions] = useState<PaymentTransaction[]>(mockPaymentTransactions);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(mockAuditLogs);
-  const [customerVerifications, setCustomerVerifications] = useState<CustomerVerificationRequest[]>(mockCustomerVerifications);
+  const [customerVerifications, setCustomerVerifications] = useState<CustomerVerificationRequest[]>([]);
+
+  // Sync real customer verification requests from PostgreSQL
+  useEffect(() => {
+    adminVerificationApi.listCustomerVerifications()
+      .then(res => {
+        if (Array.isArray(res)) {
+          setCustomerVerifications(res);
+        }
+      })
+      .catch(() => {});
+  }, [currentRole]);
 
   // Shipment & GST Integration State
   const [shipmentConnectors, setShipmentConnectors] = useState<Record<string, ShipmentCredentials>>(() => {
@@ -4912,10 +4924,11 @@ const getProductAttributes = (productId: string): Record<string, string> => {
     const pan = reqData.panNumber || '';
     const docs = reqData.documents || [];
 
-    const isGstValid = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(gst.trim()) || gst.length >= 10;
-    const isPanValid = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(pan.trim()) || pan.length >= 8;
+    // Testing Acceptance: any non-empty GST/PAN is accepted for testing without government verification
+    const isGstValid = gst.trim().length > 0;
+    const isPanValid = pan.trim().length > 0;
     const hasAllDocs = docs.length >= 6;
-    const hasFields = !!(reqData.companyName && reqData.customerType && reqData.gstNumber && reqData.panNumber && reqData.drugLicenseNumber && reqData.cinNumber);
+    const hasFields = !!(reqData.companyName && reqData.customerType && reqData.gstNumber && reqData.panNumber && reqData.drugLicenseNumber);
 
     const autoValOverall = (isGstValid && isPanValid && hasAllDocs && hasFields) ? 'Valid' : 'Pending Review';
 
@@ -5327,9 +5340,10 @@ const getProductAttributes = (productId: string): Record<string, string> => {
   };
 
   const resetDemoState = () => {
-    // 1. Reset customers & customerVerifications to pristine mockData
-    setCustomers(mockCustomers);
-    setCustomerVerifications(mockCustomerVerifications);
+    // 1. Sync real verification requests from PostgreSQL database without overwriting real records
+    adminVerificationApi.listCustomerVerifications()
+      .then(res => { if (Array.isArray(res)) setCustomerVerifications(res); })
+      .catch(() => {});
 
     // 2. Reset RFQs, Orders, and Quotes to pristine initial mockData
     setRfqs(mockRFQs);

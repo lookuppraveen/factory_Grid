@@ -19,6 +19,20 @@ export class JwtAuthGuard implements CanActivate {
       context.getClass(),
     ]);
     if (isPublic) {
+      // Optional authentication: attach the caller when a valid token is present, never reject.
+      const publicRequest = context.switchToHttp().getRequest();
+      const publicHeader: string | undefined = publicRequest.headers?.authorization;
+      if (publicHeader?.startsWith('Bearer ')) {
+        try {
+          const claims = await this.jwt.verifyAsync<AccessTokenClaims>(publicHeader.slice(7));
+          const loaded = await this.users.load(claims.sub);
+          if (loaded) {
+            publicRequest.user = loaded;
+          }
+        } catch {
+          // ignore: public route
+        }
+      }
       return true;
     }
 

@@ -1,23 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ShieldCheck, Search, Eye, X, CheckCircle2, Clock, AlertTriangle, FileText, Building2 } from 'lucide-react';
+import { adminVerificationApi } from '../../services/adminVerificationApi';
+import { CustomerVerificationRequest } from '../../types';
+import { ShieldCheck, Search, Eye, X, CheckCircle2, Clock, AlertTriangle, FileText, Building2, RefreshCw } from 'lucide-react';
 
 export const AdminComplianceVerificationMonitor: React.FC = () => {
-  const { complianceCases, currentRole } = useApp();
+  const { currentRole } = useApp();
+  const [cases, setCases] = useState<CustomerVerificationRequest[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [selectedCase, setSelectedCase] = useState<any | null>(null);
+  const [selectedCase, setSelectedCase] = useState<CustomerVerificationRequest | null>(null);
 
-  const pendingCount = complianceCases.filter(c => c.status === 'UNDER_REVIEW' || c.status === 'PENDING').length;
-  const approvedCount = complianceCases.filter(c => c.status === 'APPROVED' || c.status === 'VERIFIED').length;
-  const rejectedCount = complianceCases.filter(c => c.status === 'REJECTED').length;
-  const expiringCount = 1;
+  const loadData = () => {
+    setIsLoading(true);
+    adminVerificationApi.listCustomerVerifications()
+      .then(res => setCases(Array.isArray(res) ? res : []))
+      .catch(() => setCases([]))
+      .finally(() => setIsLoading(false));
+  };
 
-  const filteredCases = complianceCases.filter(c => {
-    const matchSearch = c.entityName.toLowerCase().includes(searchTerm.toLowerCase()) || c.id.toLowerCase().includes(searchTerm.toLowerCase());
-    if (statusFilter === 'PENDING') return matchSearch && (c.status === 'UNDER_REVIEW' || c.status === 'PENDING');
-    if (statusFilter === 'APPROVED') return matchSearch && (c.status === 'APPROVED' || c.status === 'VERIFIED');
-    if (statusFilter === 'REJECTED') return matchSearch && c.status === 'REJECTED';
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const pendingCount = cases.filter(c => c.verificationStatus === 'Under Review' || c.verificationStatus === 'Pending').length;
+  const approvedCount = cases.filter(c => c.verificationStatus === 'Active' || c.verificationStatus === 'Approved').length;
+  const rejectedCount = cases.filter(c => c.verificationStatus === 'Rejected').length;
+  const needDocsCount = cases.filter(c => c.verificationStatus === 'Need More Docs').length;
+
+  const filteredCases = cases.filter(c => {
+    const matchSearch = c.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || (c.requestCode || c.id).toLowerCase().includes(searchTerm.toLowerCase());
+    if (statusFilter === 'PENDING') return matchSearch && (c.verificationStatus === 'Under Review' || c.verificationStatus === 'Pending');
+    if (statusFilter === 'APPROVED') return matchSearch && (c.verificationStatus === 'Active' || c.verificationStatus === 'Approved');
+    if (statusFilter === 'REJECTED') return matchSearch && c.verificationStatus === 'Rejected';
     return matchSearch;
   });
 
@@ -32,21 +48,29 @@ export const AdminComplianceVerificationMonitor: React.FC = () => {
             Compliance Verification Monitor
           </h1>
           <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
-            Monitor regulatory compliance cases, Form 20B/21B CDSCO drug licenses and verification statuses.
+            Live database records for buyer regulatory compliance cases, Form 20B/21B CDSCO drug licenses and verification statuses.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#EEF2FF', border: '1px solid #C7D2FE', padding: '6px 14px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, color: '#4338CA' }}>
-          <Eye size={14} /> READ-ONLY MONITORING MODE
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={loadData}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FFF', border: '1px solid #CBD5E1', padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+          >
+            <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} /> Refresh
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#EEF2FF', border: '1px solid #C7D2FE', padding: '6px 14px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, color: '#4338CA' }}>
+            <Eye size={14} /> LIVE DATABASE MONITOR
+          </div>
         </div>
       </div>
 
       {/* KPI Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
         {[
-          { label: 'PENDING REVIEW', val: pendingCount, color: '#D97706', bg: '#FFFBEB', icon: Clock },
-          { label: 'APPROVED', val: approvedCount, color: '#15803D', bg: '#DCFCE7', icon: CheckCircle2 },
+          { label: 'PENDING / UNDER REVIEW', val: pendingCount, color: '#D97706', bg: '#FFFBEB', icon: Clock },
+          { label: 'APPROVED / ACTIVE', val: approvedCount, color: '#15803D', bg: '#DCFCE7', icon: CheckCircle2 },
           { label: 'REJECTED', val: rejectedCount, color: '#DC2626', bg: '#FEF2F2', icon: AlertTriangle },
-          { label: 'EXPIRING LICENSES', val: expiringCount, color: '#4F46E5', bg: '#EEF2FF', icon: ShieldCheck },
+          { label: 'NEED MORE DOCS', val: needDocsCount, color: '#DB2777', bg: '#FDF2F8', icon: ShieldCheck },
         ].map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
@@ -83,34 +107,52 @@ export const AdminComplianceVerificationMonitor: React.FC = () => {
               <th style={{ padding: '12px 16px' }}>Organization</th>
               <th style={{ padding: '12px 16px' }}>Type</th>
               <th style={{ padding: '12px 16px' }}>License / Reg #</th>
-              <th style={{ padding: '12px 16px' }}>Expiry Date</th>
-              <th style={{ padding: '12px 16px' }}>Submitted By</th>
-              <th style={{ padding: '12px 16px' }}>Current Reviewer</th>
+              <th style={{ padding: '12px 16px' }}>GSTIN</th>
+              <th style={{ padding: '12px 16px' }}>Registration Date</th>
+              <th style={{ padding: '12px 16px' }}>Assigned Officer</th>
               <th style={{ padding: '12px 16px' }}>Status</th>
               <th style={{ padding: '12px 16px', textAlign: 'right' }}>Action</th>
             </tr>
           </thead>
           <tbody>
-            {filteredCases.map(c => (
-              <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0F172A' }}>{c.entityName}</td>
-                <td style={{ padding: '12px 16px', color: '#475569' }}>{c.entityType || 'PCD Franchise Buyer'}</td>
-                <td style={{ padding: '12px 16px', fontFamily: 'monospace' }}>DL-20B-99812</td>
-                <td style={{ padding: '12px 16px', color: '#64748B' }}>2028-12-31</td>
-                <td style={{ padding: '12px 16px', color: '#475569' }}>Compliance Desk</td>
-                <td style={{ padding: '12px 16px', color: '#475569' }}>Compliance Officer Desk</td>
-                <td style={{ padding: '12px 16px' }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: c.status === 'APPROVED' ? '#DCFCE7' : c.status === 'REJECTED' ? '#FEF2F2' : '#FEF3C7', color: c.status === 'APPROVED' ? '#15803D' : c.status === 'REJECTED' ? '#DC2626' : '#B45309' }}>
-                    {c.status}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                  <button onClick={() => setSelectedCase(c)} style={{ padding: '4px 10px', background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                    View Details
-                  </button>
+            {isLoading ? (
+              <tr>
+                <td colSpan={8} style={{ padding: 32, textAlign: 'center', color: '#64748B' }}>
+                  Loading compliance records from database...
                 </td>
               </tr>
-            ))}
+            ) : filteredCases.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ padding: 32, textAlign: 'center', color: '#64748B' }}>
+                  No compliance records match your search.
+                </td>
+              </tr>
+            ) : (
+              filteredCases.map(c => (
+                <tr key={c.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                  <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0F172A' }}>{c.companyName}</td>
+                  <td style={{ padding: '12px 16px', color: '#475569' }}>{c.customerType || 'Buyer'}</td>
+                  <td style={{ padding: '12px 16px', fontFamily: 'monospace' }}>{c.drugLicenseNumber || '—'}</td>
+                  <td style={{ padding: '12px 16px', fontFamily: 'monospace', color: '#64748B' }}>{c.gstNumber || '—'}</td>
+                  <td style={{ padding: '12px 16px', color: '#475569' }}>{c.registrationDate || '—'}</td>
+                  <td style={{ padding: '12px 16px', color: '#475569' }}>{c.assignedComplianceOfficer || 'Unassigned'}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 999,
+                      background: (c.verificationStatus === 'Active' || c.verificationStatus === 'Approved') ? '#DCFCE7' : c.verificationStatus === 'Rejected' ? '#FEF2F2' : '#FEF3C7',
+                      color: (c.verificationStatus === 'Active' || c.verificationStatus === 'Approved') ? '#15803D' : c.verificationStatus === 'Rejected' ? '#DC2626' : '#B45309'
+                    }}>
+                      {c.verificationStatus}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    <button onClick={() => setSelectedCase(c)} style={{ padding: '4px 10px', background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -119,21 +161,22 @@ export const AdminComplianceVerificationMonitor: React.FC = () => {
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#FFF', borderRadius: 12, width: '100%', maxWidth: 640, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: 12 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Compliance Inspection: {selectedCase.entityName}</h3>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Compliance Inspection: {selectedCase.companyName}</h3>
               <button onClick={() => setSelectedCase(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} /></button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12.5 }}>
-              <div><strong>Organization:</strong> {selectedCase.entityName}</div>
-              <div><strong>Status:</strong> {selectedCase.status}</div>
-              <div><strong>License:</strong> DL-20B-99812</div>
-              <div><strong>Expiry:</strong> 2028-12-31</div>
+              <div><strong>Organization:</strong> {selectedCase.companyName}</div>
+              <div><strong>Status:</strong> {selectedCase.verificationStatus}</div>
+              <div><strong>Drug License:</strong> {selectedCase.drugLicenseNumber || '—'}</div>
+              <div><strong>GSTIN:</strong> {selectedCase.gstNumber || '—'}</div>
+              <div><strong>PAN:</strong> {selectedCase.panNumber || '—'}</div>
+              <div><strong>Officer:</strong> {selectedCase.assignedComplianceOfficer || 'Unassigned'}</div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
               <button onClick={() => setSelectedCase(null)} style={{ padding: '8px 18px', background: '#334155', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Close</button>
             </div>
           </div>
         </div>
-      )}
     </div>
   );
 };

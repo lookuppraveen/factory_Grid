@@ -9,6 +9,12 @@ export interface Env {
   JWT_EXPIRATION_MS: number;
   JWT_REFRESH_EXPIRATION_MS: number;
   THROTTLE_DISABLED: boolean;
+  S3_ENDPOINT: string;
+  S3_REGION: string;
+  S3_ACCESS_KEY_ID: string;
+  S3_SECRET_ACCESS_KEY: string;
+  S3_BUCKET: string;
+  S3_FORCE_PATH_STYLE: boolean;
 }
 
 function required(raw: Record<string, unknown>, key: string): string {
@@ -44,5 +50,11 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     JWT_EXPIRATION_MS: positiveInt(raw, 'JWT_EXPIRATION_MS', 86_400_000),
     JWT_REFRESH_EXPIRATION_MS: positiveInt(raw, 'JWT_REFRESH_EXPIRATION_MS', 604_800_000),
     THROTTLE_DISABLED: raw.THROTTLE_DISABLED === 'true',
+    S3_ENDPOINT: String(raw.S3_ENDPOINT ?? 'http://127.0.0.1:9010'),
+    S3_REGION: String(raw.S3_REGION ?? 'us-east-1'),
+    S3_ACCESS_KEY_ID: String(raw.S3_ACCESS_KEY_ID ?? 'factorygrid'),
+    S3_SECRET_ACCESS_KEY: String(raw.S3_SECRET_ACCESS_KEY ?? 'factorygrid-dev'),
+    S3_BUCKET: String(raw.S3_BUCKET ?? 'factorygrid-documents'),
+    S3_FORCE_PATH_STYLE: raw.S3_FORCE_PATH_STYLE !== 'false',
   };
 }

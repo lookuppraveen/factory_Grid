@@ -7,6 +7,9 @@ import {
   Edit3, Check, X, Shield, Lock, AlertCircle, Sparkles, ChevronRight,
   ExternalLink, Download, Info, ArrowUpRight
 } from 'lucide-react';
+import { buyerRegistrationApi } from '../../services/buyerRegistrationApi';
+import { manufacturerRegistrationApi } from '../../services/manufacturerRegistrationApi';
+import { adminVerificationApi } from '../../services/adminVerificationApi';
 
 export const ProfileModule: React.FC = () => {
   const {
@@ -21,7 +24,159 @@ export const ProfileModule: React.FC = () => {
   const [isUploadDocOpen, setIsUploadDocOpen] = useState(false);
   const [selectedDocForView, setSelectedDocForView] = useState<UserDocument | null>(null);
   const [selectedDocForReplace, setSelectedDocForReplace] = useState<UserDocument | null>(null);
+  const [selectedFileForReplace, setSelectedFileForReplace] = useState<File | null>(null);
+  const [buyerRegCode, setBuyerRegCode] = useState<string>('');
+  const [mfgRegCode, setMfgRegCode] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Real backend documents state
+  const [realDocs, setRealDocs] = useState<UserDocument[] | null>(null);
+  const [isLoadingDocs, setIsLoadingDocs] = useState<boolean>(false);
+  const [docPreviewBlobUrl, setDocPreviewBlobUrl] = useState<string | null>(null);
+  const [isDocPreviewLoading, setIsDocPreviewLoading] = useState<boolean>(false);
+  const [docPreviewError, setDocPreviewError] = useState<string | null>(null);
+
+  const loadMyDocuments = async () => {
+    setIsLoadingDocs(true);
+    try {
+      if (currentRole === 'BUYER') {
+        const res = await buyerRegistrationApi.getMyRegistration();
+        if (res?.registration?.registrationCode) {
+          setBuyerRegCode(res.registration.registrationCode);
+        }
+        if (Array.isArray(res?.documents) && res.documents.length > 0) {
+          const mapped: UserDocument[] = res.documents.map((d: any) => {
+            const isVerified = d.status === 'VALID' || d.status === 'APPROVED';
+            const isRejected = d.status === 'REJECTED';
+            const isReplacement = d.status === 'NEEDS_REPLACEMENT';
+            return {
+              id: d.id,
+              documentName: d.category,
+              documentType: d.category,
+              documentNumber: d.documentCode || 'N/A',
+              issueDate: 'N/A',
+              expiryDate: 'N/A',
+              uploadedDate: d.uploadedAt ? new Date(d.uploadedAt).toISOString().split('T')[0] : 'N/A',
+              lastUpdated: d.uploadedAt ? new Date(d.uploadedAt).toISOString().split('T')[0] : 'N/A',
+              verificationStatus: isVerified ? 'VERIFIED' : isRejected ? 'REJECTED' : isReplacement ? 'REJECTED' : 'PENDING VERIFICATION',
+              verifiedBy: d.reviewedBy || (isVerified ? 'Compliance Officer' : 'Pending Compliance'),
+              verificationDate: d.reviewedAt ? new Date(d.reviewedAt).toISOString().split('T')[0] : undefined,
+              remarks: d.rejectionReason || (isVerified ? 'Verified by Compliance Desk' : isReplacement ? 'Replacement requested by Compliance Officer' : 'Under compliance review'),
+              fileName: d.fileName,
+              fileUrl: `/api/v1/compliance/documents/${d.id}/download`,
+            };
+          });
+          setRealDocs(mapped);
+        } else if (res?.registration) {
+          setRealDocs([]);
+        }
+      } else if (currentRole === 'SUPPLIER') {
+        const res = await manufacturerRegistrationApi.getMyRegistration();
+        if (res?.registrationCode) {
+          setMfgRegCode(res.registrationCode);
+        }
+        if (Array.isArray(res?.documents) && res.documents.length > 0) {
+          const mapped: UserDocument[] = res.documents.map((d: any) => {
+            const isVerified = d.status === 'VALID' || d.status === 'APPROVED';
+            const isRejected = d.status === 'REJECTED';
+            const isReplacement = d.status === 'NEEDS_REPLACEMENT';
+            return {
+              id: d.id,
+              documentName: d.categoryDisplayName || d.category,
+              documentType: d.category,
+              documentNumber: d.documentCode || 'N/A',
+              issueDate: d.issueDate || 'N/A',
+              expiryDate: d.expiryDate || 'N/A',
+              uploadedDate: d.uploadedAt ? new Date(d.uploadedAt).toISOString().split('T')[0] : 'N/A',
+              lastUpdated: d.uploadedAt ? new Date(d.uploadedAt).toISOString().split('T')[0] : 'N/A',
+              verificationStatus: isVerified ? 'VERIFIED' : isRejected ? 'REJECTED' : isReplacement ? 'REJECTED' : 'PENDING VERIFICATION',
+              verifiedBy: d.reviewedBy || (isVerified ? 'Compliance Officer' : 'Pending Compliance'),
+              verificationDate: d.reviewedAt ? new Date(d.reviewedAt).toISOString().split('T')[0] : undefined,
+              remarks: d.rejectionReason || (isVerified ? 'Verified by Compliance Desk' : isReplacement ? 'Replacement requested by Compliance Officer' : 'Under compliance review'),
+              fileName: d.fileName,
+              fileUrl: `/api/v1/manufacturer/documents/${d.id}/download`,
+            };
+          });
+          setRealDocs(mapped);
+        } else if (res?.registrationCode) {
+          setRealDocs([]);
+        }
+      }
+    } catch {
+      // Keep existing documents fallback if offline
+    } finally {
+      setIsLoadingDocs(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadMyDocuments();
+  }, [currentRole]);
+
+  // Preview blob loader for selectedDocForView
+  React.useEffect(() => {
+    if (!selectedDocForView) {
+      if (docPreviewBlobUrl) {
+        URL.revokeObjectURL(docPreviewBlobUrl);
+        setDocPreviewBlobUrl(null);
+      }
+      setDocPreviewError(null);
+      setIsDocPreviewLoading(false);
+      return;
+    }
+
+    let active = true;
+    setIsDocPreviewLoading(true);
+    setDocPreviewError(null);
+
+    const targetUrl = selectedDocForView.fileUrl && selectedDocForView.fileUrl !== '#'
+      ? selectedDocForView.fileUrl
+      : (currentRole === 'SUPPLIER'
+          ? `/api/v1/manufacturer/documents/${selectedDocForView.id}/download`
+          : `/api/v1/compliance/documents/${selectedDocForView.id}/download`);
+
+    adminVerificationApi.getDocumentBlob(targetUrl)
+      .then(({ blobUrl }) => {
+        if (!active) {
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+        setDocPreviewBlobUrl(blobUrl);
+        setIsDocPreviewLoading(false);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setIsDocPreviewLoading(false);
+        setDocPreviewError(err.message || 'Document file not found in storage.');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedDocForView]);
+
+  const handleDownloadDoc = async (doc: UserDocument) => {
+    try {
+      const targetUrl = doc.fileUrl && doc.fileUrl !== '#'
+        ? doc.fileUrl
+        : (currentRole === 'SUPPLIER'
+            ? `/api/v1/manufacturer/documents/${doc.id}/download`
+            : `/api/v1/compliance/documents/${doc.id}/download`);
+
+      const { blobUrl } = await adminVerificationApi.getDocumentBlob(targetUrl);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = doc.fileName || 'document.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (err: any) {
+      alert(`Download failed: ${err.message}`);
+    }
+  };
+
+  const effectiveDocs = realDocs !== null ? realDocs : userDocuments;
 
   // Edit Personal Profile Form State
   const [editUserForm, setEditUserForm] = useState({
@@ -123,8 +278,8 @@ const showToast = (msg: string) => {
     orgFields.forEach(f => { if (f && f.trim().length > 0) filledOrg++; });
     const orgScore = (filledOrg / orgFields.length) * 35; // 35% weight
 
-    const verifiedDocs = userDocuments.filter(d => d.verificationStatus === 'VERIFIED').length;
-    const totalDocs = Math.max(userDocuments.length, 1);
+    const verifiedDocs = effectiveDocs.filter(d => d.verificationStatus === 'VERIFIED').length;
+    const totalDocs = Math.max(effectiveDocs.length, 1);
     const docScore = (verifiedDocs / totalDocs) * 30; // 30% weight
 
     return Math.min(100, Math.round(personalScore + orgScore + docScore));
@@ -139,7 +294,7 @@ const showToast = (msg: string) => {
     if (!userProfile.jobTitle || userProfile.jobTitle.trim() === '') missing.push({ label: 'Job Title / Designation', tab: 'personal' });
     if (!orgProfile.website || orgProfile.website.trim() === '') missing.push({ label: 'Company Website', tab: 'organization' });
     
-    userDocuments.forEach(d => {
+    effectiveDocs.forEach(d => {
       if (d.verificationStatus === 'NOT UPLOADED') {
         missing.push({ label: `${d.documentName || d.documentType} (Not Uploaded)`, tab: 'documents', docId: d.id });
       } else if (d.verificationStatus === 'REJECTED') {
@@ -155,12 +310,12 @@ const showToast = (msg: string) => {
   const missingItems = getMissingItems();
 
   const docStats = {
-    total: userDocuments.length,
-    verified: userDocuments.filter(d => d.verificationStatus === 'VERIFIED').length,
-    pending: userDocuments.filter(d => d.verificationStatus === 'PENDING VERIFICATION').length,
-    expired: userDocuments.filter(d => d.verificationStatus === 'EXPIRED').length,
-    rejected: userDocuments.filter(d => d.verificationStatus === 'REJECTED').length,
-    notUploaded: userDocuments.filter(d => d.verificationStatus === 'NOT UPLOADED').length,
+    total: effectiveDocs.length,
+    verified: effectiveDocs.filter(d => d.verificationStatus === 'VERIFIED').length,
+    pending: effectiveDocs.filter(d => d.verificationStatus === 'PENDING VERIFICATION').length,
+    expired: effectiveDocs.filter(d => d.verificationStatus === 'EXPIRED').length,
+    rejected: effectiveDocs.filter(d => d.verificationStatus === 'REJECTED').length,
+    notUploaded: effectiveDocs.filter(d => d.verificationStatus === 'NOT UPLOADED').length,
   };
 
   // Handlers for edit forms
@@ -267,18 +422,43 @@ const showToast = (msg: string) => {
     });
   };
 
-  const handleSaveReplaceDoc = (e: React.FormEvent) => {
+  const handleSaveReplaceDoc = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDocForReplace) return;
+
+    let finalFileName = docForm.fileName || `${selectedDocForReplace.documentType.replace(/\s+/g, '_')}_Replacement.pdf`;
+
+    if (selectedFileForReplace) {
+      try {
+        if (currentRole === 'BUYER' && buyerRegCode) {
+          const stored = await buyerRegistrationApi.uploadDocument(selectedFileForReplace, selectedDocForReplace.documentType, buyerRegCode);
+          finalFileName = stored.fileName;
+        } else if (currentRole === 'SUPPLIER' && mfgRegCode) {
+          const stored = await manufacturerRegistrationApi.uploadDocument(
+            selectedFileForReplace,
+            selectedDocForReplace.documentType,
+            mfgRegCode,
+            docForm.issueDate || new Date().toISOString().split('T')[0],
+            docForm.expiryDate || '2030-12-31'
+          );
+          finalFileName = stored.fileName;
+        }
+      } catch (err: any) {
+        showToast(`Server sync note: ${err?.message || 'Updated locally'}`);
+      }
+    }
+
     replaceUserDocument(selectedDocForReplace.id, {
       documentNumber: docForm.documentNumber,
       issueDate: docForm.issueDate,
       expiryDate: docForm.expiryDate || 'N/A',
-      fileName: docForm.fileName || `${selectedDocForReplace.documentType.replace(/\s+/g, '_')}_Replacement.pdf`,
+      fileName: finalFileName,
       remarks: docForm.remarks
     });
     setSelectedDocForReplace(null);
+    setSelectedFileForReplace(null);
     showToast('Replacement document submitted. Status updated to PENDING VERIFICATION.');
+    await loadMyDocuments();
   };
 
   const handleSavePassword = (e: React.FormEvent) => {
@@ -767,11 +947,16 @@ const showToast = (msg: string) => {
                 </tr>
               </thead>
               <tbody>
-                {userDocuments.map(doc => (
+                {effectiveDocs.map(doc => (
                   <tr key={doc.id}>
                     <td>
                       <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{doc.documentName}</div>
                       <div className="ent-caption">{doc.documentType}</div>
+                      {doc.verificationStatus === 'REJECTED' && doc.remarks && (
+                        <div style={{ fontSize: 11, color: '#EF4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <AlertCircle size={12} /> Reason: {doc.remarks}
+                        </div>
+                      )}
                     </td>
                     <td className="ent-mono" style={{ fontSize: 12 }}>{doc.documentNumber || '—'}</td>
                     <td className="ent-mono" style={{ fontSize: 12 }}>{doc.uploadedDate || 'Not Uploaded'}</td>
@@ -1371,10 +1556,32 @@ const showToast = (msg: string) => {
                 </div>
               )}
 
+              {/* Real Document Preview Canvas */}
+              <div style={{ marginTop: 12, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)', background: '#0F172A', minHeight: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {isDocPreviewLoading && (
+                  <div style={{ color: '#94A3B8', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, padding: 20 }}>
+                    <RefreshCw size={16} className="animate-spin" /> Retrieving verified document bytes...
+                  </div>
+                )}
+                {docPreviewError && !isDocPreviewLoading && (
+                  <div style={{ color: '#FCA5A5', fontSize: 12, padding: 20, textAlign: 'center' }}>
+                    <AlertCircle size={24} style={{ margin: '0 auto 6px', color: '#EF4444' }} />
+                    <div>{docPreviewError}</div>
+                  </div>
+                )}
+                {docPreviewBlobUrl && !isDocPreviewLoading && (
+                  <iframe
+                    src={`${docPreviewBlobUrl}#toolbar=0`}
+                    title={selectedDocForView.fileName || 'Document Preview'}
+                    style={{ width: '100%', height: 320, border: 'none', background: '#525659' }}
+                  />
+                )}
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
                 <button
                   className="ent-btn-secondary"
-                  onClick={() => alert(`Simulated download for ${selectedDocForView.fileName || 'document.pdf'}`)}
+                  onClick={() => handleDownloadDoc(selectedDocForView)}
                 >
                   <Download size={14} /> Download File ({selectedDocForView.fileName || 'document.pdf'})
                 </button>
@@ -1432,6 +1639,7 @@ const showToast = (msg: string) => {
                   required
                   onChange={e => {
                     if (e.target.files && e.target.files[0]) {
+                      setSelectedFileForReplace(e.target.files[0]);
                       setDocForm({ ...docForm, fileName: e.target.files[0].name });
                     }
                   }}

@@ -6,7 +6,11 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { JwtAuthGuard, jwtAlgorithmFor, RolesGuard } from '@factorygrid/auth';
 import { Env, validateEnv } from './config/env';
 import { HealthController } from './health/health.controller';
+import { BuyerModule } from './modules/buyer/buyer.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
 import { IamModule } from './modules/iam/iam.module';
+import { ManufacturerModule } from './modules/manufacturer/manufacturer.module';
+import { StorageModule } from './modules/storage/storage.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 /**
@@ -37,8 +41,13 @@ import { PrismaModule } from './prisma/prisma.module';
       }),
     }),
     PrismaModule,
+    StorageModule,
+    BuyerModule,
+    ManufacturerModule,
+    ComplianceModule,
     IamModule,
   ],
+
   controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
