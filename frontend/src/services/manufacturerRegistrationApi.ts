@@ -42,6 +42,94 @@ export interface UploadedManufacturerDocument {
   uploadedAt: string;
 }
 
+export interface FactoryGalleryItem {
+  id: string;
+  registrationCode: string;
+  title: string;
+  description: string | null;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  storageKey: string;
+  imageUrl: string;
+  captureDate: string | null;
+  factoryLocation: string;
+  gpsCoordinates: string | null;
+  uploadedBy: string;
+  verificationStatus: 'PENDING_VERIFICATION' | 'VERIFIED' | 'REJECTED' | string;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateGalleryPayload {
+  title: string;
+  factoryLocation?: string;
+  locationName?: string;
+  captureDate?: string;
+  capturedAt?: string;
+  description?: string;
+  gpsCoordinates?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+  registrationCode?: string;
+}
+
+export interface UpdateGalleryPayload {
+  title?: string;
+  factoryLocation?: string;
+  locationName?: string;
+  captureDate?: string;
+  capturedAt?: string;
+  description?: string;
+  gpsCoordinates?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+}
+
+export interface AchievementItem {
+  id: string;
+  registrationCode: string;
+  title: string;
+  awardType: string;
+  issuingOrganization: string;
+  issueDate: string;
+  expiryDate: string | null;
+  description: string | null;
+  hasCertificate: boolean;
+  certificateFileName: string | null;
+  certificateFileSize: number | null;
+  certificateMimeType: string | null;
+  certificateUrl: string | null;
+  verificationStatus: 'PENDING_VERIFICATION' | 'VERIFIED' | 'REJECTED' | string;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAchievementPayload {
+  title: string;
+  awardType: string;
+  issuingOrganization: string;
+  issueDate: string;
+  expiryDate?: string;
+  description?: string;
+  registrationCode?: string;
+}
+
+export interface UpdateAchievementPayload {
+  title?: string;
+  awardType?: string;
+  issuingOrganization?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  description?: string;
+}
+
 function extractMessage(data: any, status: number): string {
   const raw = data?.message ?? data?.error;
   if (Array.isArray(raw)) return raw.join('; ');
@@ -75,10 +163,52 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+export interface CategoryHierarchyItem {
+  id: string;
+  categoryId: string;
+  productTypeId: string;
+  category: string;
+  subCategory: string | null;
+  subSubCategory: string | null;
+  categoryCode: string;
+  description: string | null;
+  name: string;
+  fullName: string;
+}
+
+export interface CategoryTreeSubItem {
+  id: string;
+  categoryId: string;
+  categoryCode: string;
+  subSubCategory: string | null;
+  name: string;
+  description: string | null;
+}
+
+export interface CategoryTreeSubCategory {
+  subCategory: string;
+  items: CategoryTreeSubItem[];
+}
+
+export interface CategoryTreeCategory {
+  category: string;
+  productTypeId: string;
+  subCategories: CategoryTreeSubCategory[];
+}
+
+export interface CategoryHierarchyResponse {
+  categories: CategoryHierarchyItem[];
+  tree: CategoryTreeCategory[];
+}
+
 export const manufacturerRegistrationApi = {
   listCatalog(search?: string): Promise<CatalogProductItem[]> {
     const qs = search ? `?search=${encodeURIComponent(search)}` : '';
     return request<CatalogProductItem[]>(`${BASE}/catalog${qs}`, { method: 'GET' });
+  },
+
+  listCategories(): Promise<CategoryHierarchyResponse> {
+    return request<CategoryHierarchyResponse>(`${BASE}/categories`, { method: 'GET' });
   },
 
   saveStep1(payload: Record<string, unknown>, registrationCode?: string): Promise<ManufacturerStepResponse> {
@@ -137,14 +267,24 @@ export const manufacturerRegistrationApi = {
     );
   },
 
-  saveStep3(productIds: string[], registrationCode: string): Promise<ManufacturerStepResponse> {
+  saveStep3(categoryOrProductIds: string[], registrationCode: string): Promise<ManufacturerStepResponse> {
     return request<ManufacturerStepResponse>(
       `${BASE}/registration/step-3?registrationCode=${encodeURIComponent(registrationCode)}`,
-      json({ productIds }),
+      json({ categoryIds: categoryOrProductIds, productIds: categoryOrProductIds }),
     );
   },
 
-  saveStep4(items: Array<{ productId: string; moq: number; leadTimeDays: number }>, registrationCode: string): Promise<ManufacturerStepResponse> {
+  saveStep4(
+    items: Array<{
+      productId?: string;
+      categoryId?: string;
+      moq?: number;
+      batchSize?: number;
+      leadTimeDays?: number;
+      deliveryScheduleDays?: number;
+    }>,
+    registrationCode: string,
+  ): Promise<ManufacturerStepResponse> {
     return request<ManufacturerStepResponse>(
       `${BASE}/registration/step-4?registrationCode=${encodeURIComponent(registrationCode)}`,
       json({ items }),
@@ -181,5 +321,217 @@ export const manufacturerRegistrationApi = {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
     return request<UploadedManufacturerDocument[]>(`${BASE}/documents${qs}`, { method: 'GET', headers });
+  },
+
+  // --- Factory Gallery ---
+
+  listGallery(registrationCode?: string, token?: string): Promise<FactoryGalleryItem[]> {
+    const qs = registrationCode ? `?registrationCode=${encodeURIComponent(registrationCode)}` : '';
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return request<FactoryGalleryItem[]>(`${BASE}/gallery${qs}`, { method: 'GET', headers });
+  },
+
+  uploadGalleryEntry(
+    file: File,
+    payload: CreateGalleryPayload,
+    registrationCode?: string,
+    token?: string,
+  ): Promise<FactoryGalleryItem> {
+    const title = payload.title?.trim() || '';
+    const factoryLocation = (payload.factoryLocation || payload.locationName || '').trim();
+    const captureDate = payload.captureDate || payload.capturedAt || '';
+    const description = (payload.description || '').trim();
+    let gpsCoordinates = (payload.gpsCoordinates || '').trim();
+    if (!gpsCoordinates && payload.latitude !== undefined && payload.longitude !== undefined && payload.latitude !== '' && payload.longitude !== '') {
+      gpsCoordinates = `${payload.latitude}, ${payload.longitude}`;
+    }
+    const regCode = (registrationCode || payload.registrationCode || '').trim();
+
+    const form = new FormData();
+    // Append text fields FIRST so multipart stream parsers receive metadata before the file
+    if (title) form.append('title', title);
+    if (factoryLocation) {
+      form.append('factoryLocation', factoryLocation);
+      form.append('locationName', factoryLocation);
+    }
+    if (captureDate) {
+      form.append('captureDate', captureDate);
+      form.append('capturedAt', captureDate);
+    }
+    if (description) form.append('description', description);
+    if (gpsCoordinates) form.append('gpsCoordinates', gpsCoordinates);
+    if (regCode) form.append('registrationCode', regCode);
+    form.append('file', file);
+
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    // Dual transport: Also append metadata as URL query parameters to guarantee arrival
+    const params = new URLSearchParams();
+    if (title) params.append('title', title);
+    if (factoryLocation) {
+      params.append('factoryLocation', factoryLocation);
+      params.append('locationName', factoryLocation);
+    }
+    if (captureDate) {
+      params.append('captureDate', captureDate);
+      params.append('capturedAt', captureDate);
+    }
+    if (description) params.append('description', description);
+    if (gpsCoordinates) params.append('gpsCoordinates', gpsCoordinates);
+    if (regCode) params.append('registrationCode', regCode);
+
+    const qs = params.toString() ? `?${params.toString()}` : '';
+
+    return request<FactoryGalleryItem>(`${BASE}/gallery/upload${qs}`, {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+  },
+
+  updateGalleryEntry(
+    id: string,
+    payload: UpdateGalleryPayload,
+    token?: string,
+  ): Promise<FactoryGalleryItem> {
+    const normalized: Record<string, any> = { ...payload };
+    if (!normalized.factoryLocation && normalized.locationName) {
+      normalized.factoryLocation = normalized.locationName;
+    }
+    if (!normalized.captureDate && normalized.capturedAt) {
+      normalized.captureDate = normalized.capturedAt;
+    }
+    if (!normalized.gpsCoordinates && normalized.latitude !== undefined && normalized.longitude !== undefined && normalized.latitude !== '' && normalized.longitude !== '') {
+      normalized.gpsCoordinates = `${normalized.latitude}, ${normalized.longitude}`;
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return request<FactoryGalleryItem>(`${BASE}/gallery/${id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(normalized),
+    });
+  },
+
+  deleteGalleryEntry(id: string, token?: string): Promise<{ success: boolean; message: string }> {
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return request<{ success: boolean; message: string }>(`${BASE}/gallery/${id}`, {
+      method: 'DELETE',
+      headers,
+    });
+  },
+
+  // --- Achievements & Awards ---
+
+  listAchievements(registrationCode?: string, token?: string): Promise<AchievementItem[]> {
+    const qs = registrationCode ? `?registrationCode=${encodeURIComponent(registrationCode)}` : '';
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return request<AchievementItem[]>(`${BASE}/achievements${qs}`, { method: 'GET', headers });
+  },
+
+  createAchievement(
+    payload: CreateAchievementPayload,
+    file?: File,
+    token?: string,
+  ): Promise<AchievementItem> {
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    if (file) {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('title', payload.title);
+      form.append('awardType', payload.awardType);
+      form.append('issuingOrganization', payload.issuingOrganization);
+      form.append('issueDate', payload.issueDate);
+      if (payload.expiryDate) form.append('expiryDate', payload.expiryDate);
+      if (payload.description) form.append('description', payload.description);
+      if (payload.registrationCode) form.append('registrationCode', payload.registrationCode);
+
+      return request<AchievementItem>(`${BASE}/achievements`, {
+        method: 'POST',
+        headers,
+        body: form,
+      });
+    }
+
+    headers['Content-Type'] = 'application/json';
+    return request<AchievementItem>(`${BASE}/achievements`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateAchievement(
+    id: string,
+    payload: UpdateAchievementPayload,
+    token?: string,
+  ): Promise<AchievementItem> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return request<AchievementItem>(`${BASE}/achievements/${id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  uploadAchievementCertificate(
+    id: string,
+    file: File,
+    token?: string,
+  ): Promise<AchievementItem> {
+    const form = new FormData();
+    form.append('file', file);
+
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return request<AchievementItem>(`${BASE}/achievements/${id}/certificate`, {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+  },
+
+  deleteAchievement(id: string, token?: string): Promise<{ success: boolean; message: string }> {
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return request<{ success: boolean; message: string }>(`${BASE}/achievements/${id}`, {
+      method: 'DELETE',
+      headers,
+    });
   },
 };

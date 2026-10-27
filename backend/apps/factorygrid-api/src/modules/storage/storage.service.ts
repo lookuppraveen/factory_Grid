@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
@@ -112,6 +113,22 @@ export class StorageService implements OnModuleInit {
     } catch (err: any) {
       this.logger.error(`Failed to retrieve file from S3 (${storageKey}): ${err.message}`);
       throw new Error(`File not found or storage error: ${err.message}`);
+    }
+  }
+
+  /**
+   * Deletes a file from S3 / MinIO storage.
+   */
+  async deleteFile(storageKey: string): Promise<void> {
+    try {
+      await this.s3.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: storageKey,
+        }),
+      );
+    } catch (err: any) {
+      this.logger.warn(`Failed to delete file from S3 (${storageKey}): ${err.message}`);
     }
   }
 

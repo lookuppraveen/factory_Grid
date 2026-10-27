@@ -8,8 +8,15 @@ import {
   ShieldCheck, ArrowRight, ArrowLeft, Bookmark, BookmarkCheck, Sparkles,
   MapPin, Award, CheckCircle2, Building2, Package, Clock, Layers,
   FileCheck, FileText, Check, ExternalLink, Calendar, Phone, Mail,
-  User, CheckCircle, Info, ChevronRight, X, ShieldAlert, Cpu
+  User, CheckCircle, Info, ChevronRight, X, ShieldAlert, Cpu,
+  Image as ImageIcon, Download, ZoomIn, RefreshCw, XCircle
 } from 'lucide-react';
+import {
+  manufacturerRegistrationApi,
+  FactoryGalleryItem,
+  AchievementItem
+} from '../../services/manufacturerRegistrationApi';
+import { formatGpsCoordinates } from './ManufacturerVerificationModule';
 
 export interface RequirementContext {
   productName?: string;
@@ -22,7 +29,7 @@ export interface RequirementContext {
 export interface ManufacturerProfilePageProps {
   manufacturer: Manufacturer;
   searchRequirementContext?: RequirementContext;
-  initialTab?: 'OVERVIEW' | 'CAPABILITIES' | 'CATALOG' | 'COMPLIANCE' | 'RELATIONSHIP' | 'PERFORMANCE';
+  initialTab?: 'OVERVIEW' | 'CAPABILITIES' | 'CATALOG' | 'COMPLIANCE' | 'RELATIONSHIP' | 'PERFORMANCE' | 'GALLERY' | 'ACHIEVEMENTS';
   onBack: () => void;
   onSelectManufacturer?: (mfgId: string) => void;
   onRequestQuote?: (mfg: Manufacturer, prod?: Product) => void;
@@ -44,7 +51,32 @@ export const ManufacturerProfilePage: React.FC<ManufacturerProfilePageProps> = (
   const [selectedCertForModal, setSelectedCertForModal] = useState<Certification | null>(null);
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
   const [productSearch, setProductSearch] = useState('');
-  const [activeTab, setActiveTabLocal] = useState<'OVERVIEW' | 'CAPABILITIES' | 'CATALOG' | 'COMPLIANCE' | 'RELATIONSHIP' | 'PERFORMANCE'>(initialTab);
+  const [activeTab, setActiveTabLocal] = useState<'OVERVIEW' | 'CAPABILITIES' | 'CATALOG' | 'COMPLIANCE' | 'RELATIONSHIP' | 'PERFORMANCE' | 'GALLERY' | 'ACHIEVEMENTS'>(initialTab);
+
+  // Real backend gallery & achievements state
+  const [mfgGallery, setMfgGallery] = useState<FactoryGalleryItem[]>([]);
+  const [isGalleryLoading, setIsGalleryLoading] = useState<boolean>(false);
+  const [previewPhoto, setPreviewPhoto] = useState<FactoryGalleryItem | null>(null);
+
+  const [mfgAchievements, setMfgAchievements] = useState<AchievementItem[]>([]);
+  const [isAchievementsLoading, setIsAchievementsLoading] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    const code = manufacturer?.code;
+    if (code) {
+      setIsGalleryLoading(true);
+      manufacturerRegistrationApi.listGallery(code)
+        .then(items => setMfgGallery(Array.isArray(items) ? items : []))
+        .catch(() => setMfgGallery([]))
+        .finally(() => setIsGalleryLoading(false));
+
+      setIsAchievementsLoading(true);
+      manufacturerRegistrationApi.listAchievements(code)
+        .then(items => setMfgAchievements(Array.isArray(items) ? items : []))
+        .catch(() => setMfgAchievements([]))
+        .finally(() => setIsAchievementsLoading(false));
+    }
+  }, [manufacturer?.code]);
 
   // Robust Mapped products calculation for this manufacturer
   const finalMfgProducts = useMemo(() => {
@@ -337,6 +369,8 @@ export const ManufacturerProfilePage: React.FC<ManufacturerProfilePageProps> = (
           { id: 'CAPABILITIES', label: `Capabilities (${manufacturer?.capabilities?.length || 4})` },
           { id: 'CATALOG', label: `Product Catalog (${finalMfgProducts.length})` },
           { id: 'COMPLIANCE', label: `Certifications (${manufacturer?.certifications?.length || 0})` },
+          { id: 'GALLERY', label: `Factory Gallery (${mfgGallery.length})` },
+          { id: 'ACHIEVEMENTS', label: `Awards & Accolades (${mfgAchievements.length})` },
           { id: 'RELATIONSHIP', label: 'Buyer Relationship' },
           { id: 'PERFORMANCE', label: 'Performance Metrics' },
         ].map(tab => {
@@ -921,6 +955,260 @@ export const ManufacturerProfilePage: React.FC<ManufacturerProfilePageProps> = (
         </div>
       )}
 
+      {/* ── TAB 7: FACTORY GALLERY ───────────────────────────── */}
+      {activeTab.toUpperCase() === 'GALLERY' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div className="ent-panel" style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div className="ent-subheading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ImageIcon size={18} style={{ color: '#0F766E' }} />
+                  Production Floor & Cleanroom Photographs
+                </div>
+                <div className="ent-caption" style={{ marginTop: 4 }}>
+                  Authentic, date-stamped visual records of manufacturing blocks, formulation lines, and quality laboratories.
+                </div>
+              </div>
+              <span className="ent-chip-success">
+                ✓ Stored in Object Storage & Compliance Verified
+              </span>
+            </div>
+          </div>
+
+          {isGalleryLoading ? (
+            <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <RefreshCw className="spin" size={24} style={{ margin: '0 auto 12px' }} />
+              <div>Loading factory photographs from secure storage...</div>
+            </div>
+          ) : mfgGallery.length === 0 ? (
+            <div className="ent-panel" style={{ padding: 48, textAlign: 'center' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(15, 118, 110, 0.1)', color: '#0F766E', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                <ImageIcon size={28} />
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
+                No Factory Photos Available
+              </div>
+              <div className="ent-caption" style={{ marginTop: 6, maxWidth: 440, margin: '6px auto 0' }}>
+                This manufacturer has not uploaded photographs of their manufacturing units yet.
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
+              {mfgGallery.map(photo => {
+                const isVerified = photo.verificationStatus === 'VERIFIED';
+                return (
+                  <div
+                    key={photo.id}
+                    className="ent-card"
+                    style={{
+                      background: 'var(--bg-panel)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    <div
+                      style={{ position: 'relative', width: '100%', height: 210, background: '#0F172A', cursor: 'pointer', overflow: 'hidden' }}
+                      onClick={() => setPreviewPhoto(photo)}
+                    >
+                      <img
+                        src={photo.imageUrl}
+                        alt={photo.title}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={e => { e.currentTarget.style.display = 'none'; }}
+                      />
+                      <div style={{ position: 'absolute', top: 10, right: 10 }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          padding: '3px 8px', borderRadius: 999, fontSize: 10.5, fontWeight: 800,
+                          background: isVerified ? '#10B981' : '#F59E0B', color: '#FFFFFF'
+                        }}>
+                          {isVerified ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                          {isVerified ? 'VERIFIED' : 'PENDING REVIEW'}
+                        </span>
+                      </div>
+                      <div style={{
+                        position: 'absolute', bottom: 8, right: 8, background: 'rgba(0,0,0,0.6)',
+                        color: '#FFFFFF', borderRadius: 6, padding: '3px 8px', fontSize: 11,
+                        display: 'flex', alignItems: 'center', gap: 4
+                      }}>
+                        <ZoomIn size={12} /> View Large
+                      </div>
+                    </div>
+
+                    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>
+                        {photo.title}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                        {photo.description || <span style={{ fontStyle: 'italic', color: 'var(--text-tertiary)' }}>No description provided</span>}
+                      </div>
+
+                      <div style={{ marginTop: 'auto', paddingTop: 10, borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--text-tertiary)' }}>Capture Date</span>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {photo.capturedAt ? new Date(photo.capturedAt).toLocaleDateString() : 'Not provided'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--text-tertiary)' }}>Location</span>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {photo.locationName || 'Not provided'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--text-tertiary)' }}>GPS Coordinates</span>
+                          <span style={{ fontWeight: 700, color: photo.gpsCoordinates ? '#0F766E' : 'var(--text-tertiary)', fontFamily: photo.gpsCoordinates ? 'monospace' : 'inherit' }}>
+                            {formatGpsCoordinates(photo.gpsCoordinates)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB 8: ACHIEVEMENTS & AWARDS ─────────────────────── */}
+      {activeTab.toUpperCase() === 'ACHIEVEMENTS' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div className="ent-panel" style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div className="ent-subheading" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Award size={18} style={{ color: '#8B5CF6' }} />
+                  Accreditations, Awards & Quality Recognitions
+                </div>
+                <div className="ent-caption" style={{ marginTop: 4 }}>
+                  Institutional awards, zero-defect quality recognitions, and export milestone accolades with verifiable credentials.
+                </div>
+              </div>
+              <span className="ent-chip-success">
+                ✓ Genuine Submissions
+              </span>
+            </div>
+          </div>
+
+          {isAchievementsLoading ? (
+            <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <RefreshCw className="spin" size={24} style={{ margin: '0 auto 12px' }} />
+              <div>Loading achievements from database...</div>
+            </div>
+          ) : mfgAchievements.length === 0 ? (
+            <div className="ent-panel" style={{ padding: 48, textAlign: 'center' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(139, 92, 246, 0.1)', color: '#8B5CF6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                <Award size={28} />
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
+                No Awards or Recognitions Recorded
+              </div>
+              <div className="ent-caption" style={{ marginTop: 6, maxWidth: 440, margin: '6px auto 0' }}>
+                No awards or quality recognitions have been submitted by this manufacturer yet.
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 20 }}>
+              {mfgAchievements.map(item => {
+                const isVerified = item.verificationStatus === 'VERIFIED';
+                return (
+                  <div
+                    key={item.id}
+                    className="ent-card"
+                    style={{
+                      background: 'var(--bg-panel)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 12,
+                      padding: 18,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 12
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: 8, background: 'rgba(139, 92, 246, 0.12)',
+                          color: '#8B5CF6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                        }}>
+                          <Award size={20} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>
+                            {item.title}
+                          </div>
+                          <span style={{
+                            display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '1px 6px',
+                            borderRadius: 4, background: 'var(--bg-subtle)', color: 'var(--text-secondary)', marginTop: 4
+                          }}>
+                            {item.awardType}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 999,
+                        fontSize: 10.5, fontWeight: 800,
+                        background: isVerified ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                        color: isVerified ? '#10B981' : '#F59E0B',
+                        border: `1px solid ${isVerified ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                      }}>
+                        {isVerified ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                        {isVerified ? 'VERIFIED' : 'PENDING'}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                      {item.description || <span style={{ fontStyle: 'italic', color: 'var(--text-tertiary)' }}>No description provided</span>}
+                    </div>
+
+                    <div style={{
+                      display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px',
+                      background: 'var(--bg-subtle)', borderRadius: 8, border: '1px solid var(--border-subtle)', fontSize: 11.5, marginTop: 'auto'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-tertiary)' }}>Issuing Organization</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{item.issuingOrganization}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-tertiary)' }}>Issue Date</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {item.issueDate ? new Date(item.issueDate).toLocaleDateString() : 'Not provided'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-tertiary)' }}>Expiry Date</span>
+                        <span style={{ fontWeight: 700, color: item.expiryDate ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+                          {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : 'Permanent / N/A'}
+                        </span>
+                      </div>
+                      {item.hasCertificate && item.certificateUrl && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4, borderTop: '1px solid var(--border-subtle)' }}>
+                          <span style={{ color: 'var(--text-tertiary)' }}>Certificate</span>
+                          <a
+                            href={item.certificateUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#1D4ED8', fontWeight: 700, textDecoration: 'none' }}
+                          >
+                            <Download size={12} /> Download Certificate
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── 9. SIMILAR MANUFACTURERS ──────────────────────────── */}
       <div style={{ marginTop: 20 }}>
         <div className="ent-subheading" style={{ fontSize: 16, marginBottom: 14 }}>
@@ -1050,6 +1338,96 @@ export const ManufacturerProfilePage: React.FC<ManufacturerProfilePageProps> = (
               >
                 Close Certificate
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── FACTORY PHOTO LIGHTBOX MODAL ──────────────────────── */}
+      {previewPhoto && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            background: 'rgba(10, 15, 30, 0.85)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24
+          }}
+          onClick={() => setPreviewPhoto(null)}
+        >
+          <div
+            style={{
+              maxWidth: 900,
+              width: '100%',
+              maxHeight: '92vh',
+              background: 'var(--bg-surface)',
+              borderRadius: 14,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px rgba(0,0,0,0.5)'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {previewPhoto.title}
+                </span>
+                <span style={{
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  background: previewPhoto.verificationStatus === 'VERIFIED' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                  color: previewPhoto.verificationStatus === 'VERIFIED' ? '#10B981' : '#F59E0B',
+                  border: `1px solid ${previewPhoto.verificationStatus === 'VERIFIED' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                }}>
+                  {previewPhoto.verificationStatus}
+                </span>
+              </div>
+              <button onClick={() => setPreviewPhoto(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ background: '#090D16', display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: '60vh', overflow: 'hidden' }}>
+              <img
+                src={previewPhoto.imageUrl}
+                alt={previewPhoto.title}
+                style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }}
+              />
+            </div>
+
+            <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {previewPhoto.description && (
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {previewPhoto.description}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, background: 'var(--bg-app)', padding: 12, borderRadius: 8, fontSize: 12 }}>
+                <div>
+                  <span style={{ color: 'var(--text-tertiary)' }}>Capture Date: </span>
+                  <strong>{previewPhoto.capturedAt ? new Date(previewPhoto.capturedAt).toLocaleDateString() : 'Not provided'}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-tertiary)' }}>Location: </span>
+                  <strong>{previewPhoto.locationName || 'Not provided'}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-tertiary)' }}>GPS: </span>
+                  <strong style={{ fontFamily: 'monospace' }}>{formatGpsCoordinates(previewPhoto.gpsCoordinates)}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-tertiary)' }}>Uploaded By: </span>
+                  <strong>{previewPhoto.uploadedBy || 'Staff'}</strong>
+                </div>
+              </div>
             </div>
           </div>
         </div>

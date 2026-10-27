@@ -18,21 +18,48 @@ import {
   IsIn,
 } from 'class-validator';
 
-/** The six mandatory certifications shown in step 2 of the manufacturer wizard. */
+/** Document categories in manufacturer onboarding.
+ * Mandatory: mfgLicense, gmpCert (GLP), whoGmpCert (WHO-GLP), isoCert, pollutionCert.
+ * Optional: factoryReg (retained for historical data), otherCert (allows uploading additional certificates).
+ */
 export const MANUFACTURER_DOCUMENT_CATEGORIES = [
-  { key: 'mfgLicense', name: 'Manufacturing License' },
-  { key: 'gmpCert', name: 'GMP Certificate' },
-  { key: 'whoGmpCert', name: 'WHO-GMP Certificate' },
-  { key: 'isoCert', name: 'ISO Certification' },
-  { key: 'factoryReg', name: 'Factory Registration' },
-  { key: 'pollutionCert', name: 'Pollution Control Clearance' },
+  { key: 'mfgLicense', name: 'Manufacturing License', isMandatory: true },
+  { key: 'gmpCert', name: 'GLP Certificate', isMandatory: true },
+  { key: 'whoGmpCert', name: 'WHO-GLP Certificate', isMandatory: true },
+  { key: 'isoCert', name: 'ISO Certification', isMandatory: true },
+  { key: 'pollutionCert', name: 'Pollution Certificate', isMandatory: true },
+  { key: 'factoryReg', name: 'Factory Registration', isMandatory: false },
+  { key: 'otherCert', name: 'Other Certificates', isMandatory: false },
+] as const;
+
+export const MANDATORY_MANUFACTURER_DOCUMENT_KEYS = [
+  'mfgLicense',
+  'gmpCert',
+  'whoGmpCert',
+  'isoCert',
+  'pollutionCert',
 ] as const;
 
 export const MANUFACTURER_CATEGORY_KEYS = MANUFACTURER_DOCUMENT_CATEGORIES.map((c) => c.key);
 
-/** Accepts either the wizard key (mfgLicense) or the display name (Manufacturing License). */
+/** Accepts either the wizard key (glpCert, gmpCert, pollutionCert, otherCert, etc.) or the display name. */
 export function resolveManufacturerCategory(raw: string): { key: string; name: string } | undefined {
   const needle = (raw || '').trim().toLowerCase();
+  if (['glpcert', 'gmpcert', 'glp certificate', 'gmp certificate', 'glp', 'gmp'].includes(needle)) {
+    return { key: 'gmpCert', name: 'GLP Certificate' };
+  }
+  if (['whoglpcert', 'whogmpcert', 'who-glp certificate', 'who-gmp certificate', 'who glp certificate', 'who gmp certificate', 'who-glp', 'who-gmp', 'whogmp', 'whoglp'].includes(needle)) {
+    return { key: 'whoGmpCert', name: 'WHO-GLP Certificate' };
+  }
+  if (['pollutioncert', 'pollution certificate', 'pollution control clearance'].includes(needle)) {
+    return { key: 'pollutionCert', name: 'Pollution Certificate' };
+  }
+  if (['factoryreg', 'factory registration', 'factory cert'].includes(needle)) {
+    return { key: 'factoryReg', name: 'Factory Registration' };
+  }
+  if (['othercert', 'other certificates', 'other certificate', 'other'].includes(needle) || needle.startsWith('othercert')) {
+    return { key: 'otherCert', name: 'Other Certificates' };
+  }
   return MANUFACTURER_DOCUMENT_CATEGORIES.find(
     (c) => c.key.toLowerCase() === needle || c.name.toLowerCase() === needle,
   );
@@ -69,11 +96,11 @@ export class ManufacturerStep1Dto {
   @Matches(/^[1-9][0-9]{5}$/, { message: 'pincode must be a valid 6-digit pincode' })
   pincode!: string;
 
-  @ApiProperty({ example: '10,000,000 Units / Month', description: 'Monthly installed manufacturing capacity' })
+  @ApiPropertyOptional({ example: '10,000,000 Units / Month', description: 'Plant manufacturing capacity (optional)' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(150)
-  mfgCapacity!: string;
+  mfgCapacity?: string;
 
   @ApiProperty({ example: 'Dr. Vikram Sethi' })
   @IsString()
@@ -87,7 +114,7 @@ export class ManufacturerStep1Dto {
   @MaxLength(100)
   designation!: string;
 
-  @ApiProperty({ example: 'plant@sunbiolabs.com', description: 'Official plant email (also the login identifier)' })
+  @ApiProperty({ example: 'plant@sunbiolabs.com', description: 'Email address (also the login identifier)' })
   @IsEmail()
   @MaxLength(150)
   email!: string;
@@ -121,30 +148,59 @@ export class ManufacturerStep2Dto {
 }
 
 export class ManufacturerStep3Dto {
-  @ApiProperty({ type: [String], example: ['p1', 'p2'], description: 'Catalogue product IDs; replaces the saved selection' })
+  @ApiPropertyOptional({ type: [String], example: ['cat-tablets', 'cat-capsules'], description: 'Manufacturing category IDs' })
+  @IsOptional()
   @IsArray()
   @ArrayUnique()
   @IsString({ each: true })
-  productIds!: string[];
+  categoryIds?: string[];
+
+  @ApiPropertyOptional({ type: [String], example: ['p1', 'p2'], description: 'Catalogue product IDs; replaces the saved selection' })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  productIds?: string[];
 }
 
 export class ManufacturerSupplyItemDto {
-  @ApiProperty({ example: 'p1' })
+  @ApiPropertyOptional({ example: 'p1' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  productId!: string;
+  productId?: string;
 
-  @ApiProperty({ example: 1000, description: 'Minimum order quantity (positive integer)' })
+  @ApiPropertyOptional({ example: 'cat-tablets' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ example: 1000, description: 'Batch Size / Minimum order quantity (positive integer)' })
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(2_000_000_000)
-  moq!: number;
+  batchSize?: number;
 
-  @ApiProperty({ example: 14, description: 'Typical production delivery schedule in days (positive integer)' })
+  @ApiPropertyOptional({ example: 1000, description: 'Minimum order quantity (positive integer)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(2_000_000_000)
+  moq?: number;
+
+  @ApiPropertyOptional({ example: 14, description: 'Delivery schedule in days (positive integer)' })
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(3650)
-  leadTimeDays!: number;
+  deliveryScheduleDays?: number;
+
+  @ApiPropertyOptional({ example: 14, description: 'Typical production delivery schedule in days (positive integer)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  leadTimeDays?: number;
 }
 
 export class ManufacturerStep4Dto {

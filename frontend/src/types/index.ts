@@ -1334,6 +1334,8 @@ export interface WholesalerDetails {
 
 export interface CustomerVerificationRequest {
   id: string;
+  requestCode?: string;
+  registrationCode?: string;
   customerName: string; // Contact Person / Representative
   companyName: string;
   customerType: 'PCD' | 'TPM' | 'Distributor' | 'Hospital' | 'Export' | 'Wholesaler';
@@ -1435,7 +1437,7 @@ export interface OrganizationProfile {
   isVerified: boolean;
 }
 
-export type ProfileDocStatus = 'NOT UPLOADED' | 'PENDING VERIFICATION' | 'VERIFIED' | 'REJECTED' | 'EXPIRED';
+export type ProfileDocStatus = 'NOT UPLOADED' | 'PENDING VERIFICATION' | 'PENDING REVIEW' | 'VERIFIED' | 'REJECTED' | 'REPLACEMENT REQUESTED' | 'EXPIRED';
 
 export interface DocumentVersion {
   version: number;

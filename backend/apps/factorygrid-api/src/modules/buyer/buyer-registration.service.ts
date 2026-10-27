@@ -21,6 +21,7 @@ import {
 import {
   CATEGORY_KEY_MAP,
   MANDATORY_DOCUMENT_CATEGORIES,
+  REQUIRED_DOCUMENT_CATEGORIES,
   UploadDocumentResponseDto,
 } from './dto/buyer-document.dto';
 import { CustomerVerificationResponseDto } from './dto/verification.dto';
@@ -218,7 +219,16 @@ export class BuyerRegistrationService {
       );
     }
 
-    const reg = await this.prisma.buyerRegistration.findUnique({ where: { registrationCode } });
+    let reg = await this.prisma.buyerRegistration.findUnique({ where: { registrationCode } });
+    if (!reg) {
+      const verification = await this.prisma.customerVerificationRequest.findFirst({
+        where: { requestCode: registrationCode },
+        include: { registration: true },
+      });
+      if (verification?.registration) {
+        reg = verification.registration;
+      }
+    }
     if (!reg) {
       throw new NotFoundException(`Registration ${registrationCode} not found.`);
     }
@@ -226,7 +236,10 @@ export class BuyerRegistrationService {
     // Authorization: a registration already linked to an account only accepts uploads from its owner or staff.
     const isStaff =
       !!callerUser &&
-      (callerUser.roles.includes('ROLE_ADMIN') || callerUser.roles.includes('ROLE_COMPLIANCE_OFFICER'));
+      (callerUser.roles?.includes('ROLE_ADMIN') ||
+       callerUser.roles?.includes('ROLE_COMPLIANCE_OFFICER') ||
+       callerUser.roles?.includes('ADMIN') ||
+       callerUser.roles?.includes('COMPLIANCE_OFFICER'));
     if (reg.userId && !isStaff) {
       if (!callerUser) {
         throw new ForbiddenException('Please log in to replace documents for a submitted registration.');
@@ -398,12 +411,13 @@ export class BuyerRegistrationService {
     const pan = dto.panNumber.trim().toUpperCase();
     this.assertFormats(gst, pan);
 
-    // Required documents come from what is really stored, never from client-supplied metadata.
+    // Required documents: GST Certificate and PAN Card are mandatory for registration.
+    // Remaining documents (Drug License, Inc Cert, Cancelled Cheque, Signed Agreement) are optional and can be uploaded later from profile.
     const stored = await this.prisma.buyerDocument.findMany({
       where: { registrationId: draft.id, status: { not: 'SUPERSEDED' } },
     });
     const storedCategories = new Set(stored.map((d) => d.category));
-    const missing = MANDATORY_DOCUMENT_CATEGORIES.filter((c) => !storedCategories.has(c));
+    const missing = REQUIRED_DOCUMENT_CATEGORIES.filter((c) => !storedCategories.has(c));
     if (missing.length > 0) {
       throw new BadRequestException(`Missing required documents: ${missing.join(', ')}`);
     }
@@ -454,7 +468,7 @@ export class BuyerRegistrationService {
       validationDetails: [
         `GSTIN (${gst}) accepted for testing without government verification.`,
         `PAN (${pan}) accepted for testing without government verification.`,
-        `All ${MANDATORY_DOCUMENT_CATEGORIES.length} required onboarding documents stored.`,
+        `Stored onboarding documents: ${stored.length} (Mandatory: GST Certificate, PAN Card).`,
         'Required corporate & regulatory details completed.',
       ],
     };

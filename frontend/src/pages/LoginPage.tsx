@@ -321,11 +321,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
     setLoginError(null);
     try {
       if (activeCategory === 'BUYER_COMPANY') {
+        if (!password || password.length < 6) {
+          setLoginError('Password must be at least 6 characters.');
+          setLoading(false);
+          return;
+        }
         const username = (buyerData.email.split('@')[0] || 'buyer_' + Date.now()).toLowerCase().replace(/[^a-z0-9_]/g, '_');
         await authApi.registerBuyer({
           username,
           email: buyerData.email.trim(),
-          password: password || 'Password@123',
+          password: password,
           fullName: buyerData.contactPerson || buyerData.companyName,
           companyName: buyerData.companyName,
           phone: buyerData.phone,
@@ -337,11 +342,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
         setWizardStep(1);
         setEmail(buyerData.email.trim());
       } else {
+        if (!password || password.length < 6) {
+          setLoginError('Password must be at least 6 characters.');
+          setLoading(false);
+          return;
+        }
         const username = (mfgData.email.split('@')[0] || 'mfg_' + Date.now()).toLowerCase().replace(/[^a-z0-9_]/g, '_');
         await authApi.registerManufacturer({
           username,
           email: mfgData.email.trim(),
-          password: password || 'Password@123',
+          password: password,
           fullName: mfgData.contactPerson || mfgData.factoryName,
           companyName: mfgData.factoryName,
           phone: mfgData.phone,

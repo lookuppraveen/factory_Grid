@@ -51,7 +51,6 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
     'gmpCert',
     'whoGmpCert',
     'isoCert',
-    'factoryReg',
     'pollutionCert',
   ];
 
@@ -139,6 +138,24 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
     expect(p1.name).toContain('Amoxyclav');
   });
 
+  it('1b. lists Category -> Sub-Category -> Sub-Sub-Category hierarchy from the database', async () => {
+    const res = await http().get('/api/v1/manufacturer/categories');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.categories)).toBe(true);
+    expect(res.body.categories.length).toBeGreaterThanOrEqual(32);
+    expect(Array.isArray(res.body.tree)).toBe(true);
+    expect(res.body.tree.length).toBeGreaterThanOrEqual(6);
+
+    const drugs = res.body.tree.find((c: any) => c.category === 'Drugs');
+    expect(drugs).toBeDefined();
+    const tablets = drugs.subCategories.find((s: any) => s.subCategory === 'Tablets');
+    expect(tablets).toBeDefined();
+    const fct = tablets.items.find((i: any) => i.categoryId === 'CAT001');
+    expect(fct).toBeDefined();
+    expect(fct.name).toBe('Film Coated Tablets');
+    expect(fct.categoryCode).toBe('DRUG-TAB-FCT');
+  });
+
   it('2. Step 1: saves company and facility information and validates required fields', async () => {
     // Missing required fields rejected with 400
     const failRes = await http().post('/api/v1/manufacturer/registration/step-1').send({
@@ -146,6 +163,14 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
       companyName: '',
     });
     expect(failRes.status).toBe(400);
+
+    // Plant Capacity is optional - omission succeeds
+    const noCapRes = await http().post('/api/v1/manufacturer/registration/step-1').send({
+      ...step1,
+      mfgCapacity: undefined,
+      email: `no_cap.${run}@sunbiolabs.com`,
+    });
+    expect(noCapRes.status).toBe(201);
 
     // Valid Step 1 creates draft
     const okRes = await http().post('/api/v1/manufacturer/registration/step-1').send(step1);
@@ -163,7 +188,7 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
     expect(draft.currentStep).toBe(1);
   });
 
-  it('3. Step 2: uploads all 6 certifications, validates dates and rejects invalid files', async () => {
+  it('3. Step 2: uploads 5 mandatory certifications + optional Other Certificates, validates dates and rejects invalid files', async () => {
     // Non-PDF / invalid signature rejected
     const badFile = await upload('mfgLicense', code, '2023-01-01', '2028-01-01', 'NOT_A_PDF_SIGNATURE');
     expect(badFile.status).toBe(400);
@@ -172,7 +197,7 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
     const badDate = await upload('mfgLicense', code, '2025-01-01', '2024-01-01');
     expect(badDate.status).toBe(400);
 
-    // Upload all 6 valid certifications
+    // Upload all 5 mandatory certifications
     for (const key of MANDATORY_KEYS) {
       const res = await upload(key, code);
       expect(res.status).toBe(201);
@@ -180,6 +205,12 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
       expect(res.body.status).toBe('PENDING');
       expect(res.body.version).toBe(1);
     }
+
+    // Upload optional Other Certificates
+    const otherRes = await upload('otherCert', code, '2023-01-01', '2028-01-01', '%PDF-1.4 other cert', 'other_cert.pdf');
+    expect(otherRes.status).toBe(201);
+    expect(otherRes.body.category).toBe('otherCert');
+    expect(otherRes.body.categoryDisplayName).toBe('Other Certificates');
 
     // Step 2 dates endpoint update
     const step2Payload = {
@@ -219,23 +250,23 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
     expect(prods).toHaveLength(3);
   });
 
-  it('5. Step 4: saves MOQ and delivery lead time; validates positive integers', async () => {
-    // Zero MOQ rejected
+  it('5. Step 4: saves Batch Size and delivery schedule; validates positive integers', async () => {
+    // Zero Batch Size rejected
     const badMoq = await http()
       .post('/api/v1/manufacturer/registration/step-4')
       .query({ registrationCode: code })
-      .send({ items: [{ productId: 'p1', moq: 0, leadTimeDays: 14 }] });
+      .send({ items: [{ productId: 'p1', batchSize: 0, deliveryScheduleDays: 14 }] });
     expect(badMoq.status).toBe(400);
 
-    // Valid MOQ and lead times for p1, p2, p3
+    // Valid Batch Size and delivery schedule for p1, p2, p3
     const step4Res = await http()
       .post('/api/v1/manufacturer/registration/step-4')
       .query({ registrationCode: code })
       .send({
         items: [
-          { productId: 'p1', moq: 1000, leadTimeDays: 18 },
-          { productId: 'p2', moq: 2000, leadTimeDays: 10 },
-          { productId: 'p3', moq: 1500, leadTimeDays: 14 },
+          { productId: 'p1', batchSize: 1000, deliveryScheduleDays: 18 },
+          { productId: 'p2', batchSize: 2000, deliveryScheduleDays: 10 },
+          { productId: 'p3', batchSize: 1500, deliveryScheduleDays: 14 },
         ],
       });
     expect(step4Res.status).toBe(201);
@@ -246,9 +277,16 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
     const reviewRes = await http().get(`/api/v1/manufacturer/registration/${code}`);
     expect(reviewRes.status).toBe(200);
     expect(reviewRes.body.company.companyName).toBe(step1.companyName);
+    expect(reviewRes.body.company.plantCapacity).toBe(step1.mfgCapacity);
     expect(reviewRes.body.documents).toHaveLength(6);
+    const gmpDoc = reviewRes.body.documents.find((d: any) => d.category === 'gmpCert');
+    expect(gmpDoc.categoryDisplayName).toBe('GLP Certificate');
+    const polDoc = reviewRes.body.documents.find((d: any) => d.category === 'pollutionCert');
+    expect(polDoc.categoryDisplayName).toBe('Pollution Certificate');
     expect(reviewRes.body.products).toHaveLength(3);
     expect(reviewRes.body.products[0].moq).toBe(1000);
+    expect(reviewRes.body.products[0].batchSize).toBe(1000);
+    expect(reviewRes.body.products[0].deliveryScheduleDays).toBe(18);
   });
 
   it('7. Step 5: final submit creates single user account with bcrypt hash, prevents duplicates', async () => {

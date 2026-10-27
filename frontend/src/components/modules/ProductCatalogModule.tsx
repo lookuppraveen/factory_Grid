@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../../context/AppContext';
+import { catalogApi } from '../../services/catalogApi';
 import { Product, ManufacturerProductMapping, LifecycleStatus, AttributeMaster, ProductPrice, ProductTax, ProductUom, CustomerSegment } from '../../types';
 import { ManufacturerProductCatalogTab } from './ManufacturerProductCatalogTab';
 import { ViewModeToggle } from '../common/ViewModeToggle';
@@ -9,7 +11,7 @@ import {
   Star, Trash2,
   CheckCircle2, AlertCircle, Calendar, Hash, Tag,
   ArrowRight, ShieldCheck, ToggleLeft, ToggleRight, Sparkles,
-  DollarSign, Receipt
+  DollarSign, Receipt, ChevronDown
 } from 'lucide-react';
 
 // Common dropdown options for LIST type attributes
@@ -74,6 +76,7 @@ export const ProductCatalogModule: React.FC = () => {
     addProductMaster,
     updateProductMaster,
     toggleProductMasterStatus,
+    refreshProducts,
     addAuditLog,
     setActiveTab
   } = useApp();
@@ -189,6 +192,82 @@ export const ProductCatalogModule: React.FC = () => {
   const [isAttrModalOpen, setIsAttrModalOpen] = useState(false);
   const [attributeDraftValues, setAttributeDraftValues] = useState<Record<string, string>>({});
 
+  // Single Actions Dropdown state (tracks product ID whose menu is currently open)
+  const [openMenuProductId, setOpenMenuProductId] = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+    isUpward: boolean;
+  } | null>(null);
+
+  // Status toggle in-flight loading tracker
+  const [statusLoadingId, setStatusLoadingId] = useState<string | null>(null);
+
+  // User feedback toast notification
+  const [feedbackToast, setFeedbackToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Auto-dismiss feedback toast
+  useEffect(() => {
+    if (feedbackToast) {
+      const timer = setTimeout(() => setFeedbackToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [feedbackToast]);
+
+  // Actions Dropdown Toggle with Smart Viewport Positioning
+  const handleToggleActionsMenu = (productId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (openMenuProductId === productId) {
+      setOpenMenuProductId(null);
+      setMenuAnchor(null);
+      return;
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const isUpward = spaceBelow < 185 && rect.top > 185;
+    setMenuAnchor({
+      top: isUpward ? undefined : rect.bottom + 4,
+      bottom: isUpward ? window.innerHeight - rect.top + 4 : undefined,
+      right: Math.max(12, window.innerWidth - rect.right),
+      isUpward
+    });
+    setOpenMenuProductId(productId);
+  };
+
+  // Click outside & Escape listener to close actions dropdown
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (openMenuProductId) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('[data-actions-menu]') && !target.closest('[data-actions-trigger]')) {
+          setOpenMenuProductId(null);
+          setMenuAnchor(null);
+        }
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenMenuProductId(null);
+        setMenuAnchor(null);
+      }
+    };
+    const handleScroll = () => {
+      if (openMenuProductId) {
+        setOpenMenuProductId(null);
+        setMenuAnchor(null);
+      }
+    };
+    document.addEventListener('mousedown', handleGlobalClick);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleGlobalClick);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [openMenuProductId]);
+
   // Quick Add Price Modal State (PRODUCT_PRICE)
   const [isQuickPriceOpen, setIsQuickPriceOpen] = useState(false);
   const [quickPriceForm, setQuickPriceForm] = useState({
@@ -227,6 +306,9 @@ export const ProductCatalogModule: React.FC = () => {
   // Client-Aligned Form Data State (Strictly PRODUCT fields only)
   const [formData, setFormData] = useState({
     productTypeId: 'pt_med',
+    category: 'Drugs',
+    subCategory: 'Tablets',
+    subSubCategory: 'Film Coated Tablets',
     categoryId: 'CAT001',
     brandId: '',
     code: '',
@@ -242,6 +324,118 @@ export const ProductCatalogModule: React.FC = () => {
     replacementProductId: '',
     isSellable: true
   });
+
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+
+  // ── Dependent Category Hierarchy Dropdowns (Product Type → Category → Sub-Category → Sub-Sub-Category) ──
+  const dependentL1Categories = useMemo(() => {
+    const list = (unifiedCategories || []).filter(c =>
+      c.product_type_id === formData.productTypeId &&
+      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
+    );
+    const unique = Array.from(new Set(list.map(c => c.category).filter(Boolean)));
+    return unique;
+  }, [unifiedCategories, formData.productTypeId]);
+
+  const dependentL2SubCategories = useMemo(() => {
+    if (!formData.category) return [];
+    const list = (unifiedCategories || []).filter(c =>
+      c.product_type_id === formData.productTypeId &&
+      c.category === formData.category &&
+      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
+    );
+    const unique = Array.from(new Set(list.map(c => c.sub_category).filter(Boolean)));
+    return unique;
+  }, [unifiedCategories, formData.productTypeId, formData.category]);
+
+  const dependentL3Records = useMemo(() => {
+    if (!formData.category) return [];
+    return (unifiedCategories || []).filter(c =>
+      c.product_type_id === formData.productTypeId &&
+      c.category === formData.category &&
+      (!formData.subCategory || c.sub_category === formData.subCategory) &&
+      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
+    );
+  }, [unifiedCategories, formData.productTypeId, formData.category, formData.subCategory]);
+
+  const dependentL3SubSubCategories = useMemo(() => {
+    const unique = Array.from(new Set(dependentL3Records.map(c => c.sub_sub_category).filter(Boolean)));
+    return unique;
+  }, [dependentL3Records]);
+
+  const handleProductTypeChange = (newPtId: string) => {
+    const matchingCats = (unifiedCategories || []).filter(c =>
+      c.product_type_id === newPtId &&
+      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
+    );
+    const firstCat = matchingCats[0]?.category || '';
+    const matchingSubs = matchingCats.filter(c => c.category === firstCat);
+    const firstSub = matchingSubs[0]?.sub_category || '';
+    const matchingSubSubs = matchingSubs.filter(c => c.sub_category === firstSub);
+    const firstSubSub = matchingSubSubs[0]?.sub_sub_category || '';
+    const resolved = matchingSubSubs[0] || matchingSubs[0] || matchingCats[0];
+
+    setFormData(prev => ({
+      ...prev,
+      productTypeId: newPtId,
+      category: firstCat,
+      subCategory: firstSub,
+      subSubCategory: firstSubSub,
+      categoryId: resolved?.category_id || resolved?.id || ''
+    }));
+  };
+
+  const handleCategoryChange = (newCat: string) => {
+    const matchingSubs = (unifiedCategories || []).filter(c =>
+      c.product_type_id === formData.productTypeId &&
+      c.category === newCat &&
+      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
+    );
+    const firstSub = matchingSubs[0]?.sub_category || '';
+    const matchingSubSubs = matchingSubs.filter(c => c.sub_category === firstSub);
+    const firstSubSub = matchingSubSubs[0]?.sub_sub_category || '';
+    const resolved = matchingSubSubs[0] || matchingSubs[0];
+
+    setFormData(prev => ({
+      ...prev,
+      category: newCat,
+      subCategory: firstSub,
+      subSubCategory: firstSubSub,
+      categoryId: resolved?.category_id || resolved?.id || ''
+    }));
+  };
+
+  const handleSubCategoryChange = (newSub: string) => {
+    const matchingSubSubs = (unifiedCategories || []).filter(c =>
+      c.product_type_id === formData.productTypeId &&
+      c.category === formData.category &&
+      c.sub_category === newSub &&
+      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
+    );
+    const firstSubSub = matchingSubSubs[0]?.sub_sub_category || '';
+    const resolved = matchingSubSubs[0];
+
+    setFormData(prev => ({
+      ...prev,
+      subCategory: newSub,
+      subSubCategory: firstSubSub,
+      categoryId: resolved?.category_id || resolved?.id || ''
+    }));
+  };
+
+  const handleSubSubCategoryChange = (newSubSub: string) => {
+    const matched = (unifiedCategories || []).find(c =>
+      c.product_type_id === formData.productTypeId &&
+      c.category === formData.category &&
+      (!formData.subCategory || c.sub_category === formData.subCategory) &&
+      (c.sub_sub_category === newSubSub || c.category_id === newSubSub || c.id === newSubSub)
+    );
+    setFormData(prev => ({
+      ...prev,
+      subSubCategory: newSubSub,
+      categoryId: matched?.category_id || matched?.id || prev.categoryId
+    }));
+  };
 
   // Dynamic attribute form values for Add / Edit Product modal
   const [formAttrValues, setFormAttrValues] = useState<Record<string, string>>({});
@@ -480,11 +674,23 @@ export const ProductCatalogModule: React.FC = () => {
     setEditingProductId(null);
     const nextCodeNum = products.length + 1;
     const defaultPtId = productTypes[0]?.product_type_id || 'pt_med';
-    const firstCat = (unifiedCategories || []).find(c => c.product_type_id === defaultPtId && (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active'));
+    const matchingCats = (unifiedCategories || []).filter(c =>
+      c.product_type_id === defaultPtId &&
+      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
+    );
+    const firstCat = matchingCats[0]?.category || 'Drugs';
+    const matchingSubs = matchingCats.filter(c => c.category === firstCat);
+    const firstSub = matchingSubs[0]?.sub_category || 'Tablets';
+    const matchingSubSubs = matchingSubs.filter(c => c.sub_category === firstSub);
+    const firstSubSub = matchingSubSubs[0]?.sub_sub_category || 'Film Coated Tablets';
+    const targetCatRecord = matchingSubSubs[0] || matchingSubs[0] || matchingCats[0];
 
     setFormData({
       productTypeId: defaultPtId,
-      categoryId: firstCat?.category_id || 'CAT001',
+      category: firstCat,
+      subCategory: firstSub,
+      subSubCategory: firstSubSub,
+      categoryId: targetCatRecord?.category_id || targetCatRecord?.id || 'CAT001',
       brandId: '',
       code: `PRD001${nextCodeNum < 10 ? '00' + nextCodeNum : nextCodeNum < 100 ? '0' + nextCodeNum : nextCodeNum}`,
       name: '',
@@ -510,11 +716,20 @@ export const ProductCatalogModule: React.FC = () => {
     if (e) e.stopPropagation();
     setEditingProductId(prd.id);
 
-    const existingCat = (unifiedCategories || []).find(c => c.category_id === (prd.category_id || prd.categoryId));
+    const existingCat = (unifiedCategories || []).find(c =>
+      c.category_id === (prd.category_id || prd.categoryId) ||
+      c.id === (prd.category_id || prd.categoryId)
+    );
     const prdPtId = prd.product_type_id || prd.productTypeId || existingCat?.product_type_id || 'pt_med';
+    const prdCat = prd.category || existingCat?.category || 'Drugs';
+    const prdSub = (prd as any).sub_category || (prd as any).subCategory || existingCat?.sub_category || '';
+    const prdSubSub = (prd as any).sub_sub_category || prd.subSubCategory || existingCat?.sub_sub_category || '';
 
     setFormData({
       productTypeId: prdPtId,
+      category: prdCat,
+      subCategory: prdSub,
+      subSubCategory: prdSubSub,
       categoryId: prd.category_id || prd.categoryId || existingCat?.category_id || 'CAT001',
       brandId: prd.brand_id || prd.brandId || '',
       code: prd.product_code || prd.code || '',
@@ -525,8 +740,8 @@ export const ProductCatalogModule: React.FC = () => {
       packSize: prd.pack_size || prd.packSize || '10 x 1 x 10',
       packUom: prd.pack_uom || 'Strip',
       lifecycleStatus: prd.lifecycle_status || (prd.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'),
-      availableFrom: prd.available_from || '2025-01-01',
-      discontinuedOn: prd.discontinued_on || '',
+      availableFrom: prd.available_from ? prd.available_from.split('T')[0] : '2025-01-01',
+      discontinuedOn: prd.discontinued_on ? prd.discontinued_on.split('T')[0] : '',
       replacementProductId: prd.replacement_product_id || '',
       isSellable: prd.is_sellable !== undefined ? prd.is_sellable : true
     });
@@ -582,16 +797,17 @@ export const ProductCatalogModule: React.FC = () => {
   };
 
   // Save Central Product Handler (Pure PRODUCT Entity + Dynamic Category Attributes in PRODUCT_ATTRIBUTE)
-  const handleSaveProductMaster = (e: React.FormEvent) => {
+  const handleSaveProductMaster = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalFormError(null);
 
     // 1. Classification Validations
     if (!formData.productTypeId) {
       setModalFormError('Product Type is mandatory. Please select a Product Type.');
       return;
     }
-    if (!formData.categoryId) {
-      setModalFormError('Category is mandatory. Please select a Category from the master catalogue.');
+    if (!formData.category) {
+      setModalFormError('Category is mandatory. Please select a Category from the master hierarchy.');
       return;
     }
 
@@ -615,10 +831,14 @@ export const ProductCatalogModule: React.FC = () => {
 
     // Unique Product Code Validation Check
     const codeClean = formData.code.trim().toUpperCase();
-    const isDuplicateCode = (products || []).some(p =>
-      p.id !== editingProductId &&
-      (p.product_code || p.code || '').toUpperCase().trim() === codeClean
-    );
+    const isDuplicateCode = (products || []).some(p => {
+      const isSelf = (p.id && p.id === editingProductId) ||
+                     (p.product_id && p.product_id === editingProductId) ||
+                     (p.code && p.code.toUpperCase() === (editingProductId || '').toUpperCase());
+      if (isSelf) return false;
+      const otherCode = (p.product_code || p.code || (p as any).productCode || '').toUpperCase().trim();
+      return otherCode === codeClean;
+    });
 
     if (isDuplicateCode) {
       setModalFormError(`Product Code "${codeClean}" already exists. Product Code must be unique across the central master catalog.`);
@@ -637,89 +857,114 @@ export const ProductCatalogModule: React.FC = () => {
       }
     }
 
-    // Resolve category details for display helper
+    // Resolve category details and brand
     const chosenCatRecord = resolveCategoryRecord(formData.categoryId);
     const chosenBrandRecord = (brands || []).find(b => b.brand_id === formData.brandId || b.id === formData.brandId);
 
     const nowIso = new Date().toISOString().split('T')[0];
     const targetId = editingProductId || `prd_${Date.now()}`;
 
-    // Construct client-aligned Product entity (Strictly canonical columns only)
-    const productPayload: Product = {
-      // Client Approved Core PRODUCT Entity Schema
-      product_id: targetId,
-      product_code: codeClean,
-      product_type_id: formData.productTypeId,
-      brand_id: formData.brandId ? formData.brandId : null,
-      category_id: formData.categoryId,
-      product_name: formData.name.trim(),
-      product_short_name: formData.shortName.trim() || formData.name.trim().slice(0, 30),
-      product_description: formData.description.trim(),
-      base_uom: formData.baseUom,
-      pack_size: formData.packSize.trim() || 'Standard Pack',
-      pack_uom: formData.packUom,
-      lifecycle_status: formData.lifecycleStatus,
-      available_from: formData.availableFrom || nowIso,
-      discontinued_on: formData.discontinuedOn ? formData.discontinuedOn : null,
-      replacement_product_id: formData.replacementProductId ? formData.replacementProductId : null,
-      is_sellable: formData.isSellable,
-      created_at: editingProductId ? ((products || []).find(p => p.id === editingProductId)?.created_at || nowIso) : nowIso,
-      updated_at: nowIso,
-
-      // UI & Backward compatibility aliases
-      id: targetId,
-      code: codeClean,
+    const apiPayload = {
+      productCode: codeClean,
       name: formData.name.trim(),
+      shortName: formData.shortName.trim() || formData.name.trim().slice(0, 30),
       productTypeId: formData.productTypeId,
-      categoryId: formData.categoryId,
-      brandId: formData.brandId || null,
-      category: chosenCatRecord?.category || 'Drugs',
-      subCategory: chosenCatRecord?.sub_category || undefined,
-      subSubCategory: chosenCatRecord?.sub_sub_category || undefined,
-      uom: formData.baseUom,
-      packSize: `${formData.packSize.trim()} ${formData.packUom}`.trim(),
-      status: (formData.lifecycleStatus === 'INACTIVE' || formData.lifecycleStatus === 'DISCONTINUED' || formData.lifecycleStatus === 'EOL') ? 'Inactive' : 'Active',
-      brandNames: chosenBrandRecord ? [chosenBrandRecord.brand_name || chosenBrandRecord.name] : [],
-      description: formData.description.trim(),
+      categoryId: formData.categoryId || chosenCatRecord?.category_id || undefined,
+      category: formData.category || chosenCatRecord?.category || 'Drugs',
+      subCategory: formData.subCategory || chosenCatRecord?.sub_category || undefined,
+      subSubCategory: formData.subSubCategory || chosenCatRecord?.sub_sub_category || undefined,
+      brand: chosenBrandRecord ? (chosenBrandRecord.brand_name || chosenBrandRecord.name) : undefined,
+      brandId: formData.brandId || undefined,
+      description: formData.description.trim() || undefined,
+      baseUom: formData.baseUom,
+      packSize: formData.packSize.trim() || 'Standard Pack',
+      packUom: formData.packUom,
+      lifecycleStatus: formData.lifecycleStatus,
+      availableFrom: formData.availableFrom || nowIso,
+      discontinuedOn: formData.discontinuedOn || undefined,
+      replacementProductId: formData.replacementProductId || undefined,
+      isSellable: formData.isSellable,
+      attributes: formAttrValues,
     };
 
-    if (editingProductId) {
-      updateProductMaster(editingProductId, productPayload);
-      addAuditLog('EDIT_CENTRAL_PRODUCT', `Updated Central Product Master: ${productPayload.product_name} (${productPayload.product_code})`);
-    } else {
-      addProductMaster(productPayload);
-      addAuditLog('CREATE_CENTRAL_PRODUCT', `Created Central Product Master: ${productPayload.product_name} (${productPayload.product_code})`);
+    setIsSavingProduct(true);
+    try {
+      let savedProduct: Product;
+      if (editingProductId) {
+        savedProduct = await catalogApi.updateProduct(editingProductId, apiPayload);
+        updateProductMaster(editingProductId, savedProduct);
+        addAuditLog('EDIT_CENTRAL_PRODUCT', `Updated Central Product Master: ${savedProduct.product_name || savedProduct.name} (${savedProduct.product_code || savedProduct.code})`);
+        setFeedbackToast({
+          type: 'success',
+          message: `Product "${savedProduct.product_name || savedProduct.name}" updated successfully.`
+        });
+      } else {
+        savedProduct = await catalogApi.createProduct(apiPayload);
+        addProductMaster(savedProduct);
+        addAuditLog('CREATE_CENTRAL_PRODUCT', `Created Central Product Master: ${savedProduct.product_name || savedProduct.name} (${savedProduct.product_code || savedProduct.code})`);
+        setFeedbackToast({
+          type: 'success',
+          message: `Product "${savedProduct.product_name || savedProduct.name}" created successfully.`
+        });
+      }
+
+      // If drawer was open for this product, update it with fresh data
+      if (selectedProduct && (selectedProduct.id === editingProductId || selectedProduct.id === savedProduct.id)) {
+        setSelectedProduct(savedProduct);
+      }
+
+      // Save Dynamic Category Attributes in PRODUCT_ATTRIBUTE
+      const dynamicAttrEntries = configuredAttrs.map(ca => ({
+        attribute_id: ca.attribute.attribute_id,
+        attribute_value: formAttrValues[ca.attribute.attribute_id] || ''
+      }));
+      if (dynamicAttrEntries.length > 0) {
+        saveProductAttributesBulk(savedProduct.id || targetId, dynamicAttrEntries);
+      }
+
+      // Refresh product catalog list from PostgreSQL
+      await refreshProducts();
+
+      setIsAddModalOpen(false);
+    } catch (err: any) {
+      setModalFormError(err.message || 'Failed to save product to central database.');
+    } finally {
+      setIsSavingProduct(false);
     }
-
-    // Save Dynamic Category Attributes in PRODUCT_ATTRIBUTE
-    const dynamicAttrEntries = configuredAttrs.map(ca => ({
-      attribute_id: ca.attribute.attribute_id,
-      attribute_value: formAttrValues[ca.attribute.attribute_id] || ''
-    }));
-    saveProductAttributesBulk(targetId, dynamicAttrEntries);
-
-    setIsAddModalOpen(false);
   };
 
-  // Toggle Product Status (Cycle between ACTIVE and INACTIVE)
-  const handleToggleStatus = (prd: Product, e?: React.MouseEvent) => {
+  // Toggle Product Status with Confirmation, Real API Call, and Toast Feedback
+  const handleToggleStatus = async (prd: Product, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const currentStatus = prd.lifecycle_status || (prd.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE');
-    const newLifecycle: LifecycleStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    updateProductMaster(prd.id, {
-      lifecycle_status: newLifecycle,
-      status: newLifecycle === 'ACTIVE' ? 'Active' : 'Inactive',
-      updated_at: new Date().toISOString().split('T')[0]
-    });
-    toggleProductMasterStatus(prd.id);
-    addAuditLog('TOGGLE_PRODUCT_STATUS', `Set Central Product ${prd.product_code || prd.code} lifecycle status to ${newLifecycle}`);
+    const isActivating = currentStatus !== 'ACTIVE';
+    const actionLabel = isActivating ? 'activate' : 'deactivate';
+    const targetName = prd.product_name || prd.name || prd.product_code || prd.code;
 
-    if (selectedProduct && selectedProduct.id === prd.id) {
-      setSelectedProduct(prev => prev ? {
-        ...prev,
-        lifecycle_status: newLifecycle,
-        status: newLifecycle === 'ACTIVE' ? 'Active' : 'Inactive'
-      } : null);
+    const confirmed = window.confirm(`Are you sure you want to ${actionLabel} "${targetName}"?`);
+    if (!confirmed) return;
+
+    setStatusLoadingId(prd.id);
+    try {
+      const updated = await catalogApi.toggleProductStatus(prd.id);
+      updateProductMaster(prd.id, updated);
+      await refreshProducts();
+
+      if (selectedProduct && selectedProduct.id === prd.id) {
+        setSelectedProduct(updated);
+      }
+      addAuditLog('TOGGLE_PRODUCT_STATUS', `Set Central Product ${prd.product_code || prd.code} lifecycle status to ${updated.lifecycle_status || (isActivating ? 'ACTIVE' : 'INACTIVE')}`);
+      setFeedbackToast({
+        type: 'success',
+        message: `Product "${targetName}" has been successfully ${isActivating ? 'activated' : 'deactivated'}.`
+      });
+    } catch (err: any) {
+      setFeedbackToast({
+        type: 'error',
+        message: `Failed to update status: ${err.message || 'Unknown server error'}`
+      });
+    } finally {
+      setStatusLoadingId(null);
     }
   };
 
@@ -826,7 +1071,7 @@ export const ProductCatalogModule: React.FC = () => {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 48 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 48, width: '100%', maxWidth: '100%', minWidth: 0 }}>
 
       {/* ── Enterprise Header ────────────────────────────────────── */}
       <div style={{
@@ -839,7 +1084,10 @@ export const ProductCatalogModule: React.FC = () => {
         justifyContent: 'space-between',
         alignItems: 'center',
         flexWrap: 'wrap',
-        gap: 16
+        gap: 16,
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{
@@ -924,9 +1172,12 @@ export const ProductCatalogModule: React.FC = () => {
         boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 14
+        gap: 14,
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0
       }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', width: '100%' }}>
 
           {/* Search Input */}
           <div style={{
@@ -1115,9 +1366,20 @@ export const ProductCatalogModule: React.FC = () => {
       </div>
 
       {/* ── Product Catalog Table / Card Views ─────────────────────── */}
-      <div style={{ background: '#FFFFFF', borderRadius: 12, border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)', overflowX: 'auto' }}>
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: 12,
+        border: '1px solid #E2E8F0',
+        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)',
+        overflowX: 'auto',
+        overflowY: 'visible',
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        position: 'relative'
+      }}>
         {displayMode === 'CARD' ? (
-          <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+          <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))', gap: 16, width: '100%', maxWidth: '100%' }}>
             {filteredProducts.length === 0 ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8', gridColumn: '1 / -1' }}>
                 No products found matching your search and filter criteria.
@@ -1250,45 +1512,44 @@ export const ProductCatalogModule: React.FC = () => {
                       </div>
                     </div>
 
-                    <div style={{ paddingTop: 10, borderTop: '1px solid #F1F5F9', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <div style={{ paddingTop: 10, borderTop: '1px solid #F1F5F9', display: 'flex', justifyContent: 'flex-end', position: 'relative' }} onClick={e => e.stopPropagation()}>
                       <button
-                        onClick={() => setSelectedProduct(p)}
+                        type="button"
+                        id={`card-actions-btn-${p.id}`}
+                        data-actions-trigger
+                        aria-haspopup="true"
+                        aria-expanded={openMenuProductId === p.id}
+                        onClick={(e) => handleToggleActionsMenu(p.id, e)}
+                        disabled={statusLoadingId === p.id}
                         style={{
-                          padding: '6px 12px',
-                          background: '#F1F5F9',
-                          border: '1px solid #CBD5E1',
+                          padding: '6px 14px',
+                          background: openMenuProductId === p.id ? '#0F766E' : '#F8FAFC',
+                          color: openMenuProductId === p.id ? '#FFFFFF' : '#0F766E',
+                          border: '1.5px solid',
+                          borderColor: openMenuProductId === p.id ? '#0F766E' : '#CBD5E1',
                           borderRadius: 6,
-                          color: '#0F766E',
-                          fontSize: 11.5,
+                          fontSize: 12,
                           fontWeight: 700,
-                          cursor: 'pointer',
+                          cursor: statusLoadingId === p.id ? 'not-allowed' : 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 4
+                          gap: 6,
+                          boxShadow: openMenuProductId === p.id ? '0 2px 6px rgba(15,118,110,0.2)' : '0 1px 2px rgba(0,0,0,0.04)',
+                          transition: 'all 0.15s ease'
                         }}
                       >
-                        <Eye size={13} /> View Details
+                        {statusLoadingId === p.id ? (
+                          <>
+                            <div style={{ width: 12, height: 12, border: '2px solid #0F766E', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                            <span>Updating...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Actions</span>
+                            <ChevronDown size={13} style={{ transform: openMenuProductId === p.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
+                          </>
+                        )}
                       </button>
-                      {canEditProducts && (
-                        <button
-                          onClick={() => handleOpenEditModal(p)}
-                          style={{
-                            padding: '6px 12px',
-                            background: '#0F766E',
-                            border: 'none',
-                            borderRadius: 6,
-                            color: '#FFFFFF',
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4
-                          }}
-                        >
-                          <Edit3 size={13} /> Edit
-                        </button>
-                      )}
                     </div>
                   </div>
                 );
@@ -1296,24 +1557,41 @@ export const ProductCatalogModule: React.FC = () => {
             )}
           </div>
         ) : (
-          <table style={{ width: '100%', minWidth: 1380, borderCollapse: 'collapse', textAlign: 'left' }}>
+          <table style={{ width: '100%', minWidth: 1260, borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'auto' }}>
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>PRODUCT CODE</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>PRODUCT NAME</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 120 }}>SHORT NAME</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 125 }}>PRODUCT TYPE</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 230 }}>CATEGORY</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 120 }}>BRAND</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#0F766E', width: 170 }}>MANUFACTURER</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 85 }}>BASE UOM</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95 }}>PACK SIZE</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 85 }}>PACK UOM</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 105 }}>LIFECYCLE</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 75 }}>SELLABLE</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 105 }}>AVAILABLE</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 105 }}>DISCONTINUED</th>
-                <th style={{ padding: '12px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', textAlign: 'right', width: 120 }}>ACTIONS</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 105, minWidth: 105, position: 'sticky', left: 0, background: '#F8FAFC', zIndex: 4, boxShadow: '2px 0 5px rgba(0,0,0,0.04)' }}>PRODUCT CODE</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 160, maxWidth: 240 }}>PRODUCT NAME</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 100, minWidth: 100 }}>SHORT NAME</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 115, minWidth: 115 }}>PRODUCT TYPE</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 160, maxWidth: 220 }}>CATEGORY</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110, minWidth: 110 }}>BRAND</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#0F766E', minWidth: 140, maxWidth: 180 }}>MANUFACTURER</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 75, minWidth: 75 }}>BASE UOM</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 90, minWidth: 90 }}>PACK SIZE</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 75, minWidth: 75 }}>PACK UOM</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95, minWidth: 95 }}>LIFECYCLE</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 70, minWidth: 70 }}>SELLABLE</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95, minWidth: 95 }}>AVAILABLE</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95, minWidth: 95 }}>DISCONTINUED</th>
+                <th style={{
+                  padding: '12px 14px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  color: '#475569',
+                  textAlign: 'center',
+                  width: 105,
+                  minWidth: 105,
+                  position: 'sticky',
+                  right: 0,
+                  background: '#F8FAFC',
+                  boxShadow: '-3px 0 6px rgba(0,0,0,0.03)',
+                  zIndex: 4
+                }}>
+                  ACTIONS
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1357,14 +1635,28 @@ export const ProductCatalogModule: React.FC = () => {
                       onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                       onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
                     >
-                      {/* 1. PRODUCT CODE */}
-                      <td style={{ padding: '12px 10px', fontSize: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                      {/* 1. PRODUCT CODE (STICKY LEFT) */}
+                      <td style={{
+                        padding: '12px 10px',
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: '#0F766E',
+                        fontFamily: 'monospace',
+                        whiteSpace: 'nowrap',
+                        width: 105,
+                        minWidth: 105,
+                        position: 'sticky',
+                        left: 0,
+                        background: '#FFFFFF',
+                        zIndex: 2,
+                        boxShadow: '2px 0 5px rgba(0,0,0,0.04)'
+                      }}>
                         {pCode}
                       </td>
 
                       {/* 2. PRODUCT NAME */}
-                      <td style={{ padding: '12px 10px' }}>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', lineHeight: 1.3 }}>{pName}</div>
+                      <td style={{ padding: '12px 10px', minWidth: 160, maxWidth: 240 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', lineHeight: 1.3, wordBreak: 'break-word', whiteSpace: 'normal' }}>{pName}</div>
                       </td>
 
                       {/* 3. PRODUCT SHORT NAME */}
@@ -1505,44 +1797,59 @@ export const ProductCatalogModule: React.FC = () => {
                         {discOn}
                       </td>
 
-                      {/* 14. ACTIONS */}
-                      <td style={{ padding: '12px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => setSelectedProduct(prd)}
-                            title="View Product Details"
-                            style={{ padding: '5px 8px', background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 4, color: '#0F766E', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                          >
-                            <Eye size={13} />
-                          </button>
-                          {canEditProducts && (
+                      {/* 14. SIMPLIFIED ACTIONS COLUMN (STICKY RIGHT) */}
+                      <td
+                        style={{
+                          padding: '10px 14px',
+                          textAlign: 'center',
+                          whiteSpace: 'nowrap',
+                          width: 105,
+                          minWidth: 105,
+                          position: 'sticky',
+                          right: 0,
+                          background: '#FFFFFF',
+                          boxShadow: '-3px 0 6px rgba(0,0,0,0.03)',
+                          zIndex: 2
+                        }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          id={`actions-btn-${prd.id}`}
+                          data-actions-trigger
+                          aria-haspopup="true"
+                          aria-expanded={openMenuProductId === prd.id}
+                          onClick={(e) => handleToggleActionsMenu(prd.id, e)}
+                          disabled={statusLoadingId === prd.id}
+                          style={{
+                            padding: '6px 12px',
+                            background: openMenuProductId === prd.id ? '#0F766E' : '#FFFFFF',
+                            color: openMenuProductId === prd.id ? '#FFFFFF' : '#0F766E',
+                            border: '1.5px solid',
+                            borderColor: openMenuProductId === prd.id ? '#0F766E' : '#CBD5E1',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: statusLoadingId === prd.id ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            boxShadow: openMenuProductId === prd.id ? '0 2px 6px rgba(15,118,110,0.2)' : '0 1px 2px rgba(0,0,0,0.04)',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {statusLoadingId === prd.id ? (
                             <>
-                              <button
-                                onClick={e => handleOpenEditModal(prd, e)}
-                                title="Edit Product Master"
-                                style={{ padding: '5px 8px', background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 4, color: '#0F766E', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                              >
-                                <Edit3 size={13} />
-                              </button>
-                              <button
-                                onClick={e => handleToggleStatus(prd, e)}
-                                title={badge.label === 'ACTIVE' ? 'Deactivate Product' : 'Activate Product'}
-                                style={{
-                                  padding: '5px 8px',
-                                  background: badge.label === 'ACTIVE' ? '#FEF2F2' : '#F0FDF4',
-                                  border: badge.label === 'ACTIVE' ? '1px solid #FECACA' : '1px solid #BBF7D0',
-                                  borderRadius: 4,
-                                  color: badge.label === 'ACTIVE' ? '#DC2626' : '#16A34A',
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                <Power size={13} />
-                              </button>
+                              <div style={{ width: 12, height: 12, border: '2px solid #0F766E', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                              <span>Updating...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Actions</span>
+                              <ChevronDown size={13} style={{ transform: openMenuProductId === prd.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
                             </>
                           )}
-                        </div>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -2765,14 +3072,14 @@ export const ProductCatalogModule: React.FC = () => {
               {/* ────────────────────────────────────────────────────────── */}
               <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Layers size={14} /> 1. PRODUCT HIERARCHY (TYPE → CATEGORY → BRAND)
+                  <Layers size={14} /> 1. DEPENDENT CATEGORY HIERARCHY (TYPE → CATEGORY → SUB-CATEGORY → SUB-SUB-CATEGORY)
                 </div>
 
-                {/* Step 1: Product Type * */}
+                {/* Level 1: Product Type * */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                      Step 1: Product Type *
+                      Level 1: Product Type *
                     </label>
                     {formData.productTypeId && (
                       <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
@@ -2783,15 +3090,7 @@ export const ProductCatalogModule: React.FC = () => {
                   <select
                     required
                     value={formData.productTypeId}
-                    onChange={e => {
-                      const newPtId = e.target.value;
-                      const matchingCats = (unifiedCategories || []).filter(c => c.product_type_id === newPtId && (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active'));
-                      setFormData({
-                        ...formData,
-                        productTypeId: newPtId,
-                        categoryId: matchingCats[0]?.category_id || ''
-                      });
-                    }}
+                    onChange={e => handleProductTypeChange(e.target.value)}
                     style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none', background: '#F0FDFA', color: '#0F766E' }}
                   >
                     <option value="" disabled>-- Select Product Type * --</option>
@@ -2803,39 +3102,92 @@ export const ProductCatalogModule: React.FC = () => {
                   </select>
                 </div>
 
+                {/* Dependent Dropdowns Row: Category & Sub-Category */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  {/* Step 2: Category * */}
+                  {/* Level 2: Category * */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                       <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Step 2: Product Category *
+                        Level 2: Category *
                       </label>
-                      {formData.categoryId && (
-                        <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
-                          ID: {formData.categoryId}
-                        </span>
-                      )}
+                      <span style={{ fontSize: 11, color: '#64748B' }}>
+                        {dependentL1Categories.length} available
+                      </span>
                     </div>
                     <select
                       required
-                      value={formData.categoryId}
-                      onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
+                      value={formData.category}
+                      onChange={e => handleCategoryChange(e.target.value)}
                       style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF' }}
                     >
-                      <option value="">-- Select Category from Master * --</option>
-                      {modalAvailableCategories.map(c => (
-                        <option key={c.category_id} value={c.category_id}>
-                          {c.category} › {c.sub_category || 'General'} {c.sub_sub_category ? `› ${c.sub_sub_category}` : ''} ({c.category_id})
+                      <option value="">-- Select Category * --</option>
+                      {dependentL1Categories.map(cat => (
+                        <option key={cat} value={cat}>
+                          {cat}
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  {/* Step 3: Brand */}
+                  {/* Level 3: Sub-Category * */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                       <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Step 3: Product Brand <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>
+                        Level 3: Sub-Category *
+                      </label>
+                      <span style={{ fontSize: 11, color: '#64748B' }}>
+                        {dependentL2SubCategories.length} available
+                      </span>
+                    </div>
+                    <select
+                      required
+                      value={formData.subCategory}
+                      onChange={e => handleSubCategoryChange(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF' }}
+                    >
+                      <option value="">-- Select Sub-Category * --</option>
+                      {dependentL2SubCategories.map(sub => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Dependent Dropdowns Row: Sub-Sub-Category & Brand */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  {/* Level 4: Sub-Sub-Category */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                        Level 4: Sub-Sub-Category
+                      </label>
+                      {formData.categoryId && (
+                        <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
+                          Cat ID: {formData.categoryId}
+                        </span>
+                      )}
+                    </div>
+                    <select
+                      value={formData.subSubCategory}
+                      onChange={e => handleSubSubCategoryChange(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF' }}
+                    >
+                      <option value="">-- {dependentL3SubSubCategories.length === 0 ? 'None (Direct Category Selection)' : 'Select Sub-Sub-Category'} --</option>
+                      {dependentL3SubSubCategories.map(subSub => (
+                        <option key={subSub} value={subSub}>
+                          {subSub}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Brand (Optional) */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                        Product Brand <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>
                       </label>
                       {formData.brandId ? (
                         <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#D97706' }}>
@@ -2863,32 +3215,34 @@ export const ProductCatalogModule: React.FC = () => {
                 </div>
 
                 {/* Read-only Derived Category Hierarchy Display */}
-                {selectedModalCategoryRecord && (
-                  <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.05em' }}>
-                        Derived Category Hierarchy:
-                      </div>
-                      <div style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
-                        Category ID: {selectedModalCategoryRecord.category_id}
-                      </div>
+                <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.05em' }}>
+                      Resolved Master Category Hierarchy:
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                      <div>
-                        <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Category:</span>
-                        <strong style={{ color: '#0F172A' }}>{selectedModalCategoryRecord.category}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Sub-Category:</span>
-                        <strong style={{ color: '#0F766E' }}>{selectedModalCategoryRecord.sub_category || '—'}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Sub-Sub-Category:</span>
-                        <strong style={{ color: '#0284C7' }}>{selectedModalCategoryRecord.sub_sub_category || '—'}</strong>
-                      </div>
+                    <div style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
+                      Database Category ID: {formData.categoryId || 'Auto-resolved'}
                     </div>
                   </div>
-                )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Type:</span>
+                      <strong style={{ color: '#0F172A' }}>{formData.productTypeId}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Category:</span>
+                      <strong style={{ color: '#0F172A' }}>{formData.category || '—'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Sub-Category:</span>
+                      <strong style={{ color: '#0F766E' }}>{formData.subCategory || 'General'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Sub-Sub-Category:</span>
+                      <strong style={{ color: '#0284C7' }}>{formData.subSubCategory || '—'}</strong>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* ────────────────────────────────────────────────────────── */}
@@ -3258,16 +3612,32 @@ export const ProductCatalogModule: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 10, borderTop: '1px solid #E2E8F0' }}>
                 <button
                   type="button"
+                  disabled={isSavingProduct}
                   onClick={() => setIsAddModalOpen(false)}
-                  style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#475569', fontSize: 13, fontWeight: 600, cursor: isSavingProduct ? 'not-allowed' : 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '9px 22px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFF', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,118,110,0.2)' }}
+                  disabled={isSavingProduct}
+                  style={{
+                    padding: '9px 22px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: isSavingProduct ? '#94A3B8' : '#0F766E',
+                    color: '#FFF',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: isSavingProduct ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 3px rgba(15,118,110,0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}
                 >
-                  {editingProductId ? 'Update Product Master' : 'Save Product'}
+                  {isSavingProduct && <div style={{ width: 14, height: 14, border: '2px solid #FFF', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}
+                  {isSavingProduct ? 'Saving to Database...' : editingProductId ? 'Update Product Master' : 'Save Product to Database'}
                 </button>
               </div>
 
@@ -3847,6 +4217,168 @@ export const ProductCatalogModule: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* ── UNIFIED FIXED PORTAL FOR ACTIONS DROPDOWN (IMMUNE TO OVERFLOW CLIPPING) ── */}
+      {openMenuProductId && menuAnchor && (() => {
+        const activeProduct = products.find(p => p.id === openMenuProductId);
+        if (!activeProduct) return null;
+        const badge = getLifecycleBadge(activeProduct.lifecycle_status || (activeProduct.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'));
+        const isActive = (badge.label === 'ACTIVE' || activeProduct.status === 'Active');
+
+        return createPortal(
+          <div
+            data-actions-menu
+            role="menu"
+            aria-orientation="vertical"
+            style={{
+              position: 'fixed',
+              top: menuAnchor.top,
+              bottom: menuAnchor.bottom,
+              right: menuAnchor.right,
+              background: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: 8,
+              boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.2), 0 8px 10px -6px rgba(15, 23, 42, 0.12)',
+              minWidth: 180,
+              zIndex: 9999,
+              padding: '5px 0',
+              textAlign: 'left'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 1. View Details */}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpenMenuProductId(null);
+                setMenuAnchor(null);
+                setSelectedProduct(activeProduct);
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 14px',
+                background: 'none',
+                border: 'none',
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: '#1E293B',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                textAlign: 'left',
+                transition: 'background 0.1s'
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F0FDFA')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              <Eye size={14} style={{ color: '#0F766E', flexShrink: 0 }} />
+              <span>View Details</span>
+            </button>
+
+            {canEditProducts && (
+              <>
+                {/* 2. Edit Product */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    setOpenMenuProductId(null);
+                    setMenuAnchor(null);
+                    handleOpenEditModal(activeProduct, e);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 14px',
+                    background: 'none',
+                    border: 'none',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    color: '#1E293B',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    textAlign: 'left',
+                    transition: 'background 0.1s'
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#EFF6FF')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                >
+                  <Edit3 size={14} style={{ color: '#2563EB', flexShrink: 0 }} />
+                  <span>Edit Product</span>
+                </button>
+
+                {/* Separator */}
+                <div style={{ height: 1, background: '#F1F5F9', margin: '4px 0' }} />
+
+                {/* 3. Activate / Deactivate */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    setOpenMenuProductId(null);
+                    setMenuAnchor(null);
+                    handleToggleStatus(activeProduct, e);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 14px',
+                    background: 'none',
+                    border: 'none',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    color: isActive ? '#DC2626' : '#16A34A',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    textAlign: 'left',
+                    transition: 'background 0.1s'
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = isActive ? '#FEF2F2' : '#F0FDF4')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                >
+                  <Power size={14} style={{ color: isActive ? '#DC2626' : '#16A34A', flexShrink: 0 }} />
+                  <span>{isActive ? 'Deactivate Product' : 'Activate Product'}</span>
+                </button>
+              </>
+            )}
+          </div>,
+          document.body
+        );
+      })()}
+
+      {/* ── REAL-TIME FEEDBACK TOAST ────────────────────────── */}
+      {feedbackToast && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          zIndex: 99999,
+          background: feedbackToast.type === 'success' ? '#0F766E' : '#B91C1C',
+          color: '#FFFFFF',
+          padding: '12px 20px',
+          borderRadius: 8,
+          boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontSize: 13,
+          fontWeight: 600
+        }}>
+          {feedbackToast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          <span>{feedbackToast.message}</span>
+          <button
+            type="button"
+            onClick={() => setFeedbackToast(null)}
+            style={{ background: 'none', border: 'none', color: '#FFF', cursor: 'pointer', padding: 2, marginLeft: 8 }}
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 

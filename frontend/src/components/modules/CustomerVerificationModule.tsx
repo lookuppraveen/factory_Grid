@@ -263,12 +263,32 @@ export const CustomerVerificationModule: React.FC = () => {
   const [rejectionReasonInput, setRejectionReasonInput] = useState<string>('');
   const [moreDocsNotesInput, setMoreDocsNotesInput] = useState<string>('');
 
-  // Re-submit Docs Modal State (for Customer)
+  // Re-submission Modal & File Upload State
   const [isResubmitModalOpen, setIsResubmitModalOpen] = useState<boolean>(false);
-  const [resubmitDocsList, setResubmitDocsList] = useState<CustomerVerificationDocument[]>([]);
+  const [resubmitTargetDoc, setResubmitTargetDoc] = useState<string>('GST Certificate');
+  const [resubmitFile, setResubmitFile] = useState<File | null>(null);
+  const [isResubmitting, setIsResubmitting] = useState<boolean>(false);
+  const [resubmitError, setResubmitError] = useState<string | null>(null);
 
   // Selected Record Object from DB records
   const selectedRecord = records.find(r => r.id === selectedRecordId || r.requestCode === selectedRecordId) || null;
+
+  // Real document verification readiness checks
+  const isDocMatching = (doc: any, key: string, name: string) => {
+    const cat = (doc.category || '').toUpperCase();
+    const dt = (doc.documentType || '').toUpperCase();
+    const targetKey = key.toUpperCase();
+    const targetName = name.toUpperCase();
+    return cat.includes(targetKey) || dt.includes(targetKey) || cat.includes(targetName.split(' ')[0]) || dt.includes(targetName.split(' ')[0]);
+  };
+  const uploadedDocs = selectedRecord?.documents || [];
+  const hasGstUploaded = uploadedDocs.some(d => isDocMatching(d, 'GST', 'GST Certificate'));
+  const hasPanUploaded = uploadedDocs.some(d => isDocMatching(d, 'PAN', 'PAN Card'));
+  const hasGstVerified = uploadedDocs.some(d => isDocMatching(d, 'GST', 'GST Certificate') && (d.status === 'Valid' || d.rawStatus === 'VALID' || d.reviewDecision === 'APPROVED'));
+  const hasPanVerified = uploadedDocs.some(d => isDocMatching(d, 'PAN', 'PAN Card') && (d.status === 'Valid' || d.rawStatus === 'VALID' || d.reviewDecision === 'APPROVED'));
+  const hasPendingDocs = uploadedDocs.some(d => d.status === 'Pending' || d.rawStatus === 'PENDING');
+  const hasRejectedDocs = uploadedDocs.some(d => d.status === 'Invalid' || d.status === 'Need Replacement' || d.rawStatus === 'REJECTED' || d.rawStatus === 'NEEDS_REPLACEMENT');
+  const isCaseApprovable = selectedRecord ? (hasGstVerified && hasPanVerified && !hasPendingDocs && !hasRejectedDocs && (selectedRecord.verificationStatus !== 'Approved' && selectedRecord.verificationStatus !== 'Active')) : false;
 
   // Counts for KPI Strip
   const counts = {
@@ -377,6 +397,56 @@ export const CustomerVerificationModule: React.FC = () => {
     }
   };
 
+  const handleOpenResubmit = () => {
+    if (!selectedRecord) return;
+    const flaggedDoc = selectedRecord.documents?.find(
+      d => d.status === 'Invalid' || d.status === 'Need Replacement' || d.rawStatus === 'REJECTED' || d.rawStatus === 'NEEDS_REPLACEMENT'
+    );
+    if (flaggedDoc) {
+      setResubmitTargetDoc(flaggedDoc.documentType || flaggedDoc.category || 'GST Certificate');
+    } else {
+      setResubmitTargetDoc('GST Certificate');
+    }
+    setResubmitFile(null);
+    setResubmitError(null);
+    setIsResubmitModalOpen(true);
+  };
+
+  const handleExecuteResubmit = async () => {
+    if (!selectedRecord) return;
+    if (!resubmitFile) {
+      setResubmitError('Please select a valid document file (PDF, JPEG, or PNG) to upload.');
+      return;
+    }
+
+    const regCode = (selectedRecord as any).registrationCode || selectedRecord.requestCode || selectedRecord.id;
+    if (!regCode) {
+      setResubmitError('No valid registration code or request code found for this case.');
+      return;
+    }
+
+    setIsResubmitting(true);
+    setResubmitError(null);
+
+    try {
+      await adminVerificationApi.uploadCustomerDocument(resubmitFile, resubmitTargetDoc, regCode);
+      setToastMessage(`✓ Re-submitted ${resubmitTargetDoc} for ${selectedRecord.companyName}. Case returned to Under Review.`);
+      setIsResubmitModalOpen(false);
+      setResubmitFile(null);
+      await loadVerifications();
+      if (selectedRecordId) {
+        const refreshed = await adminVerificationApi.getCustomerVerification(selectedRecordId);
+        if (refreshed) {
+          setRecords(prev => prev.map(r => (r.id === refreshed.id || r.requestCode === refreshed.requestCode) ? refreshed : r));
+        }
+      }
+    } catch (err: any) {
+      setResubmitError(err.message || 'Failed to re-submit document.');
+    } finally {
+      setIsResubmitting(false);
+    }
+  };
+
   const handleAssignOfficer = async (officer: string) => {
     if (!selectedRecord) return;
     try {
@@ -432,17 +502,6 @@ export const CustomerVerificationModule: React.FC = () => {
     } catch (err: any) {
       alert(`Document review failed: ${err.message}`);
     }
-  };
-
-  const handleOpenResubmit = () => {
-    if (!selectedRecord) return;
-    setResubmitDocsList([...selectedRecord.documents]);
-    setIsResubmitModalOpen(true);
-  };
-
-  const handleExecuteResubmit = () => {
-    setIsResubmitModalOpen(false);
-    loadVerifications();
   };
 
   // Status Badge Rendering Helper
@@ -718,29 +777,16 @@ export const CustomerVerificationModule: React.FC = () => {
                   </td>
 
                   <td style={{ padding: '16px 18px', textAlign: 'right' }}>
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       <button
                         onClick={() => setSelectedRecordId(record.id)}
                         style={{
-                          height: 32, padding: '0 12px', borderRadius: 6, background: '#1D4ED8', color: '#FFFFFF',
-                          border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
+                          height: 32, padding: '0 16px', borderRadius: 6, background: '#1D4ED8', color: '#FFFFFF',
+                          border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+                          boxShadow: '0 1px 2px rgba(29, 78, 216, 0.2)'
                         }}
                       >
-                        <Eye size={13} /> View Case
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedRecordId(record.id);
-                          setTimeout(() => {
-                            document.getElementById('doc-verification-section')?.scrollIntoView({ behavior: 'smooth' });
-                          }, 150);
-                        }}
-                        style={{
-                          height: 32, padding: '0 12px', borderRadius: 6, background: '#F1F5F9', color: '#0F172A',
-                          border: '1px solid #CBD5E1', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
-                        }}
-                      >
-                        <FileText size={13} /> View Documents
+                        <FileCheck size={14} /> Review
                       </button>
                     </div>
                   </td>
@@ -816,16 +862,25 @@ export const CustomerVerificationModule: React.FC = () => {
               {/* NEED MORE DOCS BANNER */}
               {selectedRecord.verificationStatus === 'Need More Docs' && (
                 <div style={{ background: '#FDF2F8', border: '1px solid #F472B6', borderRadius: 10, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9D174D', fontWeight: 800, fontSize: 14 }}>
-                      <AlertCircle size={18} /> Status: Need More Docs (Workflow Loop Back)
+                      <AlertCircle size={18} /> Status: Need More Docs (Awaiting Re-Submission)
                     </div>
-                    <button
-                      onClick={handleOpenResubmit}
-                      style={{ padding: '6px 12px', background: '#DB2777', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                    >
-                      <Upload size={13} /> Simulate Customer Re-Submission
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        onClick={loadVerifications}
+                        title="Check if customer has uploaded documents via their portal"
+                        style={{ padding: '6px 12px', background: '#FFFFFF', color: '#9D174D', border: '1px solid #F472B6', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <RefreshCw size={13} /> Check Portal Updates
+                      </button>
+                      <button
+                        onClick={handleOpenResubmit}
+                        style={{ padding: '6px 12px', background: '#DB2777', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <Upload size={13} /> Upload Re-Submitted Document
+                      </button>
+                    </div>
                   </div>
                   <div style={{ fontSize: 12.5, color: '#831843', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 8 }}>
                     <div>
@@ -979,493 +1034,367 @@ export const CustomerVerificationModule: React.FC = () => {
                 </div>
               </div>
 
-              {/* 7. DOCUMENT VERIFICATION */}
-              <div id="doc-verification-section" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>DOCUMENT VERIFICATION ({selectedRecord.documents?.length || 0} SUBMITTED)</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '2px 8px', borderRadius: 4 }}>
-                    Live PostgreSQL Compliance Records
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {(!selectedRecord.documents || selectedRecord.documents.length === 0) ? (
-                    <div style={{ padding: '24px', textAlign: 'center', background: '#F8FAFC', borderRadius: 8, border: '1px dashed #CBD5E1', color: '#64748B', fontSize: 12.5 }}>
-                      No documents uploaded yet for this customer registration. Registrant can upload compliance documents via Buyer Portal.
-                    </div>
-                  ) : (
-                    selectedRecord.documents.map((docItem: any) => {
-                      const docType = docItem.documentType || docItem.category || 'Regulatory Document';
-                      const currentStatus = docItem.verificationStatus || (docItem.status === 'Valid' ? 'APPROVED' : docItem.status === 'Invalid' ? 'REJECTED' : 'PENDING');
-                      const isVerified = currentStatus === 'APPROVED' || currentStatus === 'Verified';
-                      const isRejected = currentStatus === 'REJECTED' || currentStatus === 'Rejected';
-                      const isReplacement = currentStatus === 'NEEDS_REPLACEMENT' || currentStatus === 'Need Replacement';
+              {/* 7. RELEVANT DOCUMENT VERIFICATION DESK */}
+              <div id="doc-verification-section" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '18px 20px' }}>
+                      <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: 10, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
+                            DOCUMENT VERIFICATION ({uploadedDocs.length} UPLOADED)
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                            Only actual persisted records stored in backend for {selectedRecord.companyName}.
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '3px 9px', borderRadius: 6, border: '1px solid #BFDBFE' }}>
+                          PostgreSQL / Object Storage
+                        </span>
+                      </div>
 
-                      return (
-                        <div key={docItem.id} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {/* Missing Required Documents Checklist */}
+                        {!hasGstUploaded && (
+                          <div style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px dashed #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                              <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(29, 78, 216, 0.08)', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <div style={{ width: 36, height: 36, borderRadius: 8, background: '#F1F5F9', color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 <FileText size={18} />
                               </div>
                               <div>
-                                <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <span>{docType}</span>
-                                  <span style={{
-                                    fontSize: 10, fontWeight: 700,
-                                    color: isVerified ? '#10B981' : isRejected ? '#DC2626' : isReplacement ? '#DB2777' : '#D97706',
-                                    background: isVerified ? 'rgba(16, 185, 129, 0.1)' : isRejected ? '#FEF2F2' : isReplacement ? '#FDF2F8' : '#FFFBEB',
-                                    padding: '1px 6px', borderRadius: 4
-                                  }}>
-                                    {isVerified ? '✓ Verified' : isRejected ? '✕ Rejected' : isReplacement ? '⚠ Needs Replacement' : '⏳ Pending Review'}
+                                <div style={{ fontSize: 13.5, fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span>GST Certificate</span>
+                                  <span style={{ fontSize: 10, fontWeight: 800, color: '#DC2626', background: '#FEF2F2', padding: '1px 6px', borderRadius: 4, border: '1px solid #FECACA' }}>
+                                    REQUIRED
+                                  </span>
+                                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: 4, border: '1px solid #CBD5E1' }}>
+                                    Not Uploaded
                                   </span>
                                 </div>
                                 <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
-                                  File: <strong style={{ color: '#0F172A' }}>{docItem.fileName}</strong> ({docItem.fileSize || '1.2 MB'}) • Uploaded: <strong>{new Date(docItem.uploadedAt).toLocaleDateString()}</strong>
+                                  Required statutory document — not yet submitted by customer.
                                 </div>
-                                {docItem.rejectionReason && (
-                                  <div style={{ marginTop: 4, fontSize: 11.5, color: '#DC2626', background: '#FEF2F2', padding: '3px 8px', borderRadius: 4, border: '1px solid #FECACA', display: 'inline-block' }}>
-                                    <strong>Rejection Reason:</strong> {docItem.rejectionReason}
-                                  </div>
-                                )}
                               </div>
                             </div>
+                            <span style={{ fontSize: 11, color: '#94A3B8', fontStyle: 'italic' }}>Awaiting upload</span>
+                          </div>
+                        )}
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <button
-                                onClick={() => handleRunCustomerAiAnalysis(docType, selectedRecord)}
-                                disabled={analyzingDocType === docType}
-                                style={{
-                                  padding: '5px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 700,
-                                  background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #93C5FD',
-                                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
-                                }}
-                              >
-                                <Sparkles size={12} /> {analyzingDocType === docType ? 'Analyzing...' : 'AI Analyse'}
-                              </button>
-
-                              <button
-                                onClick={() => setViewingDoc(docItem)}
-                                style={{
-                                  height: 32, padding: '0 12px', background: '#1D4ED8', border: 'none', borderRadius: 6,
-                                  fontSize: 11.5, fontWeight: 700, color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
-                                }}
-                              >
-                                <Eye size={13} /> View Document
-                              </button>
+                        {!hasPanUploaded && (
+                          <div style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px dashed #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              <div style={{ width: 36, height: 36, borderRadius: 8, background: '#F1F5F9', color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <FileText size={18} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 13.5, fontWeight: 800, color: '#334155', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span>PAN Card</span>
+                                  <span style={{ fontSize: 10, fontWeight: 800, color: '#DC2626', background: '#FEF2F2', padding: '1px 6px', borderRadius: 4, border: '1px solid #FECACA' }}>
+                                    REQUIRED
+                                  </span>
+                                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: 4, border: '1px solid #CBD5E1' }}>
+                                    Not Uploaded
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                                  Required statutory document — not yet submitted by customer.
+                                </div>
+                              </div>
                             </div>
+                            <span style={{ fontSize: 11, color: '#94A3B8', fontStyle: 'italic' }}>Awaiting upload</span>
                           </div>
+                        )}
 
-                          {/* Inline Document Review Action Buttons */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 6, borderTop: '1px solid #F1F5F9' }}>
-                            {!isVerified && (
-                              <button
-                                onClick={() => handleReviewDocument(docItem.id, docType, 'APPROVED')}
-                                style={{ height: 28, padding: '0 12px', borderRadius: 5, background: '#16A34A', color: '#FFFFFF', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                              >
-                                ✓ Verify
-                              </button>
-                            )}
-                            
-                            {!isRejected && (
-                              <button
-                                onClick={() => handleReviewDocument(docItem.id, docType, 'REJECTED', true)}
-                                style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                              >
-                                ✕ Reject
-                              </button>
-                            )}
-
-                            {!isReplacement && (
-                              <button
-                                onClick={() => handleReviewDocument(docItem.id, docType, 'NEEDS_REPLACEMENT', true)}
-                                style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                              >
-                                Request Replacement
-                              </button>
-                            )}
+                        {/* Uploaded Documents List */}
+                        {uploadedDocs.length === 0 ? (
+                          <div style={{ padding: '24px', textAlign: 'center', background: '#F8FAFC', borderRadius: 8, border: '1px dashed #CBD5E1', color: '#64748B', fontSize: 12.5 }}>
+                            No documents uploaded yet for this customer registration. Registrant can upload compliance documents via Buyer Portal.
                           </div>
+                        ) : (
+                          uploadedDocs.map((docItem: any) => {
+                            const docType = docItem.documentType || docItem.categoryDisplayName || docItem.category || 'Regulatory Document';
+                            const currentStatus = docItem.verificationStatus || (docItem.status === 'Valid' ? 'APPROVED' : docItem.status === 'Invalid' ? 'REJECTED' : docItem.status === 'Need Replacement' ? 'NEEDS_REPLACEMENT' : 'PENDING');
+                            const isVerified = currentStatus === 'APPROVED' || currentStatus === 'Verified' || docItem.status === 'Valid' || docItem.rawStatus === 'VALID';
+                            const isRejected = currentStatus === 'REJECTED' || currentStatus === 'Rejected' || docItem.status === 'Invalid' || docItem.rawStatus === 'REJECTED';
+                            const isReplacement = currentStatus === 'NEEDS_REPLACEMENT' || currentStatus === 'Need Replacement' || docItem.rawStatus === 'NEEDS_REPLACEMENT';
+                            const isGstOrPan = docType.toUpperCase().includes('GST') || docType.toUpperCase().includes('PAN');
+
+                            // Status badge and text
+                            let statusLabel = 'Pending Verification';
+                            let statusColor = '#D97706';
+                            let statusBg = '#FFFBEB';
+                            let statusBorder = '#FDE68A';
+                            let statusNote = isGstOrPan
+                              ? 'Real Govt API pending • Eligible for UI demo auto-check'
+                              : 'Awaiting Admin Review';
+
+                            if (isVerified) {
+                              statusLabel = 'Verified';
+                              statusColor = '#16A34A';
+                              statusBg = '#F0FDF4';
+                              statusBorder = '#BBF7D0';
+                              statusNote = 'Approved by Authorized Reviewer';
+                            } else if (isRejected) {
+                              statusLabel = 'Rejected';
+                              statusColor = '#DC2626';
+                              statusBg = '#FEF2F2';
+                              statusBorder = '#FECACA';
+                              statusNote = docItem.rejectionReason || 'Document rejected during review';
+                            } else if (isReplacement) {
+                              statusLabel = 'Replacement Requested';
+                              statusColor = '#DB2777';
+                              statusBg = '#FDF2F8';
+                              statusBorder = '#FBCFE8';
+                              statusNote = docItem.rejectionReason || 'Replacement requested by reviewer';
+                            }
+
+                            return (
+                              <div key={docItem.id} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(29, 78, 216, 0.08)', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                      <FileText size={18} />
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <span>{docType}</span>
+                                        {isGstOrPan && (
+                                          <span style={{ fontSize: 10, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '1px 6px', borderRadius: 4, border: '1px solid #BFDBFE' }}>
+                                            Required
+                                          </span>
+                                        )}
+                                        <span style={{
+                                          fontSize: 10.5, fontWeight: 700,
+                                          color: statusColor,
+                                          background: statusBg,
+                                          border: `1px solid ${statusBorder}`,
+                                          padding: '2px 8px', borderRadius: 4
+                                        }}>
+                                          {isVerified ? '✓ Verified' : isRejected ? '✕ Rejected' : isReplacement ? '⚠ Replacement Requested' : '⏳ Pending Verification'}
+                                        </span>
+                                      </div>
+                                      <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                                        File: <strong style={{ color: '#0F172A' }}>{docItem.fileName}</strong> ({docItem.fileSize || '1.2 MB'}) • Uploaded: <strong>{new Date(docItem.uploadedAt).toLocaleDateString()}</strong> • Expiry: <strong>{docItem.expiryDate || '—'}</strong>
+                                      </div>
+                                      <div style={{ fontSize: 11, color: isRejected || isReplacement ? '#DC2626' : '#64748B', marginTop: 3 }}>
+                                        {statusNote}
+                                      </div>
+                                      {docItem.rejectionReason && (
+                                        <div style={{ marginTop: 4, fontSize: 11.5, color: '#DC2626', background: '#FEF2F2', padding: '3px 8px', borderRadius: 4, border: '1px solid #FECACA', display: 'inline-block' }}>
+                                          <strong>Reason:</strong> {docItem.rejectionReason}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <button
+                                      onClick={() => setViewingDoc(docItem)}
+                                      style={{
+                                        height: 32, padding: '0 12px', background: '#1D4ED8', border: 'none', borderRadius: 6,
+                                        fontSize: 11.5, fontWeight: 700, color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
+                                      }}
+                                    >
+                                      <Eye size={13} /> View Document
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Inline Document Review Action Buttons */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 6, borderTop: '1px solid #F1F5F9' }}>
+                                  {!isVerified && (
+                                    <button
+                                      onClick={() => handleReviewDocument(docItem.id, docType, 'APPROVED')}
+                                      style={{ height: 28, padding: '0 12px', borderRadius: 5, background: '#16A34A', color: '#FFFFFF', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      ✓ Verify
+                                    </button>
+                                  )}
+                                  
+                                  {!isRejected && (
+                                    <button
+                                      onClick={() => handleReviewDocument(docItem.id, docType, 'REJECTED', true)}
+                                      style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      ✕ Reject
+                                    </button>
+                                  )}
+
+                                  {!isReplacement && (
+                                    <button
+                                      onClick={() => handleReviewDocument(docItem.id, docType, 'NEEDS_REPLACEMENT', true)}
+                                      style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                      Request Replacement
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Customer Classification Area */}
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Tag size={15} style={{ color: '#0E7490' }} />
+                          <span>Customer Classification &amp; Governance</span>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
+                        {selectedRecord.customerClassification === 'SPECIAL_PARTY' ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 800, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
+                            <Star size={11} fill="#0E7490" /> SPECIAL PARTY
+                          </span>
+                        ) : (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1' }}>
+                            Regular Customer
+                          </span>
+                        )}
+                      </div>
 
-              {/* 8. Auto-validation Results */}
-              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>8. Auto-validation Results</span>
-                  <span style={{
-                    padding: '3px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 700,
-                    background: selectedRecord.autoValidation.overallStatus === 'Valid' ? '#F0FDF4' : '#FFFBEB',
-                    color: selectedRecord.autoValidation.overallStatus === 'Valid' ? '#16A34A' : '#D97706'
-                  }}>
-                    Overall: {selectedRecord.autoValidation.overallStatus}
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
-                  <div style={{ background: '#F8FAFC', padding: '10px', borderRadius: 8, textAlign: 'center', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: 11, color: '#64748B' }}>GST Format</div>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: selectedRecord.autoValidation.gstCheck === 'Valid' ? '#16A34A' : '#DC2626' }}>{selectedRecord.autoValidation.gstCheck}</div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '10px', borderRadius: 8, textAlign: 'center', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: 11, color: '#64748B' }}>PAN Format</div>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: selectedRecord.autoValidation.panCheck === 'Valid' ? '#16A34A' : '#DC2626' }}>{selectedRecord.autoValidation.panCheck}</div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '10px', borderRadius: 8, textAlign: 'center', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: 11, color: '#64748B' }}>Docs Presence</div>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: selectedRecord.autoValidation.requiredDocsCheck === 'Valid' ? '#16A34A' : '#DC2626' }}>{selectedRecord.autoValidation.requiredDocsCheck}</div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '10px', borderRadius: 8, textAlign: 'center', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: 11, color: '#64748B' }}>Required Fields</div>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: selectedRecord.autoValidation.requiredFieldsCheck === 'Valid' ? '#16A34A' : '#DC2626' }}>{selectedRecord.autoValidation.requiredFieldsCheck}</div>
-                  </div>
-                </div>
-              </div>
+                      <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>
+                        Platform Admin customer-level classification. Special Party status flows across Buyer Dashboard, RFQ generation, Manufacturer quoting visibility, and Order tracking.
+                      </div>
 
-              {/* BUSINESS VERIFICATION */}
-              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>BUSINESS VERIFICATION</span>
-                  <span style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? '#10B981' : '#D97706',
-                    background: selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
-                    padding: '2px 8px',
-                    borderRadius: 4
-                  }}>
-                    {selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? 'Verified' : 'Pending Manual Review'}
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, fontSize: 12.5 }}>
-                  <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', fontWeight: 600 }}>1. GST Active Status</span>
-                    <span style={{
-                      fontWeight: 700,
-                      color: selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? '#10B981' : '#D97706',
-                      background: selectedRecord.businessVerification?.gstActiveStatus === 'Active' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
-                      padding: '2px 8px',
-                      borderRadius: 4,
-                      fontSize: 11
-                    }}>
-                      {selectedRecord.businessVerification?.gstActiveStatus || 'Pending Manual Review'}
-                    </span>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', fontWeight: 600 }}>2. PAN Validation</span>
-                    <span style={{
-                      fontWeight: 700,
-                      color: selectedRecord.businessVerification?.panValidation === 'Verified' ? '#10B981' : '#D97706',
-                      background: selectedRecord.businessVerification?.panValidation === 'Verified' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
-                      padding: '2px 8px',
-                      borderRadius: 4,
-                      fontSize: 11
-                    }}>
-                      {selectedRecord.businessVerification?.panValidation || 'Pending Manual Review'}
-                    </span>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', fontWeight: 600 }}>3. Company Registration (ROC)</span>
-                    <span style={{
-                      fontWeight: 700,
-                      color: selectedRecord.businessVerification?.companyRegistrationValidation?.includes('Verified') ? '#10B981' : '#D97706',
-                      background: selectedRecord.businessVerification?.companyRegistrationValidation?.includes('Verified') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
-                      padding: '2px 8px',
-                      borderRadius: 4,
-                      fontSize: 11
-                    }}>
-                      {selectedRecord.businessVerification?.companyRegistrationValidation || 'Pending Manual Review'}
-                    </span>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#64748B', fontWeight: 600 }}>4. CIN Validation</span>
-                    <span style={{
-                      fontWeight: 700,
-                      color: selectedRecord.businessVerification?.cinValidation?.includes('Verified') ? '#10B981' : '#D97706',
-                      background: selectedRecord.businessVerification?.cinValidation?.includes('Verified') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
-                      padding: '2px 8px',
-                      borderRadius: 4,
-                      fontSize: 11
-                    }}>
-                      {selectedRecord.businessVerification?.cinValidation || (selectedRecord.cinNumber ? 'Pending Manual Review' : 'N/A')}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                      {/* Segmented Control */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', padding: '6px', borderRadius: 8, border: '1px solid #E2E8F0', width: 'fit-content' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if ((selectedRecord.customerClassification || 'REGULAR') !== 'REGULAR') {
+                              setClassificationConfirmModal({
+                                isOpen: true,
+                                targetRecordId: selectedRecord.id,
+                                targetCompanyName: selectedRecord.companyName,
+                                targetClassification: 'REGULAR'
+                              });
+                            }
+                          }}
+                          style={{
+                            padding: '6px 16px',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? 800 : 500,
+                            background: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '#FFFFFF' : 'transparent',
+                            color: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '#0F172A' : '#64748B',
+                            border: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '1px solid #CBD5E1' : 'none',
+                            boxShadow: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          Regular Customer
+                        </button>
 
-              {/* REGULATORY VERIFICATION */}
-              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>REGULATORY VERIFICATION</span>
-                  <span style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? '#10B981' : '#D97706',
-                    background: selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
-                    padding: '2px 8px',
-                    borderRadius: 4
-                  }}>
-                    {selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? 'Verified' : 'Pending Manual Review'}
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 12 }}>
-                  <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                    <div style={{ color: '#64748B', fontWeight: 600 }}>1. Drug License Validity</div>
-                    <div style={{
-                      fontWeight: 800,
-                      color: selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? '#10B981' : '#D97706',
-                      marginTop: 4,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4
-                    }}>
-                      {selectedRecord.regulatoryVerification?.drugLicenseValidity?.includes('Valid') ? <CheckCircle2 size={14} /> : <Clock size={14} />}
-                      {selectedRecord.regulatoryVerification?.drugLicenseValidity || 'Pending Manual Review'}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (selectedRecord.customerClassification !== 'SPECIAL_PARTY') {
+                              setClassificationConfirmModal({
+                                isOpen: true,
+                                targetRecordId: selectedRecord.id,
+                                targetCompanyName: selectedRecord.companyName,
+                                targetClassification: 'SPECIAL_PARTY'
+                              });
+                            }
+                          }}
+                          style={{
+                            padding: '6px 16px',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? 800 : 500,
+                            background: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#0E7490' : 'transparent',
+                            color: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#FFFFFF' : '#64748B',
+                            border: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '1px solid #0891B2' : 'none',
+                            boxShadow: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '0 1px 3px rgba(14,116,144,0.3)' : 'none',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <Star size={12} fill={selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#FFFFFF' : 'none'} />
+                          Special Party
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                    <div style={{ color: '#64748B', fontWeight: 600 }}>2. License Expiry Check</div>
-                    <div style={{
-                      fontWeight: 800,
-                      color: selectedRecord.regulatoryVerification?.licenseExpiryCheck?.includes('Valid') ? '#10B981' : '#D97706',
-                      marginTop: 4,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4
-                    }}>
-                      {selectedRecord.regulatoryVerification?.licenseExpiryCheck?.includes('Valid') ? <CheckCircle2 size={14} /> : <Clock size={14} />}
-                      {selectedRecord.regulatoryVerification?.licenseExpiryCheck || 'Pending Manual Review'}
-                    </div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                    <div style={{ color: '#64748B', fontWeight: 600 }}>3. State FDA Validation</div>
-                    <div style={{
-                      fontWeight: 800,
-                      color: selectedRecord.regulatoryVerification?.stateRegulatoryAuthorityValidation?.includes('Verified') ? '#10B981' : '#D97706',
-                      marginTop: 4,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4
-                    }}>
-                      {selectedRecord.regulatoryVerification?.stateRegulatoryAuthorityValidation?.includes('Verified') ? <CheckCircle2 size={14} /> : <Clock size={14} />}
-                      {selectedRecord.regulatoryVerification?.stateRegulatoryAuthorityValidation || 'Pending Manual Review'}
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* FINANCIAL VERIFICATION */}
-              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>FINANCIAL VERIFICATION</span>
-                  <span style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: selectedRecord.financialVerification?.bankVerification?.includes('Verified') ? '#10B981' : '#D97706',
-                    background: selectedRecord.financialVerification?.bankVerification?.includes('Verified') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(217, 119, 6, 0.1)',
-                    padding: '2px 8px',
-                    borderRadius: 4
-                  }}>
-                    {selectedRecord.financialVerification?.bankVerification?.includes('Verified') ? 'Verified' : 'Pending Manual Review'}
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 12 }}>
-                  <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                    <div style={{ color: '#64748B', fontWeight: 600 }}>1. Bank Verification</div>
-                    <div style={{ fontWeight: 800, color: selectedRecord.financialVerification?.bankVerification?.includes('Verified') ? '#10B981' : '#D97706', marginTop: 4 }}>
-                      {selectedRecord.financialVerification?.bankVerification || 'Pending Manual Review'}
-                    </div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                    <div style={{ color: '#64748B', fontWeight: 600 }}>2. Credit Rating</div>
-                    <div style={{ fontWeight: 800, color: selectedRecord.financialVerification?.creditRating?.includes('AAA') ? '#1D4ED8' : '#64748B', marginTop: 4 }}>
-                      {selectedRecord.financialVerification?.creditRating || 'Unrated (Under Review)'}
-                    </div>
-                  </div>
-                  <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                    <div style={{ color: '#64748B', fontWeight: 600 }}>3. Risk Classification</div>
-                    <div style={{ fontWeight: 800, color: selectedRecord.financialVerification?.riskClassification === 'LOW' ? '#10B981' : '#D97706', marginTop: 4 }}>
-                      {selectedRecord.financialVerification?.riskClassification || 'PENDING EVALUATION'}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    {/* Verification Decision Desk Header */}
+                    <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>
+                        Verification Decision Desk
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
+                        Overall compliance status and document statuses are maintained separately. Case approval requires all mandatory statutory documents (GST &amp; PAN) to be verified and all uploaded documents to be reviewed.
+                      </div>
 
-              {/* 12. Compliance Officer */}
-              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12 }}>
-                  12. Compliance Officer Assignment
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: '#64748B' }}>Assigned Officer</div>
-                    <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A', marginTop: 2 }}>{selectedRecord.assignedComplianceOfficer}</div>
+                      {/* Case Readiness Warning/Notice */}
+                      {!isCaseApprovable && (selectedRecord.verificationStatus !== 'Approved' && selectedRecord.verificationStatus !== 'Active') && (
+                        <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#B45309' }}>
+                          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                          <span>
+                            {!hasGstVerified || !hasPanVerified
+                              ? 'Mandatory statutory documents (GST Certificate and PAN Card) must be uploaded and verified before this case can be approved.'
+                              : hasPendingDocs
+                              ? 'All uploaded documents must be reviewed and verified by an authorized reviewer before case approval.'
+                              : 'Please resolve any rejected documents or replacement requests before case approval.'}
+                          </span>
+                        </div>
+                      )}
+
+                      {isCaseApprovable && (
+                        <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#15803D' }}>
+                          <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
+                          <span>All document verification requirements satisfied. Case is ready for final Compliance Approval.</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, color: '#64748B' }}>Re-assign:</span>
-                    <select
-                      value={selectedRecord.assignedComplianceOfficer}
-                      onChange={e => handleAssignOfficer(e.target.value)}
-                      style={{ height: 34, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12, color: '#0F172A', background: '#FFF' }}
+
+                  {/* BOTTOM EXACT REQUIRED DECISION ACTION BUTTONS */}
+                  <div style={{ padding: '16px 24px', background: '#FFFFFF', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                    <button
+                      onClick={() => setDecisionModalType('NEED_MORE_DOCS')}
+                      disabled={selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active'}
+                      style={{
+                        height: 42, padding: '0 18px', borderRadius: 8, background: '#DB2777', color: '#FFFFFF',
+                        border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                        opacity: (selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active') ? 0.5 : 1
+                      }}
                     >
-                      {COMPLIANCE_OFFICERS.map(officer => (
-                        <option key={officer} value={officer}>{officer}</option>
-                      ))}
-                    </select>
+                      <AlertTriangle size={16} /> Need More Docs
+                    </button>
+
+                    <button
+                      onClick={() => setDecisionModalType('REJECT')}
+                      disabled={selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active'}
+                      style={{
+                        height: 42, padding: '0 18px', borderRadius: 8, background: '#DC2626', color: '#FFFFFF',
+                        border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                        opacity: (selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active') ? 0.5 : 1
+                      }}
+                    >
+                      <XCircle size={16} /> Reject
+                    </button>
+
+                    <button
+                      onClick={() => setDecisionModalType('APPROVE')}
+                      disabled={!isCaseApprovable}
+                      title={!isCaseApprovable ? 'Cannot approve: Required documents (GST & PAN) must be verified and all uploaded docs reviewed' : 'Approve Case and activate account'}
+                      style={{
+                        height: 42, padding: '0 22px', borderRadius: 8, background: isCaseApprovable ? '#16A34A' : '#94A3B8', color: '#FFFFFF',
+                        border: 'none', fontWeight: 800, fontSize: 13, cursor: isCaseApprovable ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 8,
+                        boxShadow: isCaseApprovable ? '0 2px 6px rgba(22,163,74,0.3)' : 'none',
+                        opacity: isCaseApprovable ? 1 : 0.6
+                      }}
+                    >
+                      <CheckCircle2 size={16} /> Approve Case
+                    </button>
                   </div>
-                </div>
+
               </div>
-
-              {/* Customer Classification Area */}
-              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', borderBottom: '1px solid #F1F5F9', paddingBottom: 8, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Tag size={15} style={{ color: '#0891B2' }} />
-                    <span>Customer Classification &amp; Governance</span>
-                  </div>
-                  {selectedRecord.customerClassification === 'SPECIAL_PARTY' ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 800, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
-                      <Star size={11} fill="#0E7490" /> SPECIAL PARTY
-                    </span>
-                  ) : (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1' }}>
-                      Regular Customer
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>
-                  Platform Admin customer-level classification. Special Party status flows across Buyer Dashboard, RFQ generation, Manufacturer quoting visibility, and Order tracking.
-                </div>
-
-                {/* Segmented Control */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', padding: '6px', borderRadius: 8, border: '1px solid #E2E8F0', width: 'fit-content' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if ((selectedRecord.customerClassification || 'REGULAR') !== 'REGULAR') {
-                        setClassificationConfirmModal({
-                          isOpen: true,
-                          targetRecordId: selectedRecord.id,
-                          targetCompanyName: selectedRecord.companyName,
-                          targetClassification: 'REGULAR'
-                        });
-                      }
-                    }}
-                    style={{
-                      padding: '6px 16px',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? 800 : 500,
-                      background: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '#FFFFFF' : 'transparent',
-                      color: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '#0F172A' : '#64748B',
-                      border: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '1px solid #CBD5E1' : 'none',
-                      boxShadow: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    Regular Customer
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selectedRecord.customerClassification !== 'SPECIAL_PARTY') {
-                        setClassificationConfirmModal({
-                          isOpen: true,
-                          targetRecordId: selectedRecord.id,
-                          targetCompanyName: selectedRecord.companyName,
-                          targetClassification: 'SPECIAL_PARTY'
-                        });
-                      }
-                    }}
-                    style={{
-                      padding: '6px 16px',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? 800 : 500,
-                      background: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#0E7490' : 'transparent',
-                      color: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#FFFFFF' : '#64748B',
-                      border: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '1px solid #0891B2' : 'none',
-                      boxShadow: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '0 1px 3px rgba(14,116,144,0.3)' : 'none',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <Star size={12} fill={selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#FFFFFF' : 'none'} />
-                    Special Party
-                  </button>
-                </div>
-
-                {/* Audit meta details if modified */}
-                {selectedRecord.classificationUpdatedAt && (
-                  <div style={{ marginTop: 10, fontSize: 11, color: '#64748B', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Clock size={12} />
-                    <span>Last updated by <strong>{selectedRecord.classificationUpdatedBy || 'Platform Admin'}</strong> on {selectedRecord.classificationUpdatedAt}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* 13. Verification Decision Header */}
-              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>
-                  13. Verification Decision Desk
-                </div>
-                <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
-                  Select compliance decision. Approving will generate Customer Code (`CUS000xxx`), create portal login credentials, and activate account.
-                </div>
-              </div>
-
             </div>
-
-            {/* SECTION 13: BOTTOM EXACT REQUIRED DECISION ACTION BUTTONS */}
-            <div style={{ padding: '16px 24px', background: '#FFFFFF', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <button
-                onClick={() => setDecisionModalType('NEED_MORE_DOCS')}
-                disabled={selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active'}
-                style={{
-                  height: 42, padding: '0 18px', borderRadius: 8, background: '#DB2777', color: '#FFFFFF',
-                  border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                  opacity: (selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active') ? 0.5 : 1
-                }}
-              >
-                <AlertTriangle size={16} /> Need More Docs
-              </button>
-
-              <button
-                onClick={() => setDecisionModalType('REJECT')}
-                disabled={selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active'}
-                style={{
-                  height: 42, padding: '0 18px', borderRadius: 8, background: '#DC2626', color: '#FFFFFF',
-                  border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                  opacity: (selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active') ? 0.5 : 1
-                }}
-              >
-                <XCircle size={16} /> Reject
-              </button>
-
-              <button
-                onClick={() => setDecisionModalType('APPROVE')}
-                disabled={selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active'}
-                style={{
-                  height: 42, padding: '0 22px', borderRadius: 8, background: '#16A34A', color: '#FFFFFF',
-                  border: 'none', fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                  boxShadow: '0 2px 6px rgba(22,163,74,0.3)',
-                  opacity: (selectedRecord.verificationStatus === 'Approved' || selectedRecord.verificationStatus === 'Active') ? 0.5 : 1
-                }}
-              >
-                <CheckCircle2 size={16} /> Approve
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
+          )}
 
       {/* ── NEW CUSTOMER REGISTRATION REQUEST MODAL ────────────── */}
       {isNewRequestModalOpen && (
@@ -1764,58 +1693,6 @@ export const CustomerVerificationModule: React.FC = () => {
         </div>
       )}
 
-      {/* ── CUSTOMER RE-SUBMIT DOCUMENTS SIMULATOR MODAL ──────── */}
-      {isResubmitModalOpen && selectedRecord && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(3px)' }}>
-          <div style={{ width: '100%', maxWidth: 540, background: '#FFFFFF', borderRadius: 14, padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E2E8F0', paddingBottom: 12 }}>
-              <div style={{ fontWeight: 800, fontSize: 16, color: '#0F172A' }}>Customer Document Re-Submission Portal</div>
-              <button onClick={() => setIsResubmitModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ fontSize: 12.5, color: '#475569', marginTop: 12 }}>
-              Re-uploading requested documents for <strong>{selectedRecord.companyName}</strong>:
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-              {resubmitDocsList.map((doc, idx) => (
-                <div key={doc.id || idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #CBD5E1' }}>
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>{doc.documentType}</div>
-                    <div style={{ fontSize: 11, color: '#64748B' }}>{doc.fileName}</div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const updated = [...resubmitDocsList];
-                      updated[idx] = {
-                        ...updated[idx],
-                        fileName: `Updated_${doc.documentType.replace(/\s+/g, '_')}_Cleared.pdf`,
-                        status: 'Valid',
-                        notes: undefined
-                      };
-                      setResubmitDocsList(updated);
-                    }}
-                    style={{ padding: '4px 10px', background: '#2563EB', color: '#FFF', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    Replace / Upload New File
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-              <button onClick={() => setIsResubmitModalOpen(false)} style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
-                Cancel
-              </button>
-              <button onClick={handleExecuteResubmit} style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: '#16A34A', color: '#FFF', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
-                Re-submit to Compliance Review →
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* ── REAL STATUTORY DOCUMENT VIEWER MODAL ────────────────── */}
       {viewingDoc && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1400, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', padding: 16 }}>
@@ -2001,10 +1878,7 @@ export const CustomerVerificationModule: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  updateCustomerClassification(classificationConfirmModal.targetRecordId, classificationConfirmModal.targetClassification);
-                  setClassificationConfirmModal(null);
-                  setToastMessage('Customer classification updated successfully.');
-                  setTimeout(() => setToastMessage(null), 3500);
+                  handleUpdateClassification(classificationConfirmModal.targetRecordId, classificationConfirmModal.targetClassification);
                 }}
                 style={{
                   height: 38, padding: '0 18px', borderRadius: 8,
@@ -2014,6 +1888,127 @@ export const CustomerVerificationModule: React.FC = () => {
                 }}
               >
                 Confirm &amp; Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CUSTOMER RE-SUBMIT REGULATORY DOCUMENT MODAL ──────── */}
+      {isResubmitModalOpen && selectedRecord && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)' }}>
+          <div style={{ width: '100%', maxWidth: 540, background: '#FFFFFF', borderRadius: 14, overflow: 'hidden', boxShadow: '0 20px 30px rgba(0,0,0,0.2)', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E2E8F0', paddingBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: '#FDF2F8', border: '1px solid #FBCFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DB2777' }}>
+                  <Upload size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0F172A' }}>Re-Submit Regulatory Document</h3>
+                  <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 1 }}>
+                    Case: <strong>{selectedRecord.requestCode || selectedRecord.id}</strong> • {selectedRecord.companyName}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsResubmitModalOpen(false);
+                  setResubmitFile(null);
+                  setResubmitError(null);
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 4 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.5, background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+              Upload an updated statutory document provided by the customer. The file will be securely stored and this compliance case will automatically return to <strong>Under Review</strong> status.
+            </div>
+
+            {resubmitError && (
+              <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>{resubmitError}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Document Category / Type
+                </label>
+                <select
+                  value={resubmitTargetDoc}
+                  onChange={(e) => setResubmitTargetDoc(e.target.value)}
+                  style={{ width: '100%', height: 38, padding: '0 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 13, background: '#FFFFFF', color: '#0F172A', outline: 'none' }}
+                >
+                  {REQUIRED_DOC_TYPES.map((dt) => (
+                    <option key={dt} value={dt}>{dt}</option>
+                  ))}
+                  {selectedRecord.documents?.filter(d => !REQUIRED_DOC_TYPES.includes(d.documentType as any)).map((d) => (
+                    <option key={d.id} value={d.documentType || d.category}>{d.documentType || d.category}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Select File (PDF, PNG, JPG - Max 10MB)
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setResubmitFile(file);
+                    setResubmitError(null);
+                  }}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 12.5, background: '#F8FAFC' }}
+                />
+                {resubmitFile && (
+                  <div style={{ fontSize: 11.5, color: '#16A34A', marginTop: 4, fontWeight: 600 }}>
+                    ✓ Selected: {resubmitFile.name} ({(resubmitFile.size / (1024 * 1024)).toFixed(2)} MB)
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10, paddingTop: 12, borderTop: '1px solid #E2E8F0' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResubmitModalOpen(false);
+                  setResubmitFile(null);
+                  setResubmitError(null);
+                }}
+                disabled={isResubmitting}
+                style={{ height: 38, padding: '0 16px', borderRadius: 8, background: '#F1F5F9', border: '1px solid #CBD5E1', fontSize: 12.5, fontWeight: 600, color: '#334155', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteResubmit}
+                disabled={isResubmitting || !resubmitFile}
+                style={{
+                  height: 38, padding: '0 20px', borderRadius: 8,
+                  background: isResubmitting || !resubmitFile ? '#94A3B8' : '#16A34A',
+                  border: 'none', fontSize: 12.5, fontWeight: 700, color: '#FFFFFF',
+                  cursor: isResubmitting || !resubmitFile ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  boxShadow: isResubmitting || !resubmitFile ? 'none' : '0 2px 4px rgba(22,163,74,0.3)'
+                }}
+              >
+                {isResubmitting ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" /> Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload size={14} /> Submit &amp; Return to Under Review
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -132,7 +132,7 @@ export class ComplianceController {
 
 @ApiTags('Compliance Documents')
 @ApiBearerAuth()
-@Roles('ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER')
+@Roles('ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER', 'BUYER', 'ROLE_BUYER')
 @Controller('compliance/documents')
 export class ComplianceDocumentController {
   constructor(private readonly complianceService: ComplianceService) {}

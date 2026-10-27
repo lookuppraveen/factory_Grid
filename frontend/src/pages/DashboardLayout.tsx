@@ -14,7 +14,7 @@ import { AdminBrandVerificationMonitor } from '../components/modules/AdminBrandV
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard, Users, Factory, Package, FileText, Tag, Award,
+  LayoutDashboard, Users, Factory, Package, FileText, Tag, Award, Image as ImageIcon,
   ShoppingBag, Receipt, ShieldAlert, ShieldCheck, BarChart3, Bell, Settings,
   Search, ChevronDown, ChevronRight, Home, Menu, X, Sun, Moon, Sparkles, Command,
   ChevronLeft, PanelLeftClose, PanelLeftOpen, Pin, Clock, Star, LogOut, Cpu, Truck, Landmark, UserCheck, PieChart, FileCheck, Key, Activity, Layers, Percent, RotateCcw, CreditCard, Link2, ArrowLeft
@@ -141,6 +141,8 @@ export const MANUFACTURER_NAV_GROUPS: ManufacturerNavGroup[] = [
       { id: 'profile-personal', label: 'My Profile', icon: Users },
       { id: 'profile-organization', label: 'Organization Profile', icon: Factory },
       { id: 'profile-documents', label: 'Documents & Verification', icon: FileCheck },
+      { id: 'profile-gallery', label: 'Factory Gallery', icon: ImageIcon },
+      { id: 'profile-achievements', label: 'Achievements & Awards', icon: Award },
     ],
   },
   {
@@ -549,6 +551,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
     } else if (tabId === 'profile-documents') {
       setLastProfileItem('profile-documents');
       openProfileTab('documents');
+    } else if (tabId === 'profile-gallery') {
+      setLastProfileItem('profile-gallery');
+      openProfileTab('gallery');
+    } else if (tabId === 'profile-achievements') {
+      setLastProfileItem('profile-achievements');
+      openProfileTab('achievements');
     } else {
       setActiveTab(tabId);
       if (tabId === 'category-master') {
@@ -605,7 +613,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
       case 'profile':
       case 'profile-personal':
       case 'profile-organization':
-      case 'profile-documents': return <ProfileModule />;
+      case 'profile-documents':
+      case 'profile-gallery':
+      case 'profile-achievements': return <ProfileModule />;
       case 'buyer-workspace': return <BuyerWorkspaceModule />;
       case 'buyer-catalog':
       case 'buyer-product-catalog': return <BuyerProductCatalogModule onNavigateTab={handleTabClick} />;
@@ -723,8 +733,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
     <div style={{
       display: isMobile ? 'flex' : 'grid',
       flexDirection: isMobile ? 'column' : undefined,
-      gridTemplateColumns: isMobile ? undefined : (sidebarCollapsed ? '72px 1fr' : '260px 1fr'),
+      gridTemplateColumns: isMobile ? undefined : (sidebarCollapsed ? '72px minmax(0, 1fr)' : '260px minmax(0, 1fr)'),
       height: '100vh',
+      width: '100vw',
+      maxWidth: '100vw',
       overflow: 'hidden',
       background: 'var(--bg-app)',
       transition: 'grid-template-columns 200ms ease'
@@ -1139,7 +1151,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
       </aside>
 
       {/* Main Content Area */}
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-app)', width: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-app)', width: '100%', minWidth: 0, maxWidth: '100%' }}>
         {/* Enterprise Topbar */}
         <header style={{
           height: 56,
@@ -1405,7 +1417,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
         </header>
 
         {/* Workspace Dynamic Content Container */}
-        <main style={{ flex: 1, overflowY: 'auto', padding: isMobile ? 12 : 24, background: 'var(--bg-app)' }}>
+        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: isMobile ? 12 : 24, background: 'var(--bg-app)', minWidth: 0, width: '100%', maxWidth: '100%' }}>
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -1413,6 +1425,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.18 }}
+              style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
             >
               {/* Back to Settings navigation control for all master pages */}
               {SETTINGS_CHILD_TABS.includes(activeTab) && (

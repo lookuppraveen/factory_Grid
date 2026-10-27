@@ -7,6 +7,7 @@ import { JwtAuthGuard, jwtAlgorithmFor, RolesGuard } from '@factorygrid/auth';
 import { Env, validateEnv } from './config/env';
 import { HealthController } from './health/health.controller';
 import { BuyerModule } from './modules/buyer/buyer.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { IamModule } from './modules/iam/iam.module';
 import { ManufacturerModule } from './modules/manufacturer/manufacturer.module';
@@ -46,6 +47,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ManufacturerModule,
     ComplianceModule,
     IamModule,
+    CatalogModule,
   ],
 
   controllers: [HealthController],

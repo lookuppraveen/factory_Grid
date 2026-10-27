@@ -11,7 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { AuthUser } from '@factorygrid/auth';
 import { ValidationException } from '@factorygrid/errors';
 import { PrismaService } from '../../prisma/prisma.service';
-import { StorageService } from '../storage/storage.service';
+import { StorageService, UploadResult } from '../storage/storage.service';
 import {
   MANUFACTURER_DOCUMENT_CATEGORIES,
   ManufacturerReviewDocumentDto,
@@ -23,6 +23,15 @@ import {
   ManufacturerSubmitDto,
   resolveManufacturerCategory,
 } from './dto/manufacturer-registration.dto';
+import {
+  CreateAchievementDto,
+  CreateGalleryEntryDto,
+  FactoryGalleryEntryDto,
+  ManufacturerAchievementDto,
+  ReviewSubmissionDto,
+  UpdateAchievementDto,
+  UpdateGalleryEntryDto,
+} from './dto/gallery-and-achievements.dto';
 
 const BCRYPT_ROUNDS = 12;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -34,6 +43,18 @@ function matchesSignature(buffer: Buffer, mime: string): boolean {
   if (mime === 'application/pdf') return buffer.subarray(0, 4).toString('latin1') === '%PDF';
   if (mime === 'image/png') return buffer.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   return buffer[0] === 0xff && buffer[1] === 0xd8; // jpeg
+}
+
+function matchesGalleryImageSignature(buffer: Buffer, mime: string): boolean {
+  if (mime === 'image/png') return buffer.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  if (mime === 'image/jpeg' || mime === 'image/jpg') return buffer[0] === 0xff && buffer[1] === 0xd8;
+  if (mime === 'image/webp') return buffer.subarray(0, 4).toString('latin1') === 'RIFF' && buffer.subarray(8, 12).toString('latin1') === 'WEBP';
+  return false;
+}
+
+function matchesCertSignature(buffer: Buffer, mime: string): boolean {
+  if (mime === 'application/pdf') return buffer.subarray(0, 4).toString('latin1') === '%PDF';
+  return matchesGalleryImageSignature(buffer, mime);
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -139,6 +160,140 @@ export class ManufacturerRegistrationService {
     }));
   }
 
+  async listCategoryHierarchy() {
+    const categories = await this.prisma.category.findMany({
+      where: { lifecycleStatus: 'ACTIVE' },
+      orderBy: [{ productTypeId: 'asc' }, { category: 'asc' }, { displayOrder: 'asc' }],
+    });
+
+    // Also load active catalog products that are distinct from mirrored category records
+    const existingCatIds = new Set(categories.map(c => c.id));
+    const activeProducts = await this.prisma.catalogProduct.findMany({
+      where: {
+        lifecycleStatus: 'ACTIVE',
+        id: { notIn: Array.from(existingCatIds) },
+      },
+      orderBy: [{ productCode: 'asc' }],
+    });
+
+    const treeMap = new Map<string, {
+      category: string;
+      productTypeId: string;
+      subCategories: Map<string, {
+        subCategory: string;
+        items: Array<{
+          id: string;
+          categoryId: string;
+          categoryCode: string;
+          subSubCategory: string | null;
+          name: string;
+          description: string | null;
+        }>;
+      }>;
+    }>();
+
+    for (const cat of categories) {
+      const catName = cat.category.trim();
+      if (!treeMap.has(catName)) {
+        treeMap.set(catName, {
+          category: catName,
+          productTypeId: cat.productTypeId,
+          subCategories: new Map(),
+        });
+      }
+      const catNode = treeMap.get(catName)!;
+      const subName = (cat.subCategory || 'General').trim();
+      if (!catNode.subCategories.has(subName)) {
+        catNode.subCategories.set(subName, {
+          subCategory: subName,
+          items: [],
+        });
+      }
+      catNode.subCategories.get(subName)!.items.push({
+        id: cat.id,
+        categoryId: cat.categoryId,
+        categoryCode: cat.categoryCode,
+        subSubCategory: cat.subSubCategory || null,
+        name: cat.subSubCategory || cat.subCategory || cat.category,
+        description: cat.description,
+      });
+    }
+
+    // Merge active catalog products into hierarchy under their respective category & sub-category
+    const productCategoryItems = activeProducts.map((p) => {
+      const catName = (p.category || 'Drugs').trim();
+      const subName = (p.subCategory || 'General').trim();
+      const prodTypeId = p.productTypeId || 'pt_med';
+
+      if (!treeMap.has(catName)) {
+        treeMap.set(catName, {
+          category: catName,
+          productTypeId: prodTypeId,
+          subCategories: new Map(),
+        });
+      }
+      const catNode = treeMap.get(catName)!;
+      if (!catNode.subCategories.has(subName)) {
+        catNode.subCategories.set(subName, {
+          subCategory: subName,
+          items: [],
+        });
+      }
+
+      catNode.subCategories.get(subName)!.items.push({
+        id: p.id,
+        categoryId: p.categoryId || p.id,
+        categoryCode: p.productCode,
+        subSubCategory: p.subSubCategory || p.name,
+        name: `${p.name} (${p.productCode})`,
+        description: p.description || p.genericName || null,
+      });
+
+      return {
+        id: p.id,
+        categoryId: p.categoryId || p.id,
+        productTypeId: prodTypeId,
+        category: catName,
+        subCategory: subName,
+        subSubCategory: p.subSubCategory || p.name,
+        categoryCode: p.productCode,
+        description: p.description || p.genericName || null,
+        name: `${p.name} (${p.productCode})`,
+        fullName: [catName, subName, p.name].filter(Boolean).join(' → '),
+      };
+    });
+
+    const tree = Array.from(treeMap.values()).map(cat => ({
+      category: cat.category,
+      productTypeId: cat.productTypeId,
+      subCategories: Array.from(cat.subCategories.values()).map(sub => ({
+        subCategory: sub.subCategory,
+        items: sub.items,
+      })),
+    }));
+
+    const allCategoryItems = [
+      ...categories.map(c => ({
+        id: c.id,
+        categoryId: c.categoryId,
+        productTypeId: c.productTypeId,
+        category: c.category,
+        subCategory: c.subCategory,
+        subSubCategory: c.subSubCategory,
+        categoryCode: c.categoryCode,
+        description: c.description,
+        name: c.subSubCategory || c.subCategory || c.category,
+        fullName: [c.category, c.subCategory, c.subSubCategory].filter(Boolean).join(' → '),
+      })),
+      ...productCategoryItems,
+    ];
+
+    return {
+      categories: allCategoryItems,
+      tree,
+    };
+  }
+
   // ------------------------------------------------------------------- step 1
 
   async saveStep1(dto: ManufacturerStep1Dto, existingCode?: string): Promise<ManufacturerStepResponseDto> {
@@ -149,7 +304,7 @@ export class ManufacturerRegistrationService {
       city: dto.city.trim(),
       state: dto.state.trim(),
       pincode: dto.pincode.trim(),
-      mfgCapacity: dto.mfgCapacity.trim(),
+      mfgCapacity: (dto.mfgCapacity || '').trim(),
       contactPerson: dto.contactPerson.trim(),
       designation: dto.designation.trim(),
       email,
@@ -222,10 +377,13 @@ export class ManufacturerRegistrationService {
     const stored = await this.storage.uploadFile(buffer, storageKey, mime);
 
     const doc = await this.prisma.$transaction(async (tx) => {
-      const previous = await tx.manufacturerDocument.findMany({
-        where: { registrationId: reg.id, category: category.key },
-        orderBy: { version: 'desc' },
-      });
+      const isOther = category.key === 'otherCert';
+      const previous = isOther
+        ? []
+        : await tx.manufacturerDocument.findMany({
+            where: { registrationId: reg.id, category: category.key },
+            orderBy: { version: 'desc' },
+          });
       const nextVersion = previous.length ? previous[0].version + 1 : 1;
       if (previous.length) {
         await tx.manufacturerDocument.updateMany({
@@ -316,14 +474,15 @@ export class ManufacturerRegistrationService {
 
   async saveStep3(dto: ManufacturerStep3Dto, code: string): Promise<ManufacturerStepResponseDto> {
     const reg = await this.getEditableDraft(code);
-    const ids = dto.productIds;
-    if (ids.length) {
-      const found = await this.prisma.catalogProduct.findMany({ where: { id: { in: ids }, active: true }, select: { id: true } });
-      const foundIds = new Set(found.map((p) => p.id));
-      const unknown = ids.filter((id) => !foundIds.has(id));
-      if (unknown.length) {
-        throw new BadRequestException(`Unknown product IDs: ${unknown.join(', ')}`);
-      }
+    const ids = dto.categoryIds || dto.productIds || [];
+    if (!ids.length) {
+      throw new BadRequestException('At least one manufacturing category or product capability must be selected.');
+    }
+    const found = await this.prisma.catalogProduct.findMany({ where: { id: { in: ids }, active: true }, select: { id: true } });
+    const foundIds = new Set(found.map((p) => p.id));
+    const unknown = ids.filter((id) => !foundIds.has(id));
+    if (unknown.length) {
+      throw new BadRequestException(`Unknown category or product IDs: ${unknown.join(', ')}`);
     }
     await this.prisma.$transaction(async (tx) => {
       await tx.manufacturerProduct.deleteMany({ where: { registrationId: reg.id, productId: { notIn: ids } } });
@@ -341,7 +500,7 @@ export class ManufacturerRegistrationService {
         data: { currentStep: Math.max(reg.currentStep, 3) },
       });
     });
-    return { success: true, message: 'Product capabilities saved successfully', registrationCode: code, currentStep: 3 };
+    return { success: true, message: 'Category capabilities saved successfully', registrationCode: code, currentStep: 3 };
   }
 
   // ------------------------------------------------------------------- step 4
@@ -351,19 +510,36 @@ export class ManufacturerRegistrationService {
     const selected = await this.prisma.manufacturerProduct.findMany({ where: { registrationId: reg.id } });
     const selectedIds = new Set(selected.map((s) => s.productId));
     const seen = new Set<string>();
+    const normalizedItems: Array<{ id: string; moq: number; leadTimeDays: number }> = [];
+
     for (const item of dto.items) {
-      if (!selectedIds.has(item.productId)) {
-        throw new BadRequestException(`Product ${item.productId} is not part of this manufacturer's selected products.`);
+      const id = item.categoryId || item.productId;
+      if (!id) {
+        throw new BadRequestException('categoryId or productId is required for each capability item.');
       }
-      if (seen.has(item.productId)) {
-        throw new BadRequestException(`Duplicate MOQ entry for product ${item.productId}.`);
+      if (!selectedIds.has(id)) {
+        throw new BadRequestException(`Category ${id} is not part of this manufacturer's selected capabilities.`);
       }
-      seen.add(item.productId);
+      if (seen.has(id)) {
+        throw new BadRequestException(`Duplicate entry for category ${id}.`);
+      }
+      seen.add(id);
+
+      const batchSize = item.batchSize ?? item.moq;
+      if (!batchSize || batchSize < 1) {
+        throw new BadRequestException(`Batch Size is required and must be at least 1 for category ${id}.`);
+      }
+      const deliveryDays = item.deliveryScheduleDays ?? item.leadTimeDays;
+      if (!deliveryDays || deliveryDays < 1) {
+        throw new BadRequestException(`Delivery Schedule in days is required and must be at least 1 for category ${id}.`);
+      }
+      normalizedItems.push({ id, moq: batchSize, leadTimeDays: deliveryDays });
     }
+
     await this.prisma.$transaction([
-      ...dto.items.map((item) =>
+      ...normalizedItems.map((item) =>
         this.prisma.manufacturerProduct.update({
-          where: { registrationId_productId: { registrationId: reg.id, productId: item.productId } },
+          where: { registrationId_productId: { registrationId: reg.id, productId: item.id } },
           data: { moq: item.moq, leadTimeDays: item.leadTimeDays },
         }),
       ),
@@ -372,7 +548,7 @@ export class ManufacturerRegistrationService {
         data: { currentStep: Math.max(reg.currentStep, 4) },
       }),
     ]);
-    return { success: true, message: 'MOQ and delivery schedule saved successfully', registrationCode: code, currentStep: 4 };
+    return { success: true, message: 'Batch size and delivery schedule saved successfully', registrationCode: code, currentStep: 4 };
   }
 
   // ----------------------------------------------------------- read / review
@@ -403,12 +579,62 @@ export class ManufacturerRegistrationService {
     };
   }
 
+  toGalleryDto(entry: any, regCode: string): FactoryGalleryEntryDto {
+    return {
+      id: entry.id.toString(),
+      registrationCode: regCode,
+      title: entry.title,
+      description: entry.description ?? null,
+      fileName: entry.fileName,
+      fileSize: Number(entry.fileSize),
+      mimeType: entry.mimeType,
+      storageKey: entry.storageKey,
+      imageUrl: `/api/v1/manufacturer/gallery/${entry.id}/image`,
+      captureDate: entry.captureDate ? entry.captureDate.toISOString().slice(0, 10) : null,
+      factoryLocation: entry.factoryLocation,
+      gpsCoordinates: entry.gpsCoordinates ?? null,
+      uploadedBy: entry.uploadedBy,
+      verificationStatus: entry.verificationStatus,
+      reviewedBy: entry.reviewedBy ?? null,
+      reviewedAt: entry.reviewedAt ? entry.reviewedAt.toISOString() : null,
+      rejectionReason: entry.rejectionReason ?? null,
+      createdAt: entry.createdAt.toISOString(),
+      updatedAt: entry.updatedAt.toISOString(),
+    };
+  }
+
+  toAchievementDto(ach: any, regCode: string): ManufacturerAchievementDto {
+    return {
+      id: ach.id.toString(),
+      registrationCode: regCode,
+      title: ach.title,
+      awardType: ach.awardType,
+      issuingOrganization: ach.issuingOrganization,
+      issueDate: ach.issueDate.toISOString().slice(0, 10),
+      expiryDate: ach.expiryDate ? ach.expiryDate.toISOString().slice(0, 10) : null,
+      description: ach.description ?? null,
+      hasCertificate: !!ach.certificateStorageKey,
+      certificateFileName: ach.certificateFileName ?? null,
+      certificateFileSize: ach.certificateFileSize ? Number(ach.certificateFileSize) : null,
+      certificateMimeType: ach.certificateMimeType ?? null,
+      certificateUrl: ach.certificateStorageKey ? `/api/v1/manufacturer/achievements/${ach.id}/certificate` : null,
+      verificationStatus: ach.verificationStatus,
+      reviewedBy: ach.reviewedBy ?? null,
+      reviewedAt: ach.reviewedAt ? ach.reviewedAt.toISOString() : null,
+      rejectionReason: ach.rejectionReason ?? null,
+      createdAt: ach.createdAt.toISOString(),
+      updatedAt: ach.updatedAt.toISOString(),
+    };
+  }
+
   private async buildView(regId: bigint) {
     const reg = await this.prisma.manufacturerRegistration.findUniqueOrThrow({
       where: { id: regId },
       include: {
         documents: { where: { status: { not: 'SUPERSEDED' } }, orderBy: { id: 'asc' } },
         products: { include: { product: true }, orderBy: { id: 'asc' } },
+        galleryEntries: { orderBy: { id: 'desc' } },
+        achievements: { orderBy: { id: 'desc' } },
       },
     });
     return {
@@ -427,23 +653,42 @@ export class ManufacturerRegistrationService {
         state: reg.state,
         pincode: reg.pincode,
         mfgCapacity: reg.mfgCapacity,
+        plantCapacity: reg.mfgCapacity,
         contactPerson: reg.contactPerson,
         designation: reg.designation,
         email: reg.email,
         phone: reg.phone,
       },
       documents: reg.documents.map((d) => this.toDocumentDto(d)),
-      products: reg.products.map((p) => ({
-        productId: p.productId,
-        productCode: p.product.productCode,
-        name: p.product.name,
-        genericName: p.product.genericName,
-        dosageForm: p.product.dosageForm,
-        category: p.product.category,
-        packSize: p.product.packSize,
-        moq: p.moq,
-        leadTimeDays: p.leadTimeDays,
-      })),
+      products: await (async () => {
+        const catMap = new Map((await this.prisma.category.findMany()).map((c) => [c.id, c]));
+        return reg.products.map((p) => {
+          const matched = catMap.get(p.productId) || catMap.get(p.product.productCode);
+          const fullName = matched
+            ? [matched.category, matched.subCategory, matched.subSubCategory].filter(Boolean).join(' → ')
+            : p.product.name;
+          return {
+            productId: p.productId,
+            categoryId: p.productId,
+            productCode: p.product.productCode,
+            name: p.product.name,
+            categoryName: p.product.name,
+            genericName: p.product.genericName,
+            dosageForm: p.product.dosageForm,
+            category: matched?.category || p.product.category,
+            subCategory: matched?.subCategory || null,
+            subSubCategory: matched?.subSubCategory || null,
+            fullName,
+            packSize: p.product.packSize,
+            moq: p.moq,
+            batchSize: p.moq,
+            leadTimeDays: p.leadTimeDays,
+            deliveryScheduleDays: p.leadTimeDays,
+          };
+        });
+      })(),
+      gallery: reg.galleryEntries.map((g) => this.toGalleryDto(g, reg.registrationCode)),
+      achievements: reg.achievements.map((a) => this.toAchievementDto(a, reg.registrationCode)),
     };
   }
 
@@ -502,16 +747,23 @@ export class ManufacturerRegistrationService {
       this.prisma.manufacturerProduct.findMany({ where: { registrationId: reg.id } }),
     ]);
     const errors: Record<string, string> = {};
-    for (const c of MANUFACTURER_DOCUMENT_CATEGORIES) {
+    const mandatoryCategories = MANUFACTURER_DOCUMENT_CATEGORIES.filter((c) => (c as any).isMandatory);
+    for (const c of mandatoryCategories) {
       const doc = docs.find((d) => d.category === c.key);
       if (!doc) errors[`documents.${c.key}`] = `${c.name} has not been uploaded.`;
       else if (doc.expiryDate.toISOString().slice(0, 10) < todayIso()) errors[`documents.${c.key}`] = `${c.name} has expired.`;
     }
-    if (!products.length) errors.products = 'Select at least one product capability.';
+    // Also validate expiry date on any uploaded optional documents
+    for (const d of docs) {
+      if (d.expiryDate.toISOString().slice(0, 10) < todayIso()) {
+        errors[`documents.${d.category}`] = `${d.categoryDisplayName || d.category} has expired.`;
+      }
+    }
+    if (!products.length) errors.products = 'Select at least one manufacturing category capability.';
     for (const p of products) {
-      if (!p.moq || p.moq < 1) errors[`products.${p.productId}.moq`] = `MOQ is required for product ${p.productId}.`;
+      if (!p.moq || p.moq < 1) errors[`products.${p.productId}.batchSize`] = `Batch Size is required for category ${p.productId}.`;
       if (!p.leadTimeDays || p.leadTimeDays < 1) {
-        errors[`products.${p.productId}.leadTimeDays`] = `Delivery days are required for product ${p.productId}.`;
+        errors[`products.${p.productId}.deliveryScheduleDays`] = `Delivery Schedule is required for category ${p.productId}.`;
       }
     }
     if (Object.keys(errors).length) throw new ValidationException(errors);
@@ -571,7 +823,7 @@ export class ManufacturerRegistrationService {
     const term = search?.trim();
     const regs = await this.prisma.manufacturerRegistration.findMany({
       where: {
-        status: status ? status : { not: 'DRAFT' },
+        status: status && status !== 'ALL' ? status : { not: 'DRAFT' },
         ...(term
           ? {
               OR: [
@@ -645,28 +897,67 @@ export class ManufacturerRegistrationService {
   async approve(code: string, reviewer: string) {
     const reg = await this.findByCode(code);
     if (reg.status === 'APPROVED') throw new ConflictException('Registration is already approved.');
-    if (reg.status !== 'SUBMITTED') {
+    const approvableStatuses = ['SUBMITTED', 'UNDER_REVIEW', 'ACTION_REQUIRED'];
+    if (!approvableStatuses.includes(reg.status)) {
       throw new BadRequestException(`Registration cannot be approved while its status is ${reg.status}.`);
     }
     const docs = await this.prisma.manufacturerDocument.findMany({
       where: { registrationId: reg.id, status: { not: 'SUPERSEDED' } },
     });
-    const notApproved = MANUFACTURER_DOCUMENT_CATEGORIES.filter(
+    const mandatoryCategories = MANUFACTURER_DOCUMENT_CATEGORIES.filter((c) => (c as any).isMandatory);
+    const notApproved = mandatoryCategories.filter(
       (c) => docs.find((d) => d.category === c.key)?.status !== 'VALID',
     ).map((c) => c.name);
     if (notApproved.length) {
-      throw new BadRequestException(`All six certifications must be approved first. Pending: ${notApproved.join(', ')}.`);
+      throw new BadRequestException(`All mandatory certifications must be approved first. Pending: ${notApproved.join(', ')}.`);
     }
-    if (!reg.userId) throw new BadRequestException('Registration has no linked account.');
-    const manufacturerCode = `MFG${String(reg.id).padStart(6, '0')}`;
-    await this.prisma.$transaction([
-      this.prisma.manufacturerRegistration.update({
+    const unapprovedUploaded = docs.filter((d) => d.status !== 'VALID' && d.status !== 'APPROVED');
+    if (unapprovedUploaded.length) {
+      throw new BadRequestException(`All uploaded documents must be approved first. Pending: ${unapprovedUploaded.map((d) => d.categoryDisplayName).join(', ')}.`);
+    }
+    let userId = reg.userId;
+    if (!userId) {
+      const matchedUser = await this.prisma.user.findFirst({
+        where: { email: { equals: reg.email.trim(), mode: 'insensitive' } },
+      });
+      if (matchedUser) {
+        userId = matchedUser.id;
+      }
+    }
+
+    const manufacturerCode = reg.manufacturerCode || `MFG${String(reg.id).padStart(6, '0')}`;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.manufacturerRegistration.update({
         where: { id: reg.id },
-        data: { status: 'APPROVED', reviewedAt: new Date(), reviewedBy: reviewer, rejectionReason: null, manufacturerCode },
-      }),
-      this.prisma.user.update({ where: { id: reg.userId }, data: { accountStatus: 'ACTIVE' } }),
-    ]);
-    return { registrationCode: code, status: 'APPROVED', manufacturerCode };
+        data: {
+          status: 'APPROVED',
+          reviewedAt: new Date(),
+          reviewedBy: reviewer,
+          rejectionReason: null,
+          manufacturerCode,
+          ...(userId && !reg.userId ? { userId } : {}),
+        },
+      });
+
+      if (userId) {
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            accountStatus: 'ACTIVE',
+            companyCode: manufacturerCode,
+          },
+        });
+      }
+    });
+
+    return {
+      success: true,
+      message: `Manufacturer ${reg.companyName} approved & activated successfully.`,
+      registrationCode: code,
+      status: 'APPROVED',
+      manufacturerCode,
+    };
   }
 
   async reject(code: string, reason: string, reviewer: string) {
@@ -720,5 +1011,398 @@ export class ManufacturerRegistrationService {
       reviewedBy: reviewer,
       reviewedAt: updated.reviewedAt?.toISOString(),
     };
+  }
+
+  // ------------------------------------------------------------- Factory Gallery & Achievements
+
+  async resolveRegistration(regCode?: string, user?: AuthUser) {
+    if (regCode) {
+      const reg = await this.findByCode(regCode);
+      this.assertAccess(reg, user);
+      return reg;
+    }
+    if (!user) {
+      throw new BadRequestException('registrationCode is required for unauthenticated requests.');
+    }
+    if (this.isStaff(user)) {
+      throw new BadRequestException('registrationCode query parameter is required for staff operations.');
+    }
+    const reg = await this.prisma.manufacturerRegistration.findFirst({
+      where: { userId: BigInt(user.id) },
+      orderBy: { id: 'desc' },
+    });
+    if (!reg) {
+      throw new NotFoundException('No manufacturer registration found for this account.');
+    }
+    return reg;
+  }
+
+  async listGallery(regCode?: string, user?: AuthUser) {
+    const reg = await this.resolveRegistration(regCode, user);
+    const entries = await this.prisma.factoryGalleryEntry.findMany({
+      where: { registrationId: reg.id },
+      orderBy: { id: 'desc' },
+    });
+    return entries.map((e) => this.toGalleryDto(e, reg.registrationCode));
+  }
+
+  async uploadGalleryEntry(
+    buffer: Buffer,
+    fileName: string,
+    mimeType: string,
+    dto: CreateGalleryEntryDto,
+    user?: AuthUser,
+  ) {
+    const reg = await this.resolveRegistration(dto.registrationCode, user);
+
+    if (buffer.length > MAX_FILE_SIZE) {
+      throw new BadRequestException(`File size ${buffer.length} exceeds 10 MB limit.`);
+    }
+
+    const normalizedMime = mimeType?.toLowerCase().trim() || 'image/jpeg';
+    const allowedGalleryMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedGalleryMimes.includes(normalizedMime) || !matchesGalleryImageSignature(buffer, normalizedMime)) {
+      throw new BadRequestException('Only valid JPG, PNG, and WebP images are permitted for factory gallery photos.');
+    }
+
+    let parsedCaptureDate: Date | null = null;
+    if (dto.captureDate) {
+      parsedCaptureDate = parseIsoDate(dto.captureDate, 'captureDate');
+      if (dto.captureDate > todayIso()) {
+        throw new BadRequestException('captureDate cannot be in the future.');
+      }
+    }
+
+    const cleanFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storageKey = `manufacturers/${reg.registrationCode}/gallery/${Date.now()}-${randomBytes(4).toString('hex')}-${cleanFileName}`;
+
+    const uploaded = await this.storage.uploadFile(buffer, storageKey, normalizedMime);
+    const uploadedBy = user?.username || reg.contactPerson || 'Manufacturer';
+
+    const entry = await this.prisma.factoryGalleryEntry.create({
+      data: {
+        registrationId: reg.id,
+        title: dto.title.trim(),
+        description: dto.description?.trim() || null,
+        fileName: cleanFileName,
+        fileSize: BigInt(uploaded.fileSize),
+        mimeType: normalizedMime,
+        storageKey: uploaded.storageKey,
+        storageBucket: uploaded.storageBucket,
+        captureDate: parsedCaptureDate,
+        factoryLocation: dto.factoryLocation.trim(),
+        gpsCoordinates: dto.gpsCoordinates?.trim() || null,
+        uploadedBy,
+        verificationStatus: 'PENDING_VERIFICATION',
+      },
+    });
+
+    return this.toGalleryDto(entry, reg.registrationCode);
+  }
+
+  async getGalleryImage(id: string, user?: AuthUser) {
+    const entry = await this.prisma.factoryGalleryEntry.findUnique({
+      where: { id: this.parseId(id) },
+      include: { registration: true },
+    });
+    if (!entry) throw new NotFoundException(`Gallery entry ${id} not found.`);
+    if (entry.registration.userId !== null && entry.registration.status === 'DRAFT') {
+      this.assertAccess(entry.registration, user);
+    }
+    const file = await this.storage.getFile(entry.storageKey);
+    return {
+      stream: file.stream,
+      contentType: entry.mimeType || file.contentType,
+      contentLength: Number(entry.fileSize),
+      fileName: entry.fileName,
+    };
+  }
+
+  async updateGalleryEntry(id: string, dto: UpdateGalleryEntryDto, user?: AuthUser) {
+    const entry = await this.prisma.factoryGalleryEntry.findUnique({
+      where: { id: this.parseId(id) },
+      include: { registration: true },
+    });
+    if (!entry) throw new NotFoundException(`Gallery entry ${id} not found.`);
+    this.assertAccess(entry.registration, user);
+
+    let parsedCaptureDate: Date | null | undefined = undefined;
+    if (dto.captureDate !== undefined) {
+      if (dto.captureDate) {
+        parsedCaptureDate = parseIsoDate(dto.captureDate, 'captureDate');
+        if (dto.captureDate > todayIso()) {
+          throw new BadRequestException('captureDate cannot be in the future.');
+        }
+      } else {
+        parsedCaptureDate = null;
+      }
+    }
+
+    const updated = await this.prisma.factoryGalleryEntry.update({
+      where: { id: entry.id },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
+        ...(dto.factoryLocation !== undefined ? { factoryLocation: dto.factoryLocation.trim() } : {}),
+        ...(dto.gpsCoordinates !== undefined ? { gpsCoordinates: dto.gpsCoordinates?.trim() || null } : {}),
+        ...(parsedCaptureDate !== undefined ? { captureDate: parsedCaptureDate } : {}),
+      },
+    });
+
+    return this.toGalleryDto(updated, entry.registration.registrationCode);
+  }
+
+  async deleteGalleryEntry(id: string, user?: AuthUser) {
+    const entry = await this.prisma.factoryGalleryEntry.findUnique({
+      where: { id: this.parseId(id) },
+      include: { registration: true },
+    });
+    if (!entry) throw new NotFoundException(`Gallery entry ${id} not found.`);
+    this.assertAccess(entry.registration, user);
+
+    await this.prisma.factoryGalleryEntry.delete({ where: { id: entry.id } });
+    await this.storage.deleteFile(entry.storageKey);
+
+    return { success: true, message: 'Gallery entry deleted successfully.' };
+  }
+
+  async listAchievements(regCode?: string, user?: AuthUser) {
+    const reg = await this.resolveRegistration(regCode, user);
+    const achievements = await this.prisma.manufacturerAchievement.findMany({
+      where: { registrationId: reg.id },
+      orderBy: { id: 'desc' },
+    });
+    return achievements.map((a) => this.toAchievementDto(a, reg.registrationCode));
+  }
+
+  async createAchievement(
+    dto: CreateAchievementDto,
+    user?: AuthUser,
+    certFile?: { buffer: Buffer; fileName: string; mimeType: string },
+  ) {
+    const reg = await this.resolveRegistration(dto.registrationCode, user);
+
+    const issueDate = parseIsoDate(dto.issueDate, 'issueDate');
+    if (dto.issueDate > todayIso()) {
+      throw new BadRequestException('issueDate cannot be in the future.');
+    }
+
+    let expiryDate: Date | null = null;
+    if (dto.expiryDate) {
+      expiryDate = parseIsoDate(dto.expiryDate, 'expiryDate');
+      if (dto.expiryDate <= dto.issueDate) {
+        throw new BadRequestException('expiryDate must be after the issueDate.');
+      }
+    }
+
+    let certUpload: UploadResult | null = null;
+    let cleanCertName: string | null = null;
+
+    if (certFile) {
+      if (certFile.buffer.length > MAX_FILE_SIZE) {
+        throw new BadRequestException(`Certificate size ${certFile.buffer.length} exceeds 10 MB limit.`);
+      }
+      const certMime = certFile.mimeType?.toLowerCase().trim() || 'application/pdf';
+      const allowedCertMimes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedCertMimes.includes(certMime) || !matchesCertSignature(certFile.buffer, certMime)) {
+        throw new BadRequestException('Only PDF, JPG, PNG, and WebP files are accepted for supporting certificates.');
+      }
+      cleanCertName = certFile.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storageKey = `manufacturers/${reg.registrationCode}/achievements/${Date.now()}-${randomBytes(4).toString('hex')}-${cleanCertName}`;
+      certUpload = await this.storage.uploadFile(certFile.buffer, storageKey, certMime);
+    }
+
+    const ach = await this.prisma.manufacturerAchievement.create({
+      data: {
+        registrationId: reg.id,
+        title: dto.title.trim(),
+        awardType: dto.awardType.trim(),
+        issuingOrganization: dto.issuingOrganization.trim(),
+        issueDate,
+        expiryDate,
+        description: dto.description?.trim() || null,
+        certificateFileName: cleanCertName,
+        certificateFileSize: certUpload ? BigInt(certUpload.fileSize) : null,
+        certificateMimeType: certUpload ? certUpload.mimeType : null,
+        certificateStorageKey: certUpload ? certUpload.storageKey : null,
+        certificateStorageBucket: certUpload ? certUpload.storageBucket : null,
+        verificationStatus: 'PENDING_VERIFICATION',
+      },
+    });
+
+    return this.toAchievementDto(ach, reg.registrationCode);
+  }
+
+  async updateAchievement(id: string, dto: UpdateAchievementDto, user?: AuthUser) {
+    const ach = await this.prisma.manufacturerAchievement.findUnique({
+      where: { id: this.parseId(id) },
+      include: { registration: true },
+    });
+    if (!ach) throw new NotFoundException(`Achievement ${id} not found.`);
+    this.assertAccess(ach.registration, user);
+
+    let issueDate = ach.issueDate;
+    if (dto.issueDate) {
+      issueDate = parseIsoDate(dto.issueDate, 'issueDate');
+      if (dto.issueDate > todayIso()) {
+        throw new BadRequestException('issueDate cannot be in the future.');
+      }
+    }
+
+    let expiryDate = ach.expiryDate;
+    if (dto.expiryDate !== undefined) {
+      if (dto.expiryDate) {
+        expiryDate = parseIsoDate(dto.expiryDate, 'expiryDate');
+        const issueIso = dto.issueDate || ach.issueDate.toISOString().slice(0, 10);
+        if (dto.expiryDate <= issueIso) {
+          throw new BadRequestException('expiryDate must be after issueDate.');
+        }
+      } else {
+        expiryDate = null;
+      }
+    }
+
+    const updated = await this.prisma.manufacturerAchievement.update({
+      where: { id: ach.id },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
+        ...(dto.awardType !== undefined ? { awardType: dto.awardType.trim() } : {}),
+        ...(dto.issuingOrganization !== undefined ? { issuingOrganization: dto.issuingOrganization.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description?.trim() || null } : {}),
+        issueDate,
+        expiryDate,
+      },
+    });
+
+    return this.toAchievementDto(updated, ach.registration.registrationCode);
+  }
+
+  async uploadAchievementCertificate(
+    id: string,
+    buffer: Buffer,
+    fileName: string,
+    mimeType: string,
+    user?: AuthUser,
+  ) {
+    const ach = await this.prisma.manufacturerAchievement.findUnique({
+      where: { id: this.parseId(id) },
+      include: { registration: true },
+    });
+    if (!ach) throw new NotFoundException(`Achievement ${id} not found.`);
+    this.assertAccess(ach.registration, user);
+
+    if (buffer.length > MAX_FILE_SIZE) {
+      throw new BadRequestException(`Certificate size ${buffer.length} exceeds 10 MB limit.`);
+    }
+    const certMime = mimeType?.toLowerCase().trim() || 'application/pdf';
+    const allowedCertMimes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedCertMimes.includes(certMime) || !matchesCertSignature(buffer, certMime)) {
+      throw new BadRequestException('Only PDF, JPG, PNG, and WebP files are accepted for supporting certificates.');
+    }
+
+    if (ach.certificateStorageKey) {
+      await this.storage.deleteFile(ach.certificateStorageKey);
+    }
+
+    const cleanCertName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storageKey = `manufacturers/${ach.registration.registrationCode}/achievements/${Date.now()}-${randomBytes(4).toString('hex')}-${cleanCertName}`;
+    const certUpload = await this.storage.uploadFile(buffer, storageKey, certMime);
+
+    const updated = await this.prisma.manufacturerAchievement.update({
+      where: { id: ach.id },
+      data: {
+        certificateFileName: cleanCertName,
+        certificateFileSize: BigInt(certUpload.fileSize),
+        certificateMimeType: certUpload.mimeType,
+        certificateStorageKey: certUpload.storageKey,
+        certificateStorageBucket: certUpload.storageBucket,
+      },
+    });
+
+    return this.toAchievementDto(updated, ach.registration.registrationCode);
+  }
+
+  async getAchievementCertificate(id: string, user?: AuthUser) {
+    const ach = await this.prisma.manufacturerAchievement.findUnique({
+      where: { id: this.parseId(id) },
+      include: { registration: true },
+    });
+    if (!ach || !ach.certificateStorageKey) {
+      throw new NotFoundException(`Certificate for achievement ${id} not found.`);
+    }
+    if (ach.registration.userId !== null && ach.registration.status === 'DRAFT') {
+      this.assertAccess(ach.registration, user);
+    }
+    const file = await this.storage.getFile(ach.certificateStorageKey);
+    return {
+      stream: file.stream,
+      contentType: ach.certificateMimeType || file.contentType,
+      contentLength: ach.certificateFileSize ? Number(ach.certificateFileSize) : file.contentLength,
+      fileName: ach.certificateFileName || 'certificate.pdf',
+    };
+  }
+
+  async deleteAchievement(id: string, user?: AuthUser) {
+    const ach = await this.prisma.manufacturerAchievement.findUnique({
+      where: { id: this.parseId(id) },
+      include: { registration: true },
+    });
+    if (!ach) throw new NotFoundException(`Achievement ${id} not found.`);
+    this.assertAccess(ach.registration, user);
+
+    if (ach.certificateStorageKey) {
+      await this.storage.deleteFile(ach.certificateStorageKey);
+    }
+    await this.prisma.manufacturerAchievement.delete({ where: { id: ach.id } });
+
+    return { success: true, message: 'Achievement deleted successfully.' };
+  }
+
+  async reviewGalleryEntry(code: string, id: string, dto: ReviewSubmissionDto, reviewer: string) {
+    const reg = await this.findByCode(code);
+    const entry = await this.prisma.factoryGalleryEntry.findFirst({
+      where: { id: this.parseId(id), registrationId: reg.id },
+    });
+    if (!entry) throw new NotFoundException(`Gallery entry ${id} not found for this registration.`);
+
+    if (dto.decision === 'REJECTED' && !dto.reason?.trim()) {
+      throw new BadRequestException('A reason is required when rejecting a gallery entry.');
+    }
+
+    const updated = await this.prisma.factoryGalleryEntry.update({
+      where: { id: entry.id },
+      data: {
+        verificationStatus: dto.decision,
+        rejectionReason: dto.decision === 'REJECTED' ? dto.reason!.trim() : null,
+        reviewedBy: reviewer,
+        reviewedAt: new Date(),
+      },
+    });
+
+    return this.toGalleryDto(updated, reg.registrationCode);
+  }
+
+  async reviewAchievement(code: string, id: string, dto: ReviewSubmissionDto, reviewer: string) {
+    const reg = await this.findByCode(code);
+    const ach = await this.prisma.manufacturerAchievement.findFirst({
+      where: { id: this.parseId(id), registrationId: reg.id },
+    });
+    if (!ach) throw new NotFoundException(`Achievement ${id} not found for this registration.`);
+
+    if (dto.decision === 'REJECTED' && !dto.reason?.trim()) {
+      throw new BadRequestException('A reason is required when rejecting an achievement.');
+    }
+
+    const updated = await this.prisma.manufacturerAchievement.update({
+      where: { id: ach.id },
+      data: {
+        verificationStatus: dto.decision,
+        rejectionReason: dto.decision === 'REJECTED' ? dto.reason!.trim() : null,
+        reviewedBy: reviewer,
+        reviewedAt: new Date(),
+      },
+    });
+
+    return this.toAchievementDto(updated, reg.registrationCode);
   }
 }

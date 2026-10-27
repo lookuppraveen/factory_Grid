@@ -4,6 +4,7 @@
  */
 
 import { CustomerVerificationRequest } from '../types';
+import { FactoryGalleryItem, AchievementItem } from './manufacturerRegistrationApi';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_IAM_API_URL || 'http://localhost:8081';
 
@@ -72,6 +73,8 @@ export interface ManufacturerReviewDetail {
     moq: number;
     leadTimeDays: number;
   }>;
+  gallery?: FactoryGalleryItem[];
+  achievements?: AchievementItem[];
 }
 
 let cachedAdminToken: string | null = null;
@@ -92,13 +95,13 @@ async function getAdminAuthToken(): Promise<string> {
     let res = await fetch(`${API_BASE}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usernameOrEmail: 'admin@factorygrid.com', password: 'Admin@12345678' })
+      body: JSON.stringify({ usernameOrEmail: 'admin@factorygrid.com', password: 'Admin12345678' })
     });
     if (!res.ok) {
       res = await fetch(`${API_BASE}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usernameOrEmail: 'admin', password: 'K8#vP$9mQ2!wX7zL' })
+        body: JSON.stringify({ usernameOrEmail: 'admin', password: 'Admin12345678' })
       });
     }
     if (res.ok) {
@@ -107,7 +110,10 @@ async function getAdminAuthToken(): Promise<string> {
       if (token) {
         cachedAdminToken = token;
         if (typeof window !== 'undefined') {
-          localStorage.setItem('fg_auth_token', token);
+          const role = localStorage.getItem('fg_role');
+          if (role !== 'BUYER' && role !== 'SUPPLIER') {
+            localStorage.setItem('fg_auth_token', token);
+          }
         }
         return token;
       }
@@ -122,9 +128,11 @@ async function getAdminAuthToken(): Promise<string> {
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const token = await getAdminAuthToken();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(init.headers as Record<string, string> || {}),
   };
+  if (init.body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -229,6 +237,33 @@ export const adminVerificationApi = {
     );
   },
 
+  async uploadCustomerDocument(
+    file: File,
+    category: string,
+    registrationCode: string
+  ): Promise<any> {
+    const token = await getAdminAuthToken();
+    const form = new FormData();
+    form.append('file', file);
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(
+      `${API_BASE}/api/v1/buyer/documents/upload?category=${encodeURIComponent(category)}&registrationCode=${encodeURIComponent(registrationCode)}`,
+      {
+        method: 'POST',
+        body: form,
+        headers,
+      }
+    );
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const errorMsg = data?.message || data?.error || `Upload failed (HTTP ${res.status})`;
+      throw new Error(Array.isArray(errorMsg) ? errorMsg.join('; ') : errorMsg);
+    }
+    return data?.data ?? data;
+  },
+
   // ── MANUFACTURER VERIFICATION ───────────────────────────────────────
   async listManufacturerVerifications(status?: string, search?: string): Promise<ManufacturerReviewItem[]> {
     const params = new URLSearchParams();
@@ -266,6 +301,7 @@ export const adminVerificationApi = {
       `${API_BASE}/api/v1/manufacturer/review/verifications/${encodeURIComponent(code)}/approve`,
       {
         method: 'POST',
+        body: JSON.stringify({}),
       }
     );
   },
@@ -290,12 +326,43 @@ export const adminVerificationApi = {
     );
   },
 
+  async reviewManufacturerGalleryEntry(
+    code: string,
+    id: string,
+    decision: 'VERIFIED' | 'REJECTED',
+    reason?: string,
+  ): Promise<FactoryGalleryItem> {
+    return request<FactoryGalleryItem>(
+      `${API_BASE}/api/v1/manufacturer/review/verifications/${encodeURIComponent(code)}/gallery/${encodeURIComponent(id)}/review`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ decision, reason }),
+      }
+    );
+  },
+
+  async reviewManufacturerAchievement(
+    code: string,
+    id: string,
+    decision: 'VERIFIED' | 'REJECTED',
+    reason?: string,
+  ): Promise<AchievementItem> {
+    return request<AchievementItem>(
+      `${API_BASE}/api/v1/manufacturer/review/verifications/${encodeURIComponent(code)}/achievements/${encodeURIComponent(id)}/review`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ decision, reason }),
+      }
+    );
+  },
+
   /**
    * Fetches the actual binary document (PDF or image) from the backend with Bearer authorization
    * and creates a localized object URL for rendering inside the Document Viewer modal.
    */
   async getDocumentBlob(downloadUrl: string): Promise<{ blobUrl: string; contentType: string; size: number }> {
-    const token = await getAdminAuthToken();
+    const userToken = typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null;
+    const token = userToken || (await getAdminAuthToken());
     const fullUrl = downloadUrl.startsWith('http') ? downloadUrl : `${API_BASE}${downloadUrl}`;
     const res = await fetch(fullUrl, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},

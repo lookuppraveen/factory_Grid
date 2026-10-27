@@ -91,7 +91,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Step 4: Upload Mandatory Regulatory Document
+         * Step 4 & Document Re-upload: Upload Mandatory Regulatory Document
          * @description Accepts multipart/form-data file upload for one of the 6 regulatory categories. Stores file in MinIO/S3 and records metadata in database.
          */
         post: operations["BuyerRegistrationController_uploadDocument"];
@@ -108,7 +108,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all regulatory documents for a registration (compliance staff only) */
+        /** List all regulatory documents for a registration */
         get: operations["BuyerRegistrationController_getDocuments"];
         put?: never;
         post?: never;
@@ -125,7 +125,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Download a regulatory document from private storage (compliance staff only) */
+        /** Download a regulatory document from private storage */
         get: operations["BuyerRegistrationController_downloadDocument"];
         put?: never;
         post?: never;
@@ -155,6 +155,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/buyer/my-registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current authenticated buyer registration, documents, and verification status */
+        get: operations["BuyerRegistrationController_getMyRegistration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/buyer/registration/{code}": {
         parameters: {
             query?: never;
@@ -162,10 +179,285 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get buyer registration details by code or email (compliance staff only) */
+        /** Get buyer registration details by code or email */
         get: operations["BuyerRegistrationController_getRegistration"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List master product catalogue for manufacturer capabilities */
+        get: operations["ManufacturerRegistrationController_listCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/registration/step-1": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 1: Save Company & Plant Information */
+        post: operations["ManufacturerRegistrationController_saveStep1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/documents/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step 2 & Document Re-upload: Upload Mandatory Certification Document
+         * @description Accepts multipart/form-data for one of the 6 mandatory certification categories. Stores file in MinIO/S3 and records metadata.
+         */
+        post: operations["ManufacturerRegistrationController_uploadDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an uploaded document before submission */
+        delete: operations["ManufacturerRegistrationController_removeDocument"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/registration/step-2": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 2: Save Certification Expiry and Issue Dates */
+        post: operations["ManufacturerRegistrationController_saveStep2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/registration/step-3": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 3: Save Product Manufacturing Capabilities */
+        post: operations["ManufacturerRegistrationController_saveStep3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/registration/step-4": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 4: Save MOQ and Delivery Schedule */
+        post: operations["ManufacturerRegistrationController_saveStep4"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/registration/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 5: Review & Submit Complete Manufacturer Registration */
+        post: operations["ManufacturerRegistrationController_submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/my-registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current authenticated manufacturer registration details, documents, and status */
+        get: operations["ManufacturerRegistrationController_getMyRegistration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/registration/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get manufacturer registration by registration code */
+        get: operations["ManufacturerRegistrationController_getRegistration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List certifications for a registration */
+        get: operations["ManufacturerRegistrationController_getDocuments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/documents/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download a manufacturer certification document */
+        get: operations["ManufacturerRegistrationController_downloadDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/review/verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin/Compliance: List submitted manufacturer registrations for review */
+        get: operations["ManufacturerRegistrationController_listForReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/review/verifications/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin/Compliance: Get single manufacturer registration with documents for audit */
+        get: operations["ManufacturerRegistrationController_getForReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/review/verifications/{code}/documents/{docId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Approve, reject, or request replacement for a manufacturer certification */
+        post: operations["ManufacturerRegistrationController_reviewDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/review/verifications/{code}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Final approve manufacturer registration and activate account */
+        post: operations["ManufacturerRegistrationController_approve"];
         delete?: never;
         options?: never;
         head?: never;
@@ -274,6 +566,26 @@ export interface paths {
         put?: never;
         /** Request additional regulatory documents from customer */
         post: operations["ComplianceController_requestMoreDocs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/customer-verifications/{id}/documents/{docId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review an individual uploaded regulatory document
+         * @description Allows Admin/Compliance Officer to approve, reject, or request replacement for a specific document with reason.
+         */
+        post: operations["ComplianceController_reviewDocument"];
         delete?: never;
         options?: never;
         head?: never;
@@ -500,7 +812,7 @@ export interface components {
              * @example PCD Franchise
              * @enum {string}
              */
-            businessType: "PCD Franchise" | "Third Party Manufacturing (TPM)" | "Distributor" | "Wholesaler" | "Hospital" | "Export";
+            businessType: "PCD Franchise" | "PCD Franchise Customer" | "PCD" | "Third Party Manufacturing (TPM)" | "Third Party Manufacturing" | "TPM" | "Distributor" | "DISTRIBUTOR" | "Wholesaler" | "WHOLESALER" | "Hospital" | "HOSPITAL" | "Export" | "Export Customer" | "EXPORT" | "Export House" | "Private Limited" | "Public Limited" | "Partnership Firm" | "Proprietorship" | "Healthcare Institution" | "Registered Enterprise";
             /**
              * @description 15-character Goods and Services Tax Identification Number (GSTIN)
              * @example 07AAAAA0000A1Z5
@@ -559,6 +871,11 @@ export interface components {
              * @example vikram@apexpharma.in
              */
             email: string;
+            /**
+             * @description Buyer account password
+             * @example Password@123
+             */
+            password?: string;
         };
         PcdDetailsDto: {
             /** @example North Zone */
@@ -676,6 +993,16 @@ export interface components {
             mimeType: string;
             /** @example VALID */
             status: string;
+            /** @example Document illegible or missing seal */
+            rejectionReason?: string;
+            /** @example Rajesh Kumar (Compliance Desk A) */
+            reviewedBy?: string;
+            /** @example 2026-10-14T10:00:00.000Z */
+            reviewedAt?: string;
+            /** @example REJECTED */
+            reviewDecision?: string;
+            /** @example 1 */
+            version?: number;
             /** @example 2026-10-13T10:00:00.000Z */
             uploadedAt: string;
         };
@@ -695,7 +1022,7 @@ export interface components {
              * @example PCD Franchise
              * @enum {string}
              */
-            businessType: "PCD Franchise" | "Third Party Manufacturing (TPM)" | "Distributor" | "Wholesaler" | "Hospital" | "Export";
+            businessType: "PCD Franchise" | "PCD Franchise Customer" | "PCD" | "Third Party Manufacturing (TPM)" | "Third Party Manufacturing" | "TPM" | "Distributor" | "DISTRIBUTOR" | "Wholesaler" | "WHOLESALER" | "Hospital" | "HOSPITAL" | "Export" | "Export Customer" | "EXPORT" | "Export House" | "Private Limited" | "Public Limited" | "Partnership Firm" | "Proprietorship" | "Healthcare Institution" | "Registered Enterprise";
             /**
              * @description Goods and Services Tax Identification Number (GSTIN)
              * @example 07AAAAA0000A1Z5
@@ -826,6 +1153,16 @@ export interface components {
              *     ]
              */
             validationDetails: string[];
+            /**
+             * @description True if verified against official government portal
+             * @example false
+             */
+            governmentVerified?: boolean;
+            /**
+             * @description True if accepted for testing purpose
+             * @example true
+             */
+            testingAccepted?: boolean;
         };
         CustomerVerificationResponseDto: {
             /** @example CUS-VER-101 */
@@ -845,6 +1182,122 @@ export interface components {
             customerCode?: string;
             /** @example 2026-10-13T10:00:00.000Z */
             createdAt: string;
+        };
+        ManufacturerStep1Dto: {
+            /** @example SunBio LifeSciences Pvt. Ltd. */
+            companyName: string;
+            /** @example Plot 42, IDA Pashamylaram, Phase III */
+            facilityAddress: string;
+            /** @example Hyderabad */
+            city: string;
+            /** @example Telangana */
+            state: string;
+            /**
+             * @description 6-digit Indian pincode
+             * @example 502307
+             */
+            pincode: string;
+            /**
+             * @description Monthly installed manufacturing capacity
+             * @example 10,000,000 Units / Month
+             */
+            mfgCapacity: string;
+            /** @example Dr. Vikram Sethi */
+            contactPerson: string;
+            /** @example Plant Head / Director */
+            designation: string;
+            /**
+             * Format: email
+             * @description Official plant email (also the login identifier)
+             * @example plant@sunbiolabs.com
+             */
+            email: string;
+            /** @example +91 98765 43210 */
+            phone: string;
+        };
+        ManufacturerStepResponseDto: {
+            /** @example true */
+            success: boolean;
+            /** @example Company details saved successfully */
+            message: string;
+            /** @example REG-MFG-1A2B3C4D5E6F7A8B */
+            registrationCode: string;
+            /** @example 1 */
+            currentStep: number;
+        };
+        ManufacturerDocumentDatesDto: {
+            /**
+             * @example mfgLicense
+             * @enum {string}
+             */
+            category: "mfgLicense" | "gmpCert" | "whoGmpCert" | "isoCert" | "factoryReg" | "pollutionCert";
+            /**
+             * @description ISO date (YYYY-MM-DD); must not be in the future
+             * @example 2023-04-15
+             */
+            issueDate: string;
+            /**
+             * @description ISO date (YYYY-MM-DD); must be after issueDate and not already expired
+             * @example 2028-04-14
+             */
+            expiryDate: string;
+        };
+        ManufacturerStep2Dto: {
+            /** @description Issue/expiry dates for the uploaded certifications */
+            documents: components["schemas"]["ManufacturerDocumentDatesDto"][];
+        };
+        ManufacturerStep3Dto: {
+            /**
+             * @description Catalogue product IDs; replaces the saved selection
+             * @example [
+             *       "p1",
+             *       "p2"
+             *     ]
+             */
+            productIds: string[];
+        };
+        ManufacturerSupplyItemDto: {
+            /** @example p1 */
+            productId: string;
+            /**
+             * @description Minimum order quantity (positive integer)
+             * @example 1000
+             */
+            moq: number;
+            /**
+             * @description Typical production delivery schedule in days (positive integer)
+             * @example 14
+             */
+            leadTimeDays: number;
+        };
+        ManufacturerStep4Dto: {
+            items: components["schemas"]["ManufacturerSupplyItemDto"][];
+        };
+        ManufacturerSubmitDto: {
+            /** @example REG-MFG-1A2B3C4D5E6F7A8B */
+            registrationCode: string;
+            /**
+             * @description Password for the manufacturer portal login (stored as a bcrypt hash)
+             * @example Str0ngPass!
+             */
+            password: string;
+            /**
+             * @description Declaration that all information and documents are accurate
+             * @example true
+             */
+            confirmAccurate: boolean;
+        };
+        ManufacturerReviewDocumentDto: {
+            /**
+             * @example REJECTED
+             * @enum {string}
+             */
+            decision: "APPROVED" | "REJECTED" | "NEEDS_REPLACEMENT";
+            /**
+             * @description Mandatory when rejected or replacement is requested
+             * @example Certificate is blurred
+             */
+            reason?: string;
         };
         ApproveVerificationDto: {
             /**
@@ -867,6 +1320,24 @@ export interface components {
              *     ]
              */
             notes: string[];
+        };
+        ReviewDocumentDto: {
+            /**
+             * @description Review decision for document
+             * @example REJECTED
+             * @enum {string}
+             */
+            decision: "APPROVED" | "REJECTED" | "NEEDS_REPLACEMENT";
+            /**
+             * @description Mandatory if rejected or replacement requested
+             * @example Seal missing or document blurred
+             */
+            reason?: string;
+            /**
+             * @description Auditor or officer who reviewed the document (defaults to the authenticated reviewer)
+             * @example Rajesh Kumar (Compliance Desk A)
+             */
+            reviewer?: string;
         };
         BuyerRegistrationDto: {
             /** @example buyer_pharma_01 */
@@ -1157,7 +1628,7 @@ export interface operations {
             query: {
                 /** @description Regulatory document category */
                 category: "GST Certificate" | "Drug License" | "PAN Card" | "Incorporation Certificate" | "Cancelled Cheque" | "Signed Agreement";
-                /** @description Registration code returned by step-1; the draft must exist and not yet be submitted */
+                /** @description Registration code returned by step-1; allows draft uploads and post-review replacement uploads */
                 registrationCode: string;
             };
             header?: never;
@@ -1195,8 +1666,9 @@ export interface operations {
     };
     BuyerRegistrationController_getDocuments: {
         parameters: {
-            query: {
-                registrationCode: string;
+            query?: {
+                /** @description Optional for authenticated buyer */
+                registrationCode?: string;
             };
             header?: never;
             path?: never;
@@ -1219,7 +1691,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Requires ADMIN or COMPLIANCE_OFFICER */
+            /** @description Access denied */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1257,7 +1729,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Requires ADMIN or COMPLIANCE_OFFICER */
+            /** @description Access denied */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1310,6 +1782,24 @@ export interface operations {
             };
         };
     };
+    BuyerRegistrationController_getMyRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current buyer registration details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     BuyerRegistrationController_getRegistration: {
         parameters: {
             query?: never;
@@ -1335,7 +1825,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Requires ADMIN or COMPLIANCE_OFFICER */
+            /** @description Requires ADMIN, COMPLIANCE_OFFICER, or owning BUYER */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1344,6 +1834,363 @@ export interface operations {
             };
             /** @description Registration not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_listCatalog: {
+        parameters: {
+            query?: {
+                /** @description Filter by name, generic name, category */
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_saveStep1: {
+        parameters: {
+            query?: {
+                /** @description Optional code when updating an existing draft */
+                registrationCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerStep1Dto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerStepResponseDto"];
+                };
+            };
+        };
+    };
+    ManufacturerRegistrationController_uploadDocument: {
+        parameters: {
+            query: {
+                category: "mfgLicense" | "gmpCert" | "whoGmpCert" | "isoCert" | "factoryReg" | "pollutionCert";
+                registrationCode: string;
+                issueDate: string;
+                expiryDate: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description Certification PDF/Image (max 10MB)
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_removeDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Document ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_saveStep2: {
+        parameters: {
+            query: {
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerStep2Dto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerStepResponseDto"];
+                };
+            };
+        };
+    };
+    ManufacturerRegistrationController_saveStep3: {
+        parameters: {
+            query: {
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerStep3Dto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerStepResponseDto"];
+                };
+            };
+        };
+    };
+    ManufacturerRegistrationController_saveStep4: {
+        parameters: {
+            query: {
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerStep4Dto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerStepResponseDto"];
+                };
+            };
+        };
+    };
+    ManufacturerRegistrationController_submit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerSubmitDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_getMyRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_getRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration code (REG-MFG-...) */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_getDocuments: {
+        parameters: {
+            query?: {
+                /** @description Optional for authenticated manufacturer */
+                registrationCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_downloadDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Document ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_listForReview: {
+        parameters: {
+            query?: {
+                status?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_getForReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_reviewDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+                /** @description Document ID */
+                docId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerReviewDocumentDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerRegistrationController_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1494,6 +2341,32 @@ export interface operations {
                 content: {
                     "application/json": Record<string, never>;
                 };
+            };
+        };
+    };
+    ComplianceController_reviewDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Request Code or database ID */
+                id: string;
+                /** @description Document ID */
+                docId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewDocumentDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

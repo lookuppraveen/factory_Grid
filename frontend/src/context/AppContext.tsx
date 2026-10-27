@@ -32,6 +32,7 @@ import { GSTCredentials } from '../services/connectors/gstTypes';
 import { verifyTOTPToken, generateRecoveryCodes } from '../services/auth/totpUtils';
 import { authApi, AuthUser } from '../services/authApi';
 import { adminVerificationApi } from '../services/adminVerificationApi';
+import { catalogApi } from '../services/catalogApi';
 
 export interface TwoFactorState {
   isEnabled: boolean;
@@ -138,6 +139,8 @@ interface AppContextType {
   addProductMaster: (product: Product) => void;
   updateProductMaster: (productId: string, updatedFields: Partial<Product>) => void;
   toggleProductMasterStatus: (productId: string) => void;
+  refreshProducts: () => Promise<Product[]>;
+  refreshCategories: () => Promise<any>;
   categories: CategoryMaster[];
   setCategories: React.Dispatch<React.SetStateAction<CategoryMaster[]>>;
   categoryMargins: CategoryMargin[];
@@ -329,8 +332,8 @@ interface AppContextType {
   userProfile: UserProfile;
   orgProfile: OrganizationProfile;
   userDocuments: UserDocument[];
-  profileSubTab: 'personal' | 'organization' | 'documents' | 'security';
-  setProfileSubTab: (tab: 'personal' | 'organization' | 'documents' | 'security') => void;
+  profileSubTab: 'personal' | 'organization' | 'documents' | 'gallery' | 'achievements' | 'security';
+  setProfileSubTab: (tab: 'personal' | 'organization' | 'documents' | 'gallery' | 'achievements' | 'security') => void;
   updateUserProfile: (updatedFields: Partial<UserProfile>) => void;
   updateOrgProfile: (updatedFields: Partial<OrganizationProfile>) => void;
   uploadUserDocument: (docData: Partial<UserDocument>) => void;
@@ -558,7 +561,7 @@ export const defaultBuyerOrg: OrganizationProfile = {
   gstin: '27AAACA9876E1Z2',
   pan: 'AAACA9876E',
   cinNumber: 'L24239MH2005PLC154321',
-  isVerified: true
+  isVerified: false
 };
 
 export const defaultSpecialPartyBuyerProfile: UserProfile = {
@@ -594,102 +597,7 @@ export const defaultSpecialPartyBuyerOrg: OrganizationProfile = {
   isVerified: true
 };
 
-export const defaultBuyerDocs: UserDocument[] = [
-  {
-    id: 'doc_buyer_1',
-    documentName: 'GST Registration Certificate',
-    documentType: 'GST Certificate',
-    documentNumber: '27AAACA9876E1Z2',
-    issueDate: '2020-04-01',
-    expiryDate: 'N/A',
-    uploadedDate: '2025-10-15',
-    lastUpdated: '2025-10-15',
-    verificationStatus: 'VERIFIED',
-    verifiedBy: 'Compliance Desk',
-    verificationDate: '2025-10-16',
-    remarks: 'Verified via GSTN API.',
-    fileName: 'Apex_GST_Certificate.pdf',
-    fileUrl: '#'
-  },
-  {
-    id: 'doc_buyer_2',
-    documentName: 'Corporate PAN Card',
-    documentType: 'PAN Card / PAN Document',
-    documentNumber: 'AAACA9876E',
-    issueDate: '2005-08-12',
-    expiryDate: 'N/A',
-    uploadedDate: '2025-10-15',
-    lastUpdated: '2025-10-15',
-    verificationStatus: 'VERIFIED',
-    verifiedBy: 'Compliance Desk',
-    verificationDate: '2025-10-16',
-    remarks: 'Verified.',
-    fileName: 'Apex_PAN_Card.pdf',
-    fileUrl: '#'
-  },
-  {
-    id: 'doc_buyer_3',
-    documentName: 'Certificate of Incorporation (ROC)',
-    documentType: 'Company Registration Certificate',
-    documentNumber: 'L24239MH2005PLC154321',
-    issueDate: '2005-08-10',
-    expiryDate: 'N/A',
-    uploadedDate: '2025-10-15',
-    lastUpdated: '2025-10-15',
-    verificationStatus: 'VERIFIED',
-    verifiedBy: 'Compliance Desk',
-    verificationDate: '2025-10-16',
-    remarks: 'ROC Mumbai verified.',
-    fileName: 'Apex_Incorporation_Cert.pdf',
-    fileUrl: '#'
-  },
-  {
-    id: 'doc_buyer_4',
-    documentName: 'Wholesale Drug License (Form 20B / 21B)',
-    documentType: 'Drug License',
-    documentNumber: 'MH-MZ4-2023-9091',
-    issueDate: '2023-05-01',
-    expiryDate: '2028-04-30',
-    uploadedDate: '2025-10-15',
-    lastUpdated: '2025-10-15',
-    verificationStatus: 'VERIFIED',
-    verifiedBy: 'Maharashtra FDA',
-    verificationDate: '2025-10-18',
-    remarks: 'Valid for wholesale distribution.',
-    fileName: 'Wholesale_Drug_License_MH.pdf',
-    fileUrl: '#'
-  },
-  {
-    id: 'doc_buyer_5',
-    documentName: 'Corporate Bank Mandate / Penny Drop',
-    documentType: 'Bank / Payment Details',
-    documentNumber: 'ICIC0000999',
-    issueDate: '2024-01-10',
-    expiryDate: 'N/A',
-    uploadedDate: '2025-10-15',
-    lastUpdated: '2025-10-15',
-    verificationStatus: 'VERIFIED',
-    verifiedBy: 'Accounts Desk',
-    verificationDate: '2025-10-16',
-    remarks: 'Bank account verified.',
-    fileName: 'Apex_Bank_Mandate.pdf',
-    fileUrl: '#'
-  },
-  {
-    id: 'doc_buyer_6',
-    documentName: 'Import Export Code (IEC) Certificate',
-    documentType: 'Other Business Documents',
-    documentNumber: 'IEC0305991288',
-    issueDate: '2021-02-15',
-    expiryDate: 'N/A',
-    uploadedDate: '',
-    lastUpdated: '',
-    verificationStatus: 'NOT UPLOADED',
-    remarks: 'Optional for domestic sourcing.',
-    fileName: '',
-    fileUrl: ''
-  }
-];
+export const defaultBuyerDocs: UserDocument[] = [];
 
 export const defaultAdminProfile: UserProfile = {
   id: 'usr_admin_001',
@@ -1060,6 +968,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const getInitialUserDocs = (role: UserRole): UserDocument[] => {
+    if (role === 'BUYER') {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(`fg_user_documents_${role}`);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              // Strip any legacy fake seeded records (e.g. doc_buyer_1..6 or Apex_*)
+              const clean = parsed.filter((d: any) => !d.id?.startsWith('doc_buyer_') && !d.fileName?.startsWith('Apex_'));
+              return clean;
+            }
+          } catch (e) { }
+        }
+      }
+      return [];
+    }
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`fg_user_documents_${role}`);
       if (saved) {
@@ -1068,13 +992,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     if (role === 'SUPPLIER') return defaultSupplierDocs;
     if (role === 'ADMIN') return defaultAdminDocs;
-    return defaultBuyerDocs;
+    return [];
   };
 
   const [userProfile, setUserProfileState] = useState<UserProfile>(() => getInitialUserProfile(currentRole));
   const [orgProfile, setOrgProfileState] = useState<OrganizationProfile>(() => getInitialOrgProfile(currentRole));
   const [userDocuments, setUserDocumentsState] = useState<UserDocument[]>(() => getInitialUserDocs(currentRole));
-  const [profileSubTab, setProfileSubTab] = useState<'personal' | 'organization' | 'documents' | 'security'>('personal');
+  const [profileSubTab, setProfileSubTab] = useState<'personal' | 'organization' | 'documents' | 'gallery' | 'achievements' | 'security'>('personal');
 
   // Synchronize role profile state when role changes
   React.useEffect(() => {
@@ -1357,10 +1281,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch(e) {}
   }, [products]);
 
+  const refreshProducts = async (): Promise<Product[]> => {
+    try {
+      const live = await catalogApi.listProducts();
+      if (Array.isArray(live) && live.length > 0) {
+        setProducts(live);
+        return live;
+      }
+    } catch (err) {
+      console.warn('Could not refresh products from catalog API:', err);
+    }
+    return products;
+  };
+
+  const refreshCategories = async (): Promise<any> => {
+    try {
+      const data = await catalogApi.listCategories();
+      if (data?.categories && Array.isArray(data.categories) && data.categories.length > 0) {
+        setUnifiedCategories(data.categories);
+        return data;
+      }
+    } catch (err) {
+      console.warn('Could not refresh categories from catalog API:', err);
+    }
+    return { categories: unifiedCategories, tree: [] };
+  };
+
+  // Background hydration: Load live catalog products and category master from PostgreSQL
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [liveProds, liveCats] = await Promise.all([
+          catalogApi.listProducts().catch(() => null),
+          catalogApi.listCategories().catch(() => null),
+        ]);
+        if (!mounted) return;
+        if (liveProds && Array.isArray(liveProds) && liveProds.length > 0) {
+          setProducts(liveProds);
+        }
+        if (liveCats?.categories && Array.isArray(liveCats.categories) && liveCats.categories.length > 0) {
+          setUnifiedCategories(liveCats.categories);
+        }
+      } catch (err) {
+        console.warn('Background catalog hydration warning:', err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
   const addProductMaster = (newProduct: Product) => {
     setProducts(prev => {
-      const exists = prev.some(p => p.code.toLowerCase().trim() === newProduct.code.toLowerCase().trim());
-      if (exists) return prev;
+      const exists = prev.some(p => p.id === newProduct.id || (p.code && p.code.toLowerCase().trim() === (newProduct.code || '').toLowerCase().trim()));
+      if (exists) {
+        return prev.map(p => (p.id === newProduct.id || p.code === newProduct.code) ? newProduct : p);
+      }
       return [newProduct, ...prev];
     });
   };
@@ -1380,7 +1355,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleProductMasterStatus = (productId: string) => {
-    setProducts(prev => prev.map(p => p.id === productId ? { ...p, status: p.status === 'Inactive' ? 'Active' : 'Inactive' } : p));
+    setProducts(prev => prev.map(p => {
+      if (p.id === productId) {
+        const nextStatus = p.status === 'Inactive' ? 'Active' : 'Inactive';
+        const nextLifecycle: LifecycleStatus = nextStatus === 'Active' ? 'ACTIVE' : 'INACTIVE';
+        return { ...p, status: nextStatus, lifecycle_status: nextLifecycle };
+      }
+      return p;
+    }));
+    catalogApi.toggleProductStatus(productId).catch(err => {
+      console.warn('Failed to toggle product status via API:', err);
+    });
   };
 
   // ── CATEGORY MASTER & MARGIN ENGINE STATE ─────────────────────────────
@@ -2824,6 +2809,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [newCat, ...prev];
     });
     addAuditLog('Category Master', `Added Category ${newCat.category_code} (${newCat.category})`);
+    catalogApi.createCategory(newCat).catch(err => {
+      console.warn('Failed to persist category to database:', err);
+    });
   };
 
   const updateUnifiedCategory = (id: string, updates: Partial<Category>) => {
@@ -2839,6 +2827,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return c;
     }));
+    catalogApi.updateCategory(id, updates).catch(err => {
+      console.warn('Failed to persist category update to database:', err);
+    });
   };
 
   const deleteUnifiedCategory = (id: string) => {
@@ -2860,6 +2851,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return c;
     }));
+    catalogApi.toggleCategoryStatus(id).catch(err => {
+      console.warn('Failed to persist category status toggle to database:', err);
+    });
   };
 
   // ── Dynamic Attribute Master & Product Attributes ──
@@ -5472,6 +5466,7 @@ const getProductAttributes = (productId: string): Record<string, string> => {
       activeTab, setActiveTab,
       activeBuyerAccount, setActiveBuyerAccount, resetDemoState,
       customers, manufacturers, products, setProducts, addProductMaster, updateProductMaster, toggleProductMasterStatus,
+      refreshProducts, refreshCategories,
       addManufacturer, updateManufacturer, deleteManufacturer, toggleManufacturerStatus, setPreferredManufacturer,
       categories, setCategories, categoryMargins, setCategoryMargins, addCategory, updateCategory, deleteCategory, toggleCategoryStatus, updateCategoryMargin, getCategoryMargin, getCategoryMarginConfig,
       marginRules, setMarginRules, addOrUpdateMarginRule, deleteMarginRule, getApplicableMargin,

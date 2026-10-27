@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export const REQUIRED_DOCUMENT_CATEGORIES = [
+  'GST Certificate',
+  'PAN Card',
+] as const;
+
 export const MANDATORY_DOCUMENT_CATEGORIES = [
   'GST Certificate',
   'Drug License',

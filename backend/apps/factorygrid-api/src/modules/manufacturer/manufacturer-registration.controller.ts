@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -36,6 +37,15 @@ import {
   ManufacturerStepResponseDto,
   ManufacturerSubmitDto,
 } from './dto/manufacturer-registration.dto';
+import {
+  CreateAchievementDto,
+  CreateGalleryEntryDto,
+  FactoryGalleryEntryDto,
+  ManufacturerAchievementDto,
+  ReviewSubmissionDto,
+  UpdateAchievementDto,
+  UpdateGalleryEntryDto,
+} from './dto/gallery-and-achievements.dto';
 import { ManufacturerRegistrationService } from './manufacturer-registration.service';
 
 @ApiTags('Manufacturer Registration & Onboarding')
@@ -49,6 +59,13 @@ export class ManufacturerRegistrationController {
   @ApiQuery({ name: 'search', required: false, description: 'Filter by name, generic name, category' })
   listCatalog(@Query('search') search?: string) {
     return this.service.listCatalog(search);
+  }
+
+  @Public()
+  @Get('categories')
+  @ApiOperation({ summary: 'List Category -> Sub-Category -> Sub-Sub-Category hierarchy for manufacturer onboarding' })
+  listCategories() {
+    return this.service.listCategoryHierarchy();
   }
 
   @Public()
@@ -269,7 +286,7 @@ export class ManufacturerRegistrationController {
   @Roles('ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER')
   @ApiOperation({ summary: 'Admin/Compliance: Final approve manufacturer registration and activate account' })
   @ApiParam({ name: 'code', description: 'Registration Code' })
-  approve(@Param('code') code: string, @CurrentUser() user: AuthUser) {
+  approve(@Param('code') code: string, @CurrentUser() user: AuthUser, @Body() _body?: any) {
     return this.service.approve(code, user.username);
   }
 
@@ -297,5 +314,287 @@ export class ManufacturerRegistrationController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.requestDocs(code, notes, user.username);
+  }
+
+  // ------------------------------------------------------------- Factory Gallery
+
+  @Public()
+  @Get('gallery')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List factory gallery entries for a manufacturer' })
+  @ApiQuery({ name: 'registrationCode', required: false, description: 'Optional registration code (or inferred from session)' })
+  listGallery(@Query('registrationCode') registrationCode?: string, @CurrentUser() user?: AuthUser) {
+    return this.service.listGallery(registrationCode, user);
+  }
+
+  @Public()
+  @Post('gallery/upload')
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload a factory photo to the gallery',
+    description: 'Accepts multipart/form-data containing image file (JPG, PNG, WebP; max 10MB) and metadata (title, factoryLocation, captureDate, description, gpsCoordinates).',
+  })
+  async uploadGalleryEntry(
+    @Req() req: FastifyRequest,
+    @Query('registrationCode') registrationCodeParam?: string,
+    @Query('title') titleParam?: string,
+    @Query('factoryLocation') locationParam?: string,
+    @Query('locationName') locationNameParam?: string,
+    @Query('captureDate') captureDateParam?: string,
+    @Query('capturedAt') capturedAtParam?: string,
+    @Query('description') descriptionParam?: string,
+    @Query('gpsCoordinates') gpsParam?: string,
+    @Query('latitude') latParam?: string,
+    @Query('longitude') lonParam?: string,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    if (!req.isMultipart()) {
+      throw new BadRequestException('Request must be multipart/form-data.');
+    }
+
+    let fileBuffer: Buffer | null = null;
+    let filename = '';
+    let mimetype = '';
+    const fields: Record<string, string> = {};
+
+    const parts = req.parts();
+    for await (const part of parts) {
+      if (part.type === 'file') {
+        const filePart = part as any;
+        fileBuffer = await filePart.toBuffer();
+        filename = filePart.filename;
+        mimetype = filePart.mimetype;
+      } else {
+        const fieldPart = part as any;
+        fields[fieldPart.fieldname] = typeof fieldPart.value === 'string'
+          ? fieldPart.value
+          : String(fieldPart.value ?? '');
+      }
+    }
+
+    if (!fileBuffer) {
+      throw new BadRequestException('No file uploaded in "file" field.');
+    }
+
+    const title = titleParam || fields.title;
+    const factoryLocation = locationParam || locationNameParam || fields.factoryLocation || fields.locationName;
+    const registrationCode = registrationCodeParam || fields.registrationCode;
+    const captureDate = captureDateParam || capturedAtParam || fields.captureDate || fields.capturedAt;
+    const description = descriptionParam || fields.description;
+    let gpsCoordinates = gpsParam || fields.gpsCoordinates;
+    if (!gpsCoordinates) {
+      const lat = latParam || fields.latitude;
+      const lon = lonParam || fields.longitude;
+      if (lat && lon) {
+        gpsCoordinates = `${lat}, ${lon}`;
+      }
+    }
+
+    if (!title?.trim()) {
+      throw new BadRequestException('title is required.');
+    }
+    if (!factoryLocation?.trim()) {
+      throw new BadRequestException('factoryLocation is required.');
+    }
+
+    const dto: CreateGalleryEntryDto = {
+      title: title.trim(),
+      factoryLocation: factoryLocation.trim(),
+      registrationCode: registrationCode?.trim() || undefined,
+      captureDate: captureDate?.trim() || undefined,
+      description: description?.trim() || undefined,
+      gpsCoordinates: gpsCoordinates?.trim() || undefined,
+    };
+
+    const callerUser = user || ((req as any).user as AuthUser | undefined);
+    return this.service.uploadGalleryEntry(fileBuffer, filename, mimetype, dto, callerUser);
+  }
+
+  @Public()
+  @Get('gallery/:id/image')
+  @ApiOperation({ summary: 'Stream factory gallery photo' })
+  @ApiParam({ name: 'id', description: 'Gallery entry ID' })
+  async getGalleryImage(
+    @Param('id') id: string,
+    @Res() res: FastifyReply,
+    @CurrentUser() user?: AuthUser,
+  ): Promise<void> {
+    const file = await this.service.getGalleryImage(id, user);
+    res.header('Content-Type', file.contentType || 'image/jpeg');
+    res.header('Cache-Control', 'public, max-age=86400');
+    if (file.contentLength) {
+      res.header('Content-Length', file.contentLength);
+    }
+    return res.send(file.stream);
+  }
+
+  @Patch('gallery/:id')
+  @ApiBearerAuth()
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Update factory gallery photo metadata' })
+  @ApiParam({ name: 'id', description: 'Gallery entry ID' })
+  updateGalleryEntry(
+    @Param('id') id: string,
+    @Body() dto: UpdateGalleryEntryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.updateGalleryEntry(id, dto, user);
+  }
+
+  @Delete('gallery/:id')
+  @ApiBearerAuth()
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Delete a factory gallery entry' })
+  @ApiParam({ name: 'id', description: 'Gallery entry ID' })
+  deleteGalleryEntry(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.deleteGalleryEntry(id, user);
+  }
+
+  // ------------------------------------------------------------- Achievements & Awards
+
+  @Public()
+  @Get('achievements')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List achievements and awards for a manufacturer' })
+  @ApiQuery({ name: 'registrationCode', required: false, description: 'Optional registration code' })
+  listAchievements(@Query('registrationCode') registrationCode?: string, @CurrentUser() user?: AuthUser) {
+    return this.service.listAchievements(registrationCode, user);
+  }
+
+  @Post('achievements')
+  @ApiBearerAuth()
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Create an achievement or award record' })
+  async createAchievement(
+    @Req() req: FastifyRequest,
+    @Body() bodyDto: CreateAchievementDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (req.isMultipart()) {
+      const part = await req.file();
+      const fields = (part?.fields as any) || {};
+      const title = fields.title?.value || bodyDto?.title;
+      const awardType = fields.awardType?.value || bodyDto?.awardType;
+      const issuingOrganization = fields.issuingOrganization?.value || bodyDto?.issuingOrganization;
+      const issueDate = fields.issueDate?.value || bodyDto?.issueDate;
+      const expiryDate = fields.expiryDate?.value || bodyDto?.expiryDate;
+      const description = fields.description?.value || bodyDto?.description;
+      const registrationCode = fields.registrationCode?.value || bodyDto?.registrationCode;
+
+      if (!title?.trim() || !awardType?.trim() || !issuingOrganization?.trim() || !issueDate?.trim()) {
+        throw new BadRequestException('title, awardType, issuingOrganization, and issueDate are required.');
+      }
+
+      let certFile: { buffer: Buffer; fileName: string; mimeType: string } | undefined = undefined;
+      if (part) {
+        const buffer = await part.toBuffer();
+        if (buffer.length > 0) {
+          certFile = { buffer, fileName: part.filename, mimeType: part.mimetype };
+        }
+      }
+
+      return this.service.createAchievement(
+        { title, awardType, issuingOrganization, issueDate, expiryDate, description, registrationCode },
+        user,
+        certFile,
+      );
+    }
+
+    return this.service.createAchievement(bodyDto, user);
+  }
+
+  @Patch('achievements/:id')
+  @ApiBearerAuth()
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Update an achievement or award record' })
+  @ApiParam({ name: 'id', description: 'Achievement ID' })
+  updateAchievement(
+    @Param('id') id: string,
+    @Body() dto: UpdateAchievementDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.updateAchievement(id, dto, user);
+  }
+
+  @Post('achievements/:id/certificate')
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Upload or replace supporting document/certificate for an achievement' })
+  @ApiParam({ name: 'id', description: 'Achievement ID' })
+  async uploadAchievementCertificate(
+    @Param('id') id: string,
+    @Req() req: FastifyRequest,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!req.isMultipart()) {
+      throw new BadRequestException('Request must be multipart/form-data.');
+    }
+    const part = await req.file();
+    if (!part) {
+      throw new BadRequestException('No file uploaded in "file" field.');
+    }
+    const buffer = await part.toBuffer();
+    return this.service.uploadAchievementCertificate(id, buffer, part.filename, part.mimetype, user);
+  }
+
+  @Public()
+  @Get('achievements/:id/certificate')
+  @ApiOperation({ summary: 'Download or view achievement supporting certificate' })
+  @ApiParam({ name: 'id', description: 'Achievement ID' })
+  async getAchievementCertificate(
+    @Param('id') id: string,
+    @Res() res: FastifyReply,
+    @CurrentUser() user?: AuthUser,
+  ): Promise<void> {
+    const file = await this.service.getAchievementCertificate(id, user);
+    res.header('Content-Type', file.contentType || 'application/pdf');
+    res.header('Content-Disposition', `inline; filename="${encodeURIComponent(file.fileName)}"`);
+    if (file.contentLength) {
+      res.header('Content-Length', file.contentLength);
+    }
+    return res.send(file.stream);
+  }
+
+  @Delete('achievements/:id')
+  @ApiBearerAuth()
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Delete an achievement or award' })
+  @ApiParam({ name: 'id', description: 'Achievement ID' })
+  deleteAchievement(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.deleteAchievement(id, user);
+  }
+
+  // ------------------------------------------------------------- Compliance Review of Gallery & Achievements
+
+  @Post('review/verifications/:code/gallery/:id/review')
+  @ApiBearerAuth()
+  @Roles('ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Admin/Compliance: Verify or reject a manufacturer factory gallery entry' })
+  @ApiParam({ name: 'code', description: 'Registration Code' })
+  @ApiParam({ name: 'id', description: 'Gallery Entry ID' })
+  reviewGalleryEntry(
+    @Param('code') code: string,
+    @Param('id') id: string,
+    @Body() dto: ReviewSubmissionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.reviewGalleryEntry(code, id, dto, user.username);
+  }
+
+  @Post('review/verifications/:code/achievements/:id/review')
+  @ApiBearerAuth()
+  @Roles('ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Admin/Compliance: Verify or reject a manufacturer achievement or award' })
+  @ApiParam({ name: 'code', description: 'Registration Code' })
+  @ApiParam({ name: 'id', description: 'Achievement ID' })
+  reviewAchievement(
+    @Param('code') code: string,
+    @Param('id') id: string,
+    @Body() dto: ReviewSubmissionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.reviewAchievement(code, id, dto, user.username);
   }
 }

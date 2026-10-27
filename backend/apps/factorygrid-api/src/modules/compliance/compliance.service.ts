@@ -29,7 +29,12 @@ export class ComplianceService {
       orderBy: { createdAt: 'desc' },
       include: {
         registration: {
-          include: { documents: true },
+          include: {
+            documents: {
+              where: { status: { not: 'SUPERSEDED' } },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
         },
         user: true,
       },
@@ -44,7 +49,12 @@ export class ComplianceService {
       where: isId ? { id: BigInt(idOrCode) } : { requestCode: idOrCode },
       include: {
         registration: {
-          include: { documents: true },
+          include: {
+            documents: {
+              where: { status: { not: 'SUPERSEDED' } },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
         },
         user: true,
       },
@@ -110,34 +120,47 @@ export class ComplianceService {
     const record = await this.getVerification(idOrCode);
 
     if (record.registrationId) {
-      const rejectedDocs = await this.prisma.buyerDocument.findMany({
+      const allDocs = await this.prisma.buyerDocument.findMany({
         where: {
           registrationId: BigInt(record.registrationId),
-          status: { in: ['REJECTED', 'NEEDS_REPLACEMENT'] },
+          status: { not: 'SUPERSEDED' },
         },
       });
+
+      const pendingDocs = allDocs.filter((d) => d.status === 'PENDING');
+      if (pendingDocs.length > 0) {
+        throw new BadRequestException(
+          `Cannot approve compliance case: ${pendingDocs.length} uploaded document(s) are still Pending Verification. Each document must be individually reviewed and approved before approving the case.`,
+        );
+      }
+
+      const rejectedDocs = allDocs.filter((d) => d.status === 'REJECTED' || d.status === 'NEEDS_REPLACEMENT');
       if (rejectedDocs.length > 0) {
-        throw new BadRequestException('Cannot approve verification while documents are rejected or awaiting replacement.');
+        throw new BadRequestException(
+          'Cannot approve compliance case: One or more documents are Rejected or Awaiting Replacement.',
+        );
+      }
+
+      const hasGst = allDocs.some(
+        (d) =>
+          (d.category?.toUpperCase().includes('GST') || d.categoryDisplayName?.toUpperCase().includes('GST')) &&
+          (d.status === 'VALID' || d.reviewDecision === 'APPROVED'),
+      );
+      const hasPan = allDocs.some(
+        (d) =>
+          (d.category?.toUpperCase().includes('PAN') || d.categoryDisplayName?.toUpperCase().includes('PAN')) &&
+          (d.status === 'VALID' || d.reviewDecision === 'APPROVED'),
+      );
+
+      if (!hasGst || !hasPan) {
+        throw new BadRequestException(
+          'Cannot approve compliance case: Both GST Certificate and PAN Card are mandatory documents and must be verified before approving the case.',
+        );
       }
     }
 
     const customerCode = customerCodeCustom || `CUS000${Math.floor(Math.random() * 900 + 100)}`;
     const approvedAt = new Date();
-
-    if (record.registrationId) {
-      await this.prisma.buyerDocument.updateMany({
-        where: {
-          registrationId: BigInt(record.registrationId),
-          status: 'PENDING',
-        },
-        data: {
-          status: 'VALID',
-          reviewDecision: 'APPROVED',
-          reviewedBy: 'Compliance Desk Officer',
-          reviewedAt: approvedAt,
-        },
-      });
-    }
 
     const updated = await this.prisma.customerVerificationRequest.update({
       where: { requestCode: record.requestCode },
@@ -147,31 +170,6 @@ export class ComplianceService {
         portalLoginCreated: true,
         portalUsername: record.email,
         approvedAt,
-        businessVerification: {
-          ...(typeof record.businessVerification === 'object' && record.businessVerification ? record.businessVerification : {}),
-          status: 'Approved by Compliance Officer',
-          gstActiveStatus: 'Verified (Active)',
-          panValidation: 'Verified',
-          companyRegistrationValidation: 'Verified (ROC)',
-          cinValidation: record.cinNumber ? 'Active & Verified' : 'N/A',
-          approvedAt: approvedAt.toISOString(),
-        },
-        regulatoryVerification: {
-          ...(typeof record.regulatoryVerification === 'object' && record.regulatoryVerification ? record.regulatoryVerification : {}),
-          status: 'Approved by Compliance Officer',
-          drugLicenseValidity: 'Verified (Form 20B/21B)',
-          licenseExpiryCheck: 'Verified Active',
-          stateRegulatoryAuthorityValidation: 'Verified with State Authority',
-          approvedAt: approvedAt.toISOString(),
-        },
-        financialVerification: {
-          ...(typeof record.financialVerification === 'object' && record.financialVerification ? record.financialVerification : {}),
-          status: 'Approved by Compliance Officer',
-          bankVerification: 'Verified (Account Active)',
-          creditRating: 'Satisfactory',
-          riskClassification: record.customerClassification === 'SPECIAL_PARTY' ? 'LOW (Special Partner)' : 'MODERATE (Standard Terms)',
-          approvedAt: approvedAt.toISOString(),
-        },
       },
     });
 
@@ -256,6 +254,9 @@ export class ComplianceService {
     }
 
     const verification = await this.getVerification(requestIdOrCode);
+    if (!verification.registrationId) {
+      throw new BadRequestException('No registration linked to this verification request.');
+    }
     const docIdNum = BigInt(documentId);
     const doc = await this.prisma.buyerDocument.findFirst({
       where: { id: docIdNum, registrationId: BigInt(verification.registrationId) },
@@ -366,6 +367,7 @@ export class ComplianceService {
       registrationId: r.registrationId ? r.registrationId.toString() : null,
       userId: r.userId ? r.userId.toString() : null,
       user: userClean,
+      registrationCode: r.registration?.registrationCode || r.requestCode,
       registrationDate: r.createdAt ? r.createdAt.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
       documents: formattedDocs,
       companyName: r.companyName || r.registration?.companyName || r.user?.companyName || 'Unknown Entity',
@@ -377,26 +379,9 @@ export class ComplianceService {
       gstNumber: r.gstNumber || r.registration?.gstNumber || '',
       panNumber: r.panNumber || r.registration?.panNumber || '',
       drugLicenseNumber: r.drugLicenseNumber || r.registration?.drugLicenseNumber || '',
-      cinNumber: r.cinNumber || r.registration?.cinNumber || null,
-      businessVerification: r.businessVerification || {
-        status: 'Pending manual verification',
-        gstActiveStatus: 'Pending Manual Review',
-        panValidation: 'Pending Manual Review',
-        companyRegistrationValidation: 'Pending Manual Review',
-        cinValidation: r.cinNumber ? 'Pending Manual Review' : 'N/A',
-      },
-      regulatoryVerification: r.regulatoryVerification || {
-        status: 'Pending manual verification',
-        drugLicenseValidity: 'Pending Manual Review',
-        licenseExpiryCheck: 'Pending Manual Review',
-        stateRegulatoryAuthorityValidation: 'Pending Manual Review',
-      },
-      financialVerification: r.financialVerification || {
-        status: 'Pending manual verification',
-        bankVerification: 'Pending Manual Review',
-        creditRating: 'Pending Assessment',
-        riskClassification: 'UNDER_EVALUATION',
-      },
+      businessVerification: null,
+      regulatoryVerification: null,
+      financialVerification: null,
       registration: r.registration
         ? {
             ...r.registration,

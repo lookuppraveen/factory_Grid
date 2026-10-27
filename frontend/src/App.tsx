@@ -122,15 +122,24 @@ const AppContent: React.FC = () => {
       {currentPage === 'mfg-register' && (
         <div style={{ minHeight: '100vh', background: '#07111D', color: '#fff' }}>
           <header style={{ height: 64, borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', background: 'rgba(7,17,29,0.95)' }}>
-            <button onClick={() => navigate('landing')} style={{ background: 'none', border: 'none', color: '#FFF', fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => {
+              try { localStorage.removeItem('fg_mfg_reg_code'); } catch {}
+              navigate('landing');
+            }} style={{ background: 'none', border: 'none', color: '#FFF', fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ padding: '4px 8px', borderRadius: 6, background: '#14B8A6', fontSize: 12 }}>FG</span> Manufacturer Verification Portal
             </button>
-            <button onClick={() => navigate('landing')} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8, padding: '6px 16px', color: '#94A3B8', fontSize: 13, cursor: 'pointer' }}>
+            <button onClick={() => {
+              try { localStorage.removeItem('fg_mfg_reg_code'); } catch {}
+              navigate('landing');
+            }} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8, padding: '6px 16px', color: '#94A3B8', fontSize: 13, cursor: 'pointer' }}>
               ← Return to Home
             </button>
           </header>
           <div style={{ maxWidth: 900, margin: '32px auto', padding: '0 20px' }}>
-            <ManufacturerOnboardingWizard isPublicPage onBack={() => navigate('landing')} />
+            <ManufacturerOnboardingWizard isPublicPage onBack={() => {
+              try { localStorage.removeItem('fg_mfg_reg_code'); } catch {}
+              navigate('landing');
+            }} />
           </div>
         </div>
       )}
