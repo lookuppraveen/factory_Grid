@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useApp } from '../../context/AppContext';
 import {
   Receipt, Search, Plus, Filter, Edit2, Trash2, X, AlertTriangle,
   Package, Percent, Calendar, Eye, Power, Clock, Hash
