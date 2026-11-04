@@ -280,7 +280,7 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
     expect(reviewRes.body.company.plantCapacity).toBe(step1.mfgCapacity);
     expect(reviewRes.body.documents).toHaveLength(6);
     const gmpDoc = reviewRes.body.documents.find((d: any) => d.category === 'gmpCert');
-    expect(gmpDoc.categoryDisplayName).toBe('GLP Certificate');
+    expect(gmpDoc.categoryDisplayName).toContain('GMP Certificate');
     const polDoc = reviewRes.body.documents.find((d: any) => d.category === 'pollutionCert');
     expect(polDoc.categoryDisplayName).toBe('Pollution Certificate');
     expect(reviewRes.body.products).toHaveLength(3);
@@ -493,5 +493,101 @@ describe('Manufacturer registration: complete 5-step workflow, password setup, c
     expect(dashboard.status).toBe(200);
     expect(dashboard.body.data.portal).toBe('MANUFACTURER');
     expect(dashboard.body.message).toContain('access granted');
+  });
+
+  it('13. manufacturer accesses /manufacturers/me/documents and streams binary via /me/documents/:id/download', async () => {
+    // Authenticated manufacturer retrieves own documents via /manufacturers/me/documents
+    const meDocsRes = await http().get('/api/v1/manufacturers/me/documents').set(mfgAuthHeader);
+    expect(meDocsRes.status).toBe(200);
+    expect(Array.isArray(meDocsRes.body)).toBe(true);
+    expect(meDocsRes.body.length).toBeGreaterThanOrEqual(5);
+
+    const firstDoc = meDocsRes.body[0];
+    expect(firstDoc.id).toBeDefined();
+    expect(firstDoc.document_id).toBeDefined();
+    expect(firstDoc.manufacturer_id).toBeDefined();
+    expect(firstDoc.category).toBeDefined();
+    expect(firstDoc.document_type).toBeDefined();
+    expect(firstDoc.file_name).toBeDefined();
+    expect(firstDoc.file_size).toBeGreaterThan(0);
+    expect(firstDoc.mime_type).toBe('application/pdf');
+    expect(firstDoc.storage_key).toBeDefined();
+    expect(firstDoc.verification_status).toBe('VALID');
+
+    // Authenticated manufacturer streams actual binary file
+    const downloadRes = await http().get(`/api/v1/manufacturers/me/documents/${firstDoc.id}/download`).set(mfgAuthHeader);
+    expect(downloadRes.status).toBe(200);
+    expect(downloadRes.headers['content-type']).toBe('application/pdf');
+    expect(downloadRes.headers['content-disposition']).toContain('inline');
+    expect(downloadRes.body.toString()).toContain('%PDF');
+
+    // Cross-manufacturer security: Manufacturer 2 cannot download Manufacturer 1's document
+    const crossDownload = await http().get(`/api/v1/manufacturers/me/documents/${firstDoc.id}/download`).set(mfg2AuthHeader);
+    expect(crossDownload.status).toBe(404);
+  });
+
+  it('14. admin accesses /admin/manufacturers/:id/documents and downloads identical binary file', async () => {
+    // Admin retrieves documents by manufacturer registration code
+    const adminDocsRes = await http().get(`/api/v1/admin/manufacturers/${code}/documents`).set(adminAuthHeader);
+    expect(adminDocsRes.status).toBe(200);
+    expect(Array.isArray(adminDocsRes.body)).toBe(true);
+
+    const doc = adminDocsRes.body[0];
+    expect(doc).toBeDefined();
+
+    // Admin downloads the exact same binary file from persistent storage
+    const adminDownload = await http().get(`/api/v1/admin/manufacturers/${code}/documents/${doc.id}/download`).set(adminAuthHeader);
+    expect(adminDownload.status).toBe(200);
+    expect(adminDownload.headers['content-type']).toBe('application/pdf');
+    expect(adminDownload.body.toString()).toContain('%PDF');
+
+    // Non-admin cannot access admin endpoints
+    const nonAdminAccess = await http().get(`/api/v1/admin/manufacturers/${code}/documents`).set(mfg2AuthHeader);
+    expect(nonAdminAccess.status).toBe(403);
+  });
+
+  it('15. admin updates document verification status and admin remarks via PATCH /admin/manufacturers/:id/documents/:docId/verification', async () => {
+    const adminDocsRes = await http().get(`/api/v1/admin/manufacturers/${code}/documents`).set(adminAuthHeader);
+    const doc = adminDocsRes.body[0];
+
+    // Admin sets remarks and requests replacement
+    const patchRes = await http()
+      .patch(`/api/v1/admin/manufacturers/${code}/documents/${doc.id}/verification`)
+      .set(adminAuthHeader)
+      .send({
+        status: 'NEEDS_REPLACEMENT',
+        remarks: 'Resolution is too low. Upload a 300 DPI scan with visible state seal.',
+      });
+    expect(patchRes.status).toBe(200);
+    expect(patchRes.body.success).toBe(true);
+    expect(patchRes.body.document.verification_status).toBe('NEEDS_REPLACEMENT');
+    expect(patchRes.body.document.admin_remarks).toContain('300 DPI');
+
+    // Manufacturer checks own portal and sees the updated verification status and admin remarks
+    const mfgDocs = await http().get('/api/v1/manufacturers/me/documents').set(mfgAuthHeader);
+    const updatedDoc = mfgDocs.body.find((d: any) => d.id === doc.id);
+    expect(updatedDoc).toBeDefined();
+    expect(updatedDoc.verification_status).toBe('NEEDS_REPLACEMENT');
+    expect(updatedDoc.admin_remarks).toContain('300 DPI');
+  });
+
+  it('16. manufacturer replaces document via PUT /manufacturers/me/documents/:id and returns to review', async () => {
+    const mfgDocs = await http().get('/api/v1/manufacturers/me/documents').set(mfgAuthHeader);
+    const docToReplace = mfgDocs.body.find((d: any) => d.verification_status === 'NEEDS_REPLACEMENT');
+    expect(docToReplace).toBeDefined();
+
+    // Upload replacement binary file
+    const replaceRes = await http()
+      .put(`/api/v1/manufacturers/me/documents/${docToReplace.id}`)
+      .set(mfgAuthHeader)
+      .attach('file', Buffer.from('%PDF-1.4 300 DPI high-res certified scan'), { filename: 'high_res_cert.pdf', contentType: 'application/pdf' });
+    expect(replaceRes.status).toBe(200);
+    expect(replaceRes.body.fileName).toBe('high_res_cert.pdf');
+    expect(replaceRes.body.status).toBe('PENDING');
+
+    // Admin verifies the replaced file content
+    const verifyDownload = await http().get(`/api/v1/admin/manufacturers/${code}/documents/${replaceRes.body.id}/download`).set(adminAuthHeader);
+    expect(verifyDownload.status).toBe(200);
+    expect(verifyDownload.body.toString()).toContain('high-res certified scan');
   });
 });

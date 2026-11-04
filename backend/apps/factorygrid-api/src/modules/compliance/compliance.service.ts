@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { AuthUser } from '@factorygrid/auth';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { ApproveVerificationDto } from '../buyer/dto/verification.dto';
 
 @Injectable()
 export class ComplianceService {
@@ -116,7 +117,7 @@ export class ComplianceService {
     return this.formatRecord(updated);
   }
 
-  async approveVerification(idOrCode: string, customerCodeCustom?: string) {
+  async approveVerification(idOrCode: string, dto?: ApproveVerificationDto, reviewerUser?: AuthUser) {
     const record = await this.getVerification(idOrCode);
 
     if (record.registrationId) {
@@ -159,17 +160,47 @@ export class ComplianceService {
       }
     }
 
-    const customerCode = customerCodeCustom || `CUS000${Math.floor(Math.random() * 900 + 100)}`;
+    const requestedClassification = dto?.customerClassification;
+    const targetClassification = requestedClassification === 'SPECIAL_PARTY'
+      ? 'SPECIAL_PARTY'
+      : (requestedClassification === 'REGULAR' ? 'REGULAR' : (record.customerClassification || 'REGULAR'));
+
+    const customerCode = dto?.customerCode || record.customerCode || `CUS000${Math.floor(Math.random() * 900 + 100)}`;
     const approvedAt = new Date();
+    const reviewerName = reviewerUser?.username || 'Platform Admin';
+
+    const existingNotes = Array.isArray(record.reviewNotes) ? [...record.reviewNotes] : [];
+    const approvalAudit = {
+      action: 'CASE_APPROVED',
+      classification: targetClassification,
+      reviewer: reviewerName,
+      timestamp: approvedAt.toISOString(),
+      remarks: dto?.remarks || `Approved verification case as ${targetClassification === 'SPECIAL_PARTY' ? 'Special Party / Special Buyer' : 'Standard Regular Buyer'}`,
+    };
+    existingNotes.push(approvalAudit);
 
     const updated = await this.prisma.customerVerificationRequest.update({
       where: { requestCode: record.requestCode },
       data: {
         verificationStatus: 'Active',
+        customerClassification: targetClassification,
         customerCode,
         portalLoginCreated: true,
         portalUsername: record.email,
         approvedAt,
+        assignedComplianceOfficer: record.assignedComplianceOfficer || reviewerName,
+        reviewNotes: existingNotes,
+      },
+      include: {
+        registration: {
+          include: {
+            documents: {
+              where: { status: { not: 'SUPERSEDED' } },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        },
+        user: true,
       },
     });
 
@@ -312,18 +343,41 @@ export class ComplianceService {
     };
   }
 
-  async updateClassification(idOrCode: string, classification: string, updatedBy = 'Platform Admin') {
+  async updateClassification(idOrCode: string, classification: string, remarks?: string, updatedBy = 'Platform Admin') {
     const valid = classification === 'SPECIAL_PARTY' ? 'SPECIAL_PARTY' : 'REGULAR';
     const record = await this.getVerification(idOrCode);
+
+    if (valid === 'SPECIAL_PARTY' && record.verificationStatus === 'Rejected') {
+      throw new BadRequestException('Cannot set Special Party classification on a rejected customer case.');
+    }
+
+    const existingNotes = Array.isArray(record.reviewNotes) ? [...record.reviewNotes] : [];
+    const auditEntry = {
+      action: 'CLASSIFICATION_CHANGED',
+      previousClassification: record.customerClassification || 'REGULAR',
+      newClassification: valid,
+      reviewer: updatedBy,
+      timestamp: new Date().toISOString(),
+      remarks: remarks || `Classification updated to ${valid === 'SPECIAL_PARTY' ? 'Special Party' : 'Regular Buyer'}`,
+    };
+    existingNotes.push(auditEntry);
+
     const updated = await this.prisma.customerVerificationRequest.update({
       where: { requestCode: record.requestCode },
       data: {
         customerClassification: valid,
+        reviewNotes: existingNotes,
       },
       include: {
         registration: {
-          include: { documents: true },
+          include: {
+            documents: {
+              where: { status: { not: 'SUPERSEDED' } },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
         },
+        user: true,
       },
     });
     return this.formatRecord(updated);

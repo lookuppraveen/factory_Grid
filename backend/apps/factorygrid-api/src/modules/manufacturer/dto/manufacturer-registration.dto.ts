@@ -15,21 +15,22 @@ import {
   Min,
   MinLength,
   ValidateNested,
+  ValidateIf,
   IsIn,
 } from 'class-validator';
 
 /** Document categories in manufacturer onboarding.
- * Mandatory: mfgLicense, gmpCert (GLP), whoGmpCert (WHO-GLP), isoCert, pollutionCert.
- * Optional: factoryReg (retained for historical data), otherCert (allows uploading additional certificates).
+ * Mandatory required documents: mfgLicense, gmpCert, whoGmpCert.
+ * Historical/Optional: isoCert, pollutionCert, factoryReg, otherCert.
  */
 export const MANUFACTURER_DOCUMENT_CATEGORIES = [
-  { key: 'mfgLicense', name: 'Manufacturing License', isMandatory: true },
-  { key: 'gmpCert', name: 'GLP Certificate', isMandatory: true },
-  { key: 'whoGmpCert', name: 'WHO-GLP Certificate', isMandatory: true },
-  { key: 'isoCert', name: 'ISO Certification', isMandatory: true },
-  { key: 'pollutionCert', name: 'Pollution Certificate', isMandatory: true },
-  { key: 'factoryReg', name: 'Factory Registration', isMandatory: false },
-  { key: 'otherCert', name: 'Other Certificates', isMandatory: false },
+  { key: 'mfgLicense', name: 'Manufacturing License', isMandatory: true, description: 'Manufacturing License' },
+  { key: 'gmpCert', name: 'GMP Certificate', isMandatory: true, description: 'GMP Certificate' },
+  { key: 'whoGmpCert', name: 'WHO-GMP Certificate', isMandatory: true, description: 'WHO-GMP Certificate' },
+  { key: 'isoCert', name: 'ISO Certification', isMandatory: true, description: 'ISO Certification' },
+  { key: 'pollutionCert', name: 'Pollution Certificate', isMandatory: true, description: 'Pollution Certificate' },
+  { key: 'factoryReg', name: 'Factory Registration', isMandatory: false, description: 'Factory Registration' },
+  { key: 'otherCert', name: 'Other Certificates', isMandatory: false, description: 'Other Certificates' },
 ] as const;
 
 export const MANDATORY_MANUFACTURER_DOCUMENT_KEYS = [
@@ -42,17 +43,23 @@ export const MANDATORY_MANUFACTURER_DOCUMENT_KEYS = [
 
 export const MANUFACTURER_CATEGORY_KEYS = MANUFACTURER_DOCUMENT_CATEGORIES.map((c) => c.key);
 
-/** Accepts either the wizard key (glpCert, gmpCert, pollutionCert, otherCert, etc.) or the display name. */
+/** Accepts either the wizard key (mfgLicense, gmpCert, whoGmpCert, etc.) or the display name. */
 export function resolveManufacturerCategory(raw: string): { key: string; name: string } | undefined {
   const needle = (raw || '').trim().toLowerCase();
-  if (['glpcert', 'gmpcert', 'glp certificate', 'gmp certificate', 'glp', 'gmp'].includes(needle)) {
-    return { key: 'gmpCert', name: 'GLP Certificate' };
+  if (['gmpcert', 'gmp certificate', 'gmp', 'good manufacturing practice', 'glpcert', 'glp certificate', 'glp'].includes(needle)) {
+    return { key: 'gmpCert', name: 'GMP Certificate' };
   }
-  if (['whoglpcert', 'whogmpcert', 'who-glp certificate', 'who-gmp certificate', 'who glp certificate', 'who gmp certificate', 'who-glp', 'who-gmp', 'whogmp', 'whoglp'].includes(needle)) {
-    return { key: 'whoGmpCert', name: 'WHO-GLP Certificate' };
+  if (['whogmpcert', 'whogmp', 'who-gmp certificate', 'who-gmp', 'who gmp certificate', 'who gmp', 'whoglpcert', 'who-glp certificate', 'who-glp'].includes(needle)) {
+    return { key: 'whoGmpCert', name: 'WHO-GMP Certificate' };
   }
-  if (['pollutioncert', 'pollution certificate', 'pollution control clearance'].includes(needle)) {
+  if (['pollutioncert', 'pollution certificate', 'pollution control clearance', 'spcb noc', 'spcb'].includes(needle)) {
     return { key: 'pollutionCert', name: 'Pollution Certificate' };
+  }
+  if (['mfglicense', 'manufacturing license', 'mfg license', 'form 25', 'form 28'].includes(needle)) {
+    return { key: 'mfgLicense', name: 'Manufacturing License' };
+  }
+  if (['isocert', 'iso certificate', 'iso certification', 'iso'].includes(needle)) {
+    return { key: 'isoCert', name: 'ISO Certification' };
   }
   if (['factoryreg', 'factory registration', 'factory cert'].includes(needle)) {
     return { key: 'factoryReg', name: 'Factory Registration' };
@@ -130,21 +137,37 @@ export class ManufacturerDocumentDatesDto {
   @IsNotEmpty()
   category!: string;
 
-  @ApiProperty({ example: '2023-04-15', description: 'ISO date (YYYY-MM-DD); must not be in the future' })
+  @ApiPropertyOptional({ example: '2023-04-15', description: 'ISO date (YYYY-MM-DD); must not be in the future' })
+  @IsOptional()
+  @ValidateIf((o) => !!o.issueDate)
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'issueDate must be YYYY-MM-DD' })
-  issueDate!: string;
+  issueDate?: string;
 
-  @ApiProperty({ example: '2028-04-14', description: 'ISO date (YYYY-MM-DD); must be after issueDate and not already expired' })
+  @ApiPropertyOptional({ example: '2028-04-14', description: 'ISO date (YYYY-MM-DD); must be after issueDate and not already expired' })
+  @IsOptional()
+  @ValidateIf((o) => !!o.expiryDate)
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'expiryDate must be YYYY-MM-DD' })
-  expiryDate!: string;
+  expiryDate?: string;
+
+  @ApiPropertyOptional({ example: 'GMP-MH-2023-4819', description: 'Official registration or license number' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  documentNumber?: string;
 }
 
 export class ManufacturerStep2Dto {
-  @ApiProperty({ type: [ManufacturerDocumentDatesDto], description: 'Issue/expiry dates for the uploaded certifications' })
+  @ApiPropertyOptional({ type: [ManufacturerDocumentDatesDto], description: 'Issue/expiry dates for the uploaded certifications' })
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ManufacturerDocumentDatesDto)
-  documents!: ManufacturerDocumentDatesDto[];
+  documents?: ManufacturerDocumentDatesDto[];
+
+  @ApiPropertyOptional({ example: true, description: 'Whether WHO-GMP is applicable to this manufacturing facility (defaults to true; set to false for domestic Schedule M only facilities)' })
+  @IsOptional()
+  @IsBoolean()
+  whoGmpApplicable?: boolean;
 }
 
 export class ManufacturerStep3Dto {
@@ -226,6 +249,11 @@ export class ManufacturerSubmitDto {
   @ApiProperty({ example: true, description: 'Declaration that all information and documents are accurate' })
   @IsBoolean()
   confirmAccurate!: boolean;
+
+  @ApiPropertyOptional({ example: true, description: 'Whether WHO-GMP is applicable to this facility' })
+  @IsOptional()
+  @IsBoolean()
+  whoGmpApplicable?: boolean;
 }
 
 export class ManufacturerReviewDocumentDto {
@@ -261,6 +289,9 @@ export class ManufacturerDocumentResponseDto {
   @ApiProperty({ example: 'DOC-12' })
   documentCode!: string;
 
+  @ApiPropertyOptional({ example: 'GMP-MH-2023-4819' })
+  documentNumber?: string | null;
+
   @ApiProperty({ example: 'mfgLicense', enum: MANUFACTURER_CATEGORY_KEYS })
   category!: string;
 
@@ -288,11 +319,20 @@ export class ManufacturerDocumentResponseDto {
   @ApiPropertyOptional({ example: 'Certificate is blurred' })
   rejectionReason?: string | null;
 
+  @ApiPropertyOptional({ example: 'Certificate is blurred' })
+  adminRemarks?: string | null;
+
   @ApiPropertyOptional({ example: 'admin' })
   reviewedBy?: string | null;
 
+  @ApiPropertyOptional({ example: 'admin' })
+  verifiedBy?: string | null;
+
   @ApiPropertyOptional({ example: '2026-10-14T10:00:00.000Z' })
   reviewedAt?: string | null;
+
+  @ApiPropertyOptional({ example: '2026-10-14T10:00:00.000Z' })
+  verifiedAt?: string | null;
 
   @ApiPropertyOptional({ example: 'REJECTED' })
   reviewDecision?: string | null;
@@ -302,4 +342,37 @@ export class ManufacturerDocumentResponseDto {
 
   @ApiProperty({ example: '2026-10-14T10:00:00.000Z' })
   uploadedAt!: string;
+
+  @ApiPropertyOptional({ example: '/api/v1/manufacturer/documents/12/download' })
+  downloadUrl?: string;
+}
+
+export class ManufacturerVerificationPatchDto {
+  @ApiPropertyOptional({ enum: ['APPROVED', 'REJECTED', 'NEEDS_REPLACEMENT', 'VALID', 'REQUEST_MORE_DOCUMENTS'], example: 'APPROVED' })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({ enum: ['APPROVED', 'REJECTED', 'NEEDS_REPLACEMENT'], example: 'APPROVED' })
+  @IsOptional()
+  @IsString()
+  decision?: 'APPROVED' | 'REJECTED' | 'NEEDS_REPLACEMENT' | string;
+
+  @ApiPropertyOptional({ example: 'All certifications verified against state FDA register.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  remarks?: string;
+
+  @ApiPropertyOptional({ example: 'Certificate is blurred' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+
+  @ApiPropertyOptional({ example: 'All certifications verified.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  adminRemarks?: string;
 }

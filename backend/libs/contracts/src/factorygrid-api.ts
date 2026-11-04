@@ -135,6 +135,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/buyer/documents/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download or stream an uploaded buyer regulatory document by ID */
+        get: operations["BuyerRegistrationController_downloadDocumentById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/buyer/registration/submit": {
         parameters: {
             query?: never;
@@ -172,6 +189,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/buyer/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get authenticated buyer profile, registration, and compliance status */
+        get: operations["BuyerRegistrationController_getBuyerProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/buyer/registration/{code}": {
         parameters: {
             query?: never;
@@ -189,6 +223,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/buyer/brand-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List authenticated buyer brand documents */
+        get: operations["BuyerBrandDocumentsController_listMyDocuments"];
+        put?: never;
+        /** Upload a new brand document */
+        post: operations["BuyerBrandDocumentsController_uploadDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/brand-documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update or re-upload a brand document */
+        put: operations["BuyerBrandDocumentsController_updateDocument"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/brand-documents/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download / view authorized brand document */
+        get: operations["BuyerBrandDocumentsController_downloadDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/trademark-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List authenticated buyer trademark documents */
+        get: operations["BuyerTrademarkDocumentsController_listMyDocuments"];
+        put?: never;
+        /** Upload a new trademark document */
+        post: operations["BuyerTrademarkDocumentsController_uploadDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/trademark-documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update or re-upload a trademark document */
+        put: operations["BuyerTrademarkDocumentsController_updateDocument"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/trademark-documents/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download / view authorized trademark document */
+        get: operations["BuyerTrademarkDocumentsController_downloadDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/manufacturer/catalog": {
         parameters: {
             query?: never;
@@ -197,7 +335,58 @@ export interface paths {
             cookie?: never;
         };
         /** List master product catalogue for manufacturer capabilities */
-        get: operations["ManufacturerRegistrationController_listCatalog"];
+        get: operations["ManufacturerRegistrationController_listCatalog[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List master product catalogue for manufacturer capabilities */
+        get: operations["ManufacturerRegistrationController_listCatalog[1]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Category -> Sub-Category -> Sub-Sub-Category hierarchy for manufacturer onboarding */
+        get: operations["ManufacturerRegistrationController_listCategories[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Category -> Sub-Category -> Sub-Sub-Category hierarchy for manufacturer onboarding */
+        get: operations["ManufacturerRegistrationController_listCategories[1]"];
         put?: never;
         post?: never;
         delete?: never;
@@ -216,7 +405,24 @@ export interface paths {
         get?: never;
         put?: never;
         /** Step 1: Save Company & Plant Information */
-        post: operations["ManufacturerRegistrationController_saveStep1"];
+        post: operations["ManufacturerRegistrationController_saveStep1[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/registration/step-1": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 1: Save Company & Plant Information */
+        post: operations["ManufacturerRegistrationController_saveStep1[1]"];
         delete?: never;
         options?: never;
         head?: never;
@@ -236,7 +442,27 @@ export interface paths {
          * Step 2 & Document Re-upload: Upload Mandatory Certification Document
          * @description Accepts multipart/form-data for one of the 6 mandatory certification categories. Stores file in MinIO/S3 and records metadata.
          */
-        post: operations["ManufacturerRegistrationController_uploadDocument"];
+        post: operations["ManufacturerRegistrationController_uploadDocument[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/documents/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Step 2 & Document Re-upload: Upload Mandatory Certification Document
+         * @description Accepts multipart/form-data for one of the 6 mandatory certification categories. Stores file in MinIO/S3 and records metadata.
+         */
+        post: operations["ManufacturerRegistrationController_uploadDocument[1]"];
         delete?: never;
         options?: never;
         head?: never;
@@ -254,7 +480,24 @@ export interface paths {
         put?: never;
         post?: never;
         /** Remove an uploaded document before submission */
-        delete: operations["ManufacturerRegistrationController_removeDocument"];
+        delete: operations["ManufacturerRegistrationController_removeDocument[0]"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an uploaded document before submission */
+        delete: operations["ManufacturerRegistrationController_removeDocument[1]"];
         options?: never;
         head?: never;
         patch?: never;
@@ -270,7 +513,24 @@ export interface paths {
         get?: never;
         put?: never;
         /** Step 2: Save Certification Expiry and Issue Dates */
-        post: operations["ManufacturerRegistrationController_saveStep2"];
+        post: operations["ManufacturerRegistrationController_saveStep2[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/registration/step-2": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 2: Save Certification Expiry and Issue Dates */
+        post: operations["ManufacturerRegistrationController_saveStep2[1]"];
         delete?: never;
         options?: never;
         head?: never;
@@ -287,7 +547,24 @@ export interface paths {
         get?: never;
         put?: never;
         /** Step 3: Save Product Manufacturing Capabilities */
-        post: operations["ManufacturerRegistrationController_saveStep3"];
+        post: operations["ManufacturerRegistrationController_saveStep3[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/registration/step-3": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 3: Save Product Manufacturing Capabilities */
+        post: operations["ManufacturerRegistrationController_saveStep3[1]"];
         delete?: never;
         options?: never;
         head?: never;
@@ -304,7 +581,24 @@ export interface paths {
         get?: never;
         put?: never;
         /** Step 4: Save MOQ and Delivery Schedule */
-        post: operations["ManufacturerRegistrationController_saveStep4"];
+        post: operations["ManufacturerRegistrationController_saveStep4[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/registration/step-4": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 4: Save MOQ and Delivery Schedule */
+        post: operations["ManufacturerRegistrationController_saveStep4[1]"];
         delete?: never;
         options?: never;
         head?: never;
@@ -321,7 +615,24 @@ export interface paths {
         get?: never;
         put?: never;
         /** Step 5: Review & Submit Complete Manufacturer Registration */
-        post: operations["ManufacturerRegistrationController_submit"];
+        post: operations["ManufacturerRegistrationController_submit[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/registration/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Step 5: Review & Submit Complete Manufacturer Registration */
+        post: operations["ManufacturerRegistrationController_submit[1]"];
         delete?: never;
         options?: never;
         head?: never;
@@ -336,7 +647,128 @@ export interface paths {
             cookie?: never;
         };
         /** Get current authenticated manufacturer registration details, documents, and status */
-        get: operations["ManufacturerRegistrationController_getMyRegistration"];
+        get: operations["ManufacturerRegistrationController_getMyRegistration[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/my-registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current authenticated manufacturer registration details, documents, and status */
+        get: operations["ManufacturerRegistrationController_getMyRegistration[1]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/me/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current authenticated manufacturer uploaded certification documents */
+        get: operations["ManufacturerRegistrationController_getMyDocuments[0]"];
+        put?: never;
+        /** Upload a new certification document for the authenticated manufacturer */
+        post: operations["ManufacturerRegistrationController_uploadMyDocument[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/me/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current authenticated manufacturer uploaded certification documents */
+        get: operations["ManufacturerRegistrationController_getMyDocuments[1]"];
+        put?: never;
+        /** Upload a new certification document for the authenticated manufacturer */
+        post: operations["ManufacturerRegistrationController_uploadMyDocument[1]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/me/documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace an existing certification document for the authenticated manufacturer */
+        put: operations["ManufacturerRegistrationController_replaceMyDocument[0]"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/me/documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace an existing certification document for the authenticated manufacturer */
+        put: operations["ManufacturerRegistrationController_replaceMyDocument[1]"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/me/documents/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download or stream an authenticated manufacturer certification document */
+        get: operations["ManufacturerRegistrationController_downloadMyDocument[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/me/documents/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download or stream an authenticated manufacturer certification document */
+        get: operations["ManufacturerRegistrationController_downloadMyDocument[1]"];
         put?: never;
         post?: never;
         delete?: never;
@@ -353,7 +785,24 @@ export interface paths {
             cookie?: never;
         };
         /** Get manufacturer registration by registration code */
-        get: operations["ManufacturerRegistrationController_getRegistration"];
+        get: operations["ManufacturerRegistrationController_getRegistration[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/registration/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get manufacturer registration by registration code */
+        get: operations["ManufacturerRegistrationController_getRegistration[1]"];
         put?: never;
         post?: never;
         delete?: never;
@@ -370,7 +819,24 @@ export interface paths {
             cookie?: never;
         };
         /** List certifications for a registration */
-        get: operations["ManufacturerRegistrationController_getDocuments"];
+        get: operations["ManufacturerRegistrationController_getDocuments[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List certifications for a registration */
+        get: operations["ManufacturerRegistrationController_getDocuments[1]"];
         put?: never;
         post?: never;
         delete?: never;
@@ -386,8 +852,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Download a manufacturer certification document */
-        get: operations["ManufacturerRegistrationController_downloadDocument"];
+        /** Download or view a manufacturer certification document */
+        get: operations["ManufacturerRegistrationController_downloadDocument[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/documents/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download or view a manufacturer certification document */
+        get: operations["ManufacturerRegistrationController_downloadDocument[1]"];
         put?: never;
         post?: never;
         delete?: never;
@@ -404,7 +887,24 @@ export interface paths {
             cookie?: never;
         };
         /** Admin/Compliance: List submitted manufacturer registrations for review */
-        get: operations["ManufacturerRegistrationController_listForReview"];
+        get: operations["ManufacturerRegistrationController_listForReview[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/review/verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin/Compliance: List submitted manufacturer registrations for review */
+        get: operations["ManufacturerRegistrationController_listForReview[1]"];
         put?: never;
         post?: never;
         delete?: never;
@@ -421,7 +921,24 @@ export interface paths {
             cookie?: never;
         };
         /** Admin/Compliance: Get single manufacturer registration with documents for audit */
-        get: operations["ManufacturerRegistrationController_getForReview"];
+        get: operations["ManufacturerRegistrationController_getForReview[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/review/verifications/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin/Compliance: Get single manufacturer registration with documents for audit */
+        get: operations["ManufacturerRegistrationController_getForReview[1]"];
         put?: never;
         post?: never;
         delete?: never;
@@ -440,7 +957,24 @@ export interface paths {
         get?: never;
         put?: never;
         /** Admin/Compliance: Approve, reject, or request replacement for a manufacturer certification */
-        post: operations["ManufacturerRegistrationController_reviewDocument"];
+        post: operations["ManufacturerRegistrationController_reviewDocument[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/review/verifications/{code}/documents/{docId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Approve, reject, or request replacement for a manufacturer certification */
+        post: operations["ManufacturerRegistrationController_reviewDocument[1]"];
         delete?: never;
         options?: never;
         head?: never;
@@ -457,11 +991,589 @@ export interface paths {
         get?: never;
         put?: never;
         /** Admin/Compliance: Final approve manufacturer registration and activate account */
-        post: operations["ManufacturerRegistrationController_approve"];
+        post: operations["ManufacturerRegistrationController_approve[0]"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/review/verifications/{code}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Final approve manufacturer registration and activate account */
+        post: operations["ManufacturerRegistrationController_approve[1]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/review/verifications/{code}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Reject manufacturer registration with reason */
+        post: operations["ManufacturerRegistrationController_reject[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/review/verifications/{code}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Reject manufacturer registration with reason */
+        post: operations["ManufacturerRegistrationController_reject[1]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/review/verifications/{code}/request-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Request replacement/additional certifications with notes */
+        post: operations["ManufacturerRegistrationController_requestDocs[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/review/verifications/{code}/request-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Request replacement/additional certifications with notes */
+        post: operations["ManufacturerRegistrationController_requestDocs[1]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/gallery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List factory gallery entries for a manufacturer */
+        get: operations["ManufacturerRegistrationController_listGallery[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/gallery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List factory gallery entries for a manufacturer */
+        get: operations["ManufacturerRegistrationController_listGallery[1]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/gallery/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a factory photo to the gallery
+         * @description Accepts multipart/form-data containing image file (JPG, PNG, WebP; max 10MB) and metadata (title, factoryLocation, captureDate, description, gpsCoordinates).
+         */
+        post: operations["ManufacturerRegistrationController_uploadGalleryEntry[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/gallery/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a factory photo to the gallery
+         * @description Accepts multipart/form-data containing image file (JPG, PNG, WebP; max 10MB) and metadata (title, factoryLocation, captureDate, description, gpsCoordinates).
+         */
+        post: operations["ManufacturerRegistrationController_uploadGalleryEntry[1]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/gallery/{id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream factory gallery photo */
+        get: operations["ManufacturerRegistrationController_getGalleryImage[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/gallery/{id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream factory gallery photo */
+        get: operations["ManufacturerRegistrationController_getGalleryImage[1]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/gallery/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a factory gallery entry */
+        delete: operations["ManufacturerRegistrationController_deleteGalleryEntry[0]"];
+        options?: never;
+        head?: never;
+        /** Update factory gallery photo metadata */
+        patch: operations["ManufacturerRegistrationController_updateGalleryEntry[0]"];
+        trace?: never;
+    };
+    "/api/v1/manufacturers/gallery/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a factory gallery entry */
+        delete: operations["ManufacturerRegistrationController_deleteGalleryEntry[1]"];
+        options?: never;
+        head?: never;
+        /** Update factory gallery photo metadata */
+        patch: operations["ManufacturerRegistrationController_updateGalleryEntry[1]"];
+        trace?: never;
+    };
+    "/api/v1/manufacturer/achievements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List achievements and awards for a manufacturer */
+        get: operations["ManufacturerRegistrationController_listAchievements[0]"];
+        put?: never;
+        /** Create an achievement or award record */
+        post: operations["ManufacturerRegistrationController_createAchievement[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/achievements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List achievements and awards for a manufacturer */
+        get: operations["ManufacturerRegistrationController_listAchievements[1]"];
+        put?: never;
+        /** Create an achievement or award record */
+        post: operations["ManufacturerRegistrationController_createAchievement[1]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/achievements/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an achievement or award */
+        delete: operations["ManufacturerRegistrationController_deleteAchievement[0]"];
+        options?: never;
+        head?: never;
+        /** Update an achievement or award record */
+        patch: operations["ManufacturerRegistrationController_updateAchievement[0]"];
+        trace?: never;
+    };
+    "/api/v1/manufacturers/achievements/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an achievement or award */
+        delete: operations["ManufacturerRegistrationController_deleteAchievement[1]"];
+        options?: never;
+        head?: never;
+        /** Update an achievement or award record */
+        patch: operations["ManufacturerRegistrationController_updateAchievement[1]"];
+        trace?: never;
+    };
+    "/api/v1/manufacturer/achievements/{id}/certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download or view achievement supporting certificate */
+        get: operations["ManufacturerRegistrationController_getAchievementCertificate[0]"];
+        put?: never;
+        /** Upload or replace supporting document/certificate for an achievement */
+        post: operations["ManufacturerRegistrationController_uploadAchievementCertificate[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/achievements/{id}/certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download or view achievement supporting certificate */
+        get: operations["ManufacturerRegistrationController_getAchievementCertificate[1]"];
+        put?: never;
+        /** Upload or replace supporting document/certificate for an achievement */
+        post: operations["ManufacturerRegistrationController_uploadAchievementCertificate[1]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/review/verifications/{code}/gallery/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Verify or reject a manufacturer factory gallery entry */
+        post: operations["ManufacturerRegistrationController_reviewGalleryEntry[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/review/verifications/{code}/gallery/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Verify or reject a manufacturer factory gallery entry */
+        post: operations["ManufacturerRegistrationController_reviewGalleryEntry[1]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/review/verifications/{code}/achievements/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Verify or reject a manufacturer achievement or award */
+        post: operations["ManufacturerRegistrationController_reviewAchievement[0]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturers/review/verifications/{code}/achievements/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin/Compliance: Verify or reject a manufacturer achievement or award */
+        post: operations["ManufacturerRegistrationController_reviewAchievement[1]"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/products/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get summary statistics of mapped products for authenticated manufacturer */
+        get: operations["ManufacturerProductController_getSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List products mapped exclusively to authenticated manufacturer facility */
+        get: operations["ManufacturerProductController_listMappedProducts"];
+        put?: never;
+        /** Add product mapping from master catalogue to manufacturer facility */
+        post: operations["ManufacturerProductController_createMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get single product mapping details by mapping ID */
+        get: operations["ManufacturerProductController_getMappingById"];
+        /** Update manufacturer-specific details of a mapped product */
+        put: operations["ManufacturerProductController_updateMapping"];
+        post?: never;
+        /** Remove product mapping from facility */
+        delete: operations["ManufacturerProductController_deleteMapping"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manufacturer/products/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Activate or deactivate product mapping */
+        patch: operations["ManufacturerProductController_updateStatus"];
+        trace?: never;
+    };
+    "/api/v1/admin/manufacturers/{manufacturerId}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin: List all uploaded certification documents for a manufacturer */
+        get: operations["AdminManufacturerController_getDocuments[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/manufacturer/{manufacturerId}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin: List all uploaded certification documents for a manufacturer */
+        get: operations["AdminManufacturerController_getDocuments[1]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/manufacturers/{manufacturerId}/documents/{documentId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin: Download or stream a manufacturer certification document */
+        get: operations["AdminManufacturerController_downloadDocument[0]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/manufacturer/{manufacturerId}/documents/{documentId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin: Download or stream a manufacturer certification document */
+        get: operations["AdminManufacturerController_downloadDocument[1]"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/manufacturers/{manufacturerId}/documents/{documentId}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Verify, approve, reject or request replacement for a manufacturer certification document */
+        patch: operations["AdminManufacturerController_verifyDocument[0]"];
+        trace?: never;
+    };
+    "/api/v1/admin/manufacturer/{manufacturerId}/documents/{documentId}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Verify, approve, reject or request replacement for a manufacturer certification document */
+        patch: operations["AdminManufacturerController_verifyDocument[1]"];
         trace?: never;
     };
     "/api/v1/compliance/customer-verifications": {
@@ -586,6 +1698,312 @@ export interface paths {
          * @description Allows Admin/Compliance Officer to approve, reject, or request replacement for a specific document with reason.
          */
         post: operations["ComplianceController_reviewDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/customer-verifications/{id}/documents/{docId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream an uploaded buyer document within a customer verification case */
+        get: operations["ComplianceController_downloadCaseDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/customer-verifications/{id}/classification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update customer classification (REGULAR or SPECIAL_PARTY) */
+        post: operations["ComplianceController_updateClassification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/documents/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download or stream uploaded regulatory document for PDF viewer */
+        get: operations["ComplianceDocumentController_downloadDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/brand-verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all brand verification records for compliance desk */
+        get: operations["BrandVerificationController_listAll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/brand-verifications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get brand verification details by ID */
+        get: operations["BrandVerificationController_getById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/brand-verifications/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve brand authorization */
+        post: operations["BrandVerificationController_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/brand-verifications/{id}/request-auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Letter of Authorization / additional documents */
+        post: operations["BrandVerificationController_requestAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/brand-verifications/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject brand authorization */
+        post: operations["BrandVerificationController_reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/brand-verifications/{id}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update a specific verification check */
+        post: operations["BrandVerificationController_updateCheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/brand-verifications/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download uploaded brand document file */
+        get: operations["BrandVerificationController_download"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/trademark-verifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all trademark verification records for compliance desk */
+        get: operations["TrademarkVerificationController_listAll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/trademark-verifications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get trademark verification details by ID */
+        get: operations["TrademarkVerificationController_getById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/trademark-verifications/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve trademark filing */
+        post: operations["TrademarkVerificationController_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/trademark-verifications/{id}/conflict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark conflict on trademark registration */
+        post: operations["TrademarkVerificationController_markConflict"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/trademark-verifications/{id}/expired": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark trademark registration as expired */
+        post: operations["TrademarkVerificationController_markExpired"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/trademark-verifications/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject trademark filing */
+        post: operations["TrademarkVerificationController_reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/trademark-verifications/{id}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update a specific verification check */
+        post: operations["TrademarkVerificationController_updateCheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/trademark-verifications/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download uploaded trademark certificate file */
+        get: operations["TrademarkVerificationController_download"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -746,23 +2164,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/buyer/profile": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Buyer profile access check */
-        get: operations["BuyerAccessController_profile"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/manufacturer/dashboard": {
         parameters: {
             query?: never;
@@ -791,6 +2192,817 @@ export interface paths {
         get: operations["ManufacturerAccessController_profile"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List master product catalog with filters
+         * @description Publicly readable by buyers, manufacturers and admins with query filtering.
+         */
+        get: operations["CatalogController_listProducts"];
+        put?: never;
+        /**
+         * Admin: Create new central catalog product
+         * @description Requires platform Administrator credentials. Persists directly into PostgreSQL.
+         */
+        post: operations["CatalogController_createProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get single catalog product by ID or Code */
+        get: operations["CatalogController_getProduct"];
+        /** Admin: Update central catalog product */
+        put: operations["CatalogController_updateProduct"];
+        post?: never;
+        /** Admin: Delete or deactivate product */
+        delete: operations["CatalogController_deleteProduct"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/products/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Toggle or update product lifecycle status */
+        patch: operations["CatalogController_toggleProductStatus"];
+        trace?: never;
+    };
+    "/api/v1/catalog/products/{id}/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get dynamic attributes for product */
+        get: operations["CatalogController_getProductAttributes"];
+        /** Admin: Update dynamic attributes for product */
+        put: operations["CatalogController_saveProductAttributes"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/products/{id}/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get prices for product */
+        get: operations["CatalogController_getProductPrices"];
+        put?: never;
+        /** Add product price definition */
+        post: operations["CatalogController_createProductPrice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/products/{id}/manufacturers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get manufacturer mappings for product */
+        get: operations["CatalogController_getProductManufacturers"];
+        put?: never;
+        /** Map product to manufacturer */
+        post: operations["CatalogController_mapProductManufacturer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Category -> Sub-Category -> Sub-Sub-Category hierarchy with pagination and filters */
+        get: operations["CatalogController_listCategories"];
+        put?: never;
+        /** Admin: Create new Category hierarchy record */
+        post: operations["CatalogController_createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get single category by ID or Code */
+        get: operations["CatalogController_getCategory"];
+        /** Admin: Update Category record */
+        put: operations["CatalogController_updateCategory"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/product-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all active product types from database with pagination and filters */
+        get: operations["CatalogController_listProductTypes"];
+        put?: never;
+        /** Admin: Create new Product Type */
+        post: operations["CatalogController_createProductType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/product-types/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Product Type by ID or Code */
+        get: operations["CatalogController_getProductType"];
+        /** Admin: Update Product Type */
+        put: operations["CatalogController_updateProductType"];
+        post?: never;
+        /** Admin: Delete Product Type */
+        delete: operations["CatalogController_deleteProductType"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/product-types/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Toggle Product Type active/inactive status */
+        patch: operations["CatalogController_toggleProductTypeStatus"];
+        trace?: never;
+    };
+    "/api/v1/catalog/product-types/{id}/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get attributes applicable to this Product Type */
+        get: operations["CatalogController_getProductTypeAttributes"];
+        /** Admin: Bulk update assigned attributes for this Product Type */
+        put: operations["CatalogController_bulkUpdateProductTypeAttributes"];
+        /** Admin: Assign an attribute to this Product Type */
+        post: operations["CatalogController_assignProductTypeAttribute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/product-types/{id}/attributes/{attributeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Admin: Update attribute configuration for this Product Type */
+        put: operations["CatalogController_updateProductTypeAttribute"];
+        post?: never;
+        /** Admin: Remove attribute assignment from Product Type */
+        delete: operations["CatalogController_removeProductTypeAttribute"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/categories/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Toggle category status between ACTIVE and INACTIVE */
+        patch: operations["CatalogController_toggleCategoryStatus"];
+        trace?: never;
+    };
+    "/api/v1/catalog/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List reusable central attribute master definitions */
+        get: operations["CatalogController_listAttributes"];
+        put?: never;
+        /** Admin: Create new central reusable attribute */
+        post: operations["CatalogController_createAttribute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/attributes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get attribute definition by ID or code */
+        get: operations["CatalogController_getAttribute"];
+        /** Admin: Update attribute definition */
+        put: operations["CatalogController_updateAttribute"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/attributes/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Toggle attribute status */
+        patch: operations["CatalogController_toggleAttributeStatus"];
+        trace?: never;
+    };
+    "/api/v1/catalog/attributes/{id}/product-types/{productTypeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin: Assign attribute to Product Type */
+        post: operations["CatalogController_assignAttributeToProductType"];
+        /** Admin: Remove attribute from Product Type */
+        delete: operations["CatalogController_removeAttributeFromProductType"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List master product catalog with filters and pagination
+         * @description Public read-only formulation catalogue from PostgreSQL for buyers and marketplace users.
+         */
+        get: operations["ProductsController_listProducts"];
+        put?: never;
+        /** Admin: Create new central catalog product */
+        post: operations["ProductsController_createProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search products by query string */
+        get: operations["ProductsController_searchProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get single catalog product by ID or Code */
+        get: operations["ProductsController_getProduct"];
+        /** Admin: Update central catalog product */
+        put: operations["ProductsController_updateProduct"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Toggle or update product lifecycle status */
+        patch: operations["ProductsController_toggleProductStatus"];
+        trace?: never;
+    };
+    "/api/v1/products/{id}/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get dynamic attributes for product */
+        get: operations["ProductsController_getProductAttributes"];
+        /** Admin: Update dynamic attributes for product */
+        put: operations["ProductsController_saveProductAttributes"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{id}/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get price list for product */
+        get: operations["ProductsController_getProductPrices"];
+        put?: never;
+        /** Add product price definition */
+        post: operations["ProductsController_createProductPrice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{id}/manufacturers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get manufacturer mappings for product */
+        get: operations["ProductsController_getProductManufacturers"];
+        put?: never;
+        /** Map product to manufacturer */
+        post: operations["ProductsController_mapProductManufacturer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Category -> Sub-Category -> Sub-Sub-Category hierarchy with pagination and filters */
+        get: operations["CategoriesController_listCategories"];
+        put?: never;
+        /** Admin: Create new Category hierarchy record */
+        post: operations["CategoriesController_createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/product-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all active product types from database */
+        get: operations["CategoriesController_listProductTypes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get category by ID or Code */
+        get: operations["CategoriesController_getCategory"];
+        /** Admin: Update Category record */
+        put: operations["CategoriesController_updateCategory"];
+        post?: never;
+        /** Admin: Delete Category record */
+        delete: operations["CategoriesController_deleteCategory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Toggle category status between ACTIVE and INACTIVE */
+        patch: operations["CategoriesController_toggleCategoryStatus"];
+        trace?: never;
+    };
+    "/api/v1/categories/{categoryId}/sub-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sub-categories for a given category */
+        get: operations["CategoriesController_getSubCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{categoryId}/sub-categories/{subCategory}/sub-sub-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List sub-sub-categories for a given category and sub-category */
+        get: operations["CategoriesController_getSubSubCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List central Attribute Master records
+         * @description Fetch reusable enterprise attributes with filters for data type, status, and text search.
+         */
+        get: operations["AttributesController_listAttributes"];
+        put?: never;
+        /**
+         * Admin: Create new central reusable attribute
+         * @description Persists reusable attribute into PostgreSQL attribute_masters table.
+         */
+        post: operations["AttributesController_createAttribute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attributes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get attribute definition by ID or code */
+        get: operations["AttributesController_getAttribute"];
+        /** Admin: Update attribute definition */
+        put: operations["AttributesController_updateAttribute"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attributes/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Toggle attribute active status */
+        patch: operations["AttributesController_toggleAttributeStatus"];
+        trace?: never;
+    };
+    "/api/v1/attributes/{id}/product-types/{productTypeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin: Assign this attribute to a Product Type */
+        post: operations["AttributesController_assignToProductType"];
+        /** Admin: Remove this attribute from a Product Type */
+        delete: operations["AttributesController_removeFromProductType"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/product-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all Product Types with pagination, search, and lifecycle filtering */
+        get: operations["ProductTypesController_listProductTypes"];
+        put?: never;
+        /** Admin: Create new Product Type */
+        post: operations["ProductTypesController_createProductType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/product-types/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Product Type by ID or Code */
+        get: operations["ProductTypesController_getProductType"];
+        /** Admin: Update Product Type */
+        put: operations["ProductTypesController_updateProductType"];
+        post?: never;
+        /** Admin: Delete Product Type */
+        delete: operations["ProductTypesController_deleteProductType"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/product-types/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin: Toggle Product Type active/inactive lifecycle status */
+        patch: operations["ProductTypesController_toggleProductTypeStatus"];
+        trace?: never;
+    };
+    "/api/v1/product-types/{id}/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get attributes applicable to this Product Type
+         * @description Returns all attributes assigned to this Product Type with attribute definitions from Attribute Master.
+         */
+        get: operations["ProductTypesController_getProductTypeAttributes"];
+        /** Admin: Bulk update assigned attributes for this Product Type */
+        put: operations["ProductTypesController_bulkUpdateProductTypeAttributes"];
+        /** Admin: Assign an attribute to this Product Type */
+        post: operations["ProductTypesController_assignProductTypeAttribute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/product-types/{id}/attributes/{attributeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Admin: Update attribute configuration for this Product Type */
+        put: operations["ProductTypesController_updateProductTypeAttribute"];
+        post?: never;
+        /** Admin: Remove attribute assignment from Product Type */
+        delete: operations["ProductTypesController_removeProductTypeAttribute"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/rfqs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List RFQs for current authenticated buyer
+         * @description Returns all RFQs belonging to the authenticated buyer. Administrators can view all RFQs.
+         */
+        get: operations["RfqController_listRfqs"];
+        put?: never;
+        /**
+         * Create or draft a new Buyer RFQ
+         * @description Creates an RFQ bound to the authenticated buyer identity. Automatically assigns sequential RFQ number.
+         */
+        post: operations["RfqController_createRfq"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/rfqs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get single RFQ details with product lines */
+        get: operations["RfqController_getRfq"];
+        /** Update an existing draft RFQ */
+        put: operations["RfqController_updateRfq"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/rfqs/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit a valid draft RFQ for pricing and manufacturer distribution */
+        post: operations["RfqController_submitRfq"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/buyer/rfqs/{id}/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run AI/Rule-based manufacturer matching against real PostgreSQL records
+         * @description Matches eligible manufacturers for products in the RFQ. Does NOT submit the RFQ.
+         */
+        post: operations["RfqController_matchManufacturers"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1183,6 +3395,88 @@ export interface components {
             /** @example 2026-10-13T10:00:00.000Z */
             createdAt: string;
         };
+        BuyerBrandDocumentDto: {
+            /** @example 1 */
+            id: string;
+            /** @example 14 */
+            userId: string;
+            /** @example 17 */
+            registrationId?: string | null;
+            /** @example CROCIN PLUS */
+            brandName: string;
+            /** @example SKU-CP-01 */
+            brandReference?: string | null;
+            /** @example Letter of Authorization (LOA) */
+            documentType: string;
+            /** @example LOA-2026-001 */
+            documentNumber?: string | null;
+            /** @example Paracetamol & Caffeine Tablets (500mg/65mg) */
+            dosageForm?: string | null;
+            /** @example TM-908124 */
+            tmRegistrationNo?: string | null;
+            /** @example 2026-01-01 */
+            issueDate?: string | null;
+            /** @example 2028-01-01 */
+            expiryDate?: string | null;
+            /** @example LOA_Signed.pdf */
+            fileName: string;
+            /** @example 1048576 */
+            fileSize: number;
+            /** @example application/pdf */
+            mimeType: string;
+            /** @example UNDER REVIEW */
+            status: string;
+            checks?: {
+                [key: string]: string;
+            } | null;
+            rejectionReason?: string | null;
+            authNotes?: string | null;
+            reviewedBy?: string | null;
+            reviewedAt?: string | null;
+            approvedAt?: string | null;
+            createdAt: string;
+            updatedAt: string;
+        };
+        BuyerTrademarkDocumentDto: {
+            /** @example 1 */
+            id: string;
+            /** @example 14 */
+            userId: string;
+            /** @example 17 */
+            registrationId?: string | null;
+            /** @example CROCIN PLUS */
+            trademarkName: string;
+            /** @example TM-908124 */
+            tmNumber: string;
+            /** @example Class 5 (Pharmaceuticals & Medicinal Preparations) */
+            tmClass: string;
+            /** @example Trademark Registration Certificate */
+            documentType: string;
+            /** @example Customer Uploaded TM Certificate */
+            verificationSource: string;
+            /** @example 2026-01-01 */
+            issueDate?: string | null;
+            /** @example 2030-10-15 */
+            expiryDate?: string | null;
+            /** @example TM_Certificate.pdf */
+            fileName: string;
+            /** @example 2097152 */
+            fileSize: number;
+            /** @example application/pdf */
+            mimeType: string;
+            /** @example UNDER REVIEW */
+            status: string;
+            checks?: {
+                [key: string]: string;
+            } | null;
+            conflictNotes?: string | null;
+            rejectionReason?: string | null;
+            reviewedBy?: string | null;
+            reviewedAt?: string | null;
+            approvedAt?: string | null;
+            createdAt: string;
+            updatedAt: string;
+        };
         ManufacturerStep1Dto: {
             /** @example SunBio LifeSciences Pvt. Ltd. */
             companyName: string;
@@ -1198,17 +3492,17 @@ export interface components {
              */
             pincode: string;
             /**
-             * @description Monthly installed manufacturing capacity
+             * @description Plant manufacturing capacity (optional)
              * @example 10,000,000 Units / Month
              */
-            mfgCapacity: string;
+            mfgCapacity?: string;
             /** @example Dr. Vikram Sethi */
             contactPerson: string;
             /** @example Plant Head / Director */
             designation: string;
             /**
              * Format: email
-             * @description Official plant email (also the login identifier)
+             * @description Email address (also the login identifier)
              * @example plant@sunbiolabs.com
              */
             email: string;
@@ -1230,23 +3524,41 @@ export interface components {
              * @example mfgLicense
              * @enum {string}
              */
-            category: "mfgLicense" | "gmpCert" | "whoGmpCert" | "isoCert" | "factoryReg" | "pollutionCert";
+            category: "mfgLicense" | "gmpCert" | "whoGmpCert" | "isoCert" | "pollutionCert" | "factoryReg" | "otherCert";
             /**
              * @description ISO date (YYYY-MM-DD); must not be in the future
              * @example 2023-04-15
              */
-            issueDate: string;
+            issueDate?: string;
             /**
              * @description ISO date (YYYY-MM-DD); must be after issueDate and not already expired
              * @example 2028-04-14
              */
-            expiryDate: string;
+            expiryDate?: string;
+            /**
+             * @description Official registration or license number
+             * @example GMP-MH-2023-4819
+             */
+            documentNumber?: string;
         };
         ManufacturerStep2Dto: {
             /** @description Issue/expiry dates for the uploaded certifications */
-            documents: components["schemas"]["ManufacturerDocumentDatesDto"][];
+            documents?: components["schemas"]["ManufacturerDocumentDatesDto"][];
+            /**
+             * @description Whether WHO-GMP is applicable to this manufacturing facility (defaults to true; set to false for domestic Schedule M only facilities)
+             * @example true
+             */
+            whoGmpApplicable?: boolean;
         };
         ManufacturerStep3Dto: {
+            /**
+             * @description Manufacturing category IDs
+             * @example [
+             *       "cat-tablets",
+             *       "cat-capsules"
+             *     ]
+             */
+            categoryIds?: string[];
             /**
              * @description Catalogue product IDs; replaces the saved selection
              * @example [
@@ -1254,21 +3566,33 @@ export interface components {
              *       "p2"
              *     ]
              */
-            productIds: string[];
+            productIds?: string[];
         };
         ManufacturerSupplyItemDto: {
             /** @example p1 */
-            productId: string;
+            productId?: string;
+            /** @example cat-tablets */
+            categoryId?: string;
+            /**
+             * @description Batch Size / Minimum order quantity (positive integer)
+             * @example 1000
+             */
+            batchSize?: number;
             /**
              * @description Minimum order quantity (positive integer)
              * @example 1000
              */
-            moq: number;
+            moq?: number;
+            /**
+             * @description Delivery schedule in days (positive integer)
+             * @example 14
+             */
+            deliveryScheduleDays?: number;
             /**
              * @description Typical production delivery schedule in days (positive integer)
              * @example 14
              */
-            leadTimeDays: number;
+            leadTimeDays?: number;
         };
         ManufacturerStep4Dto: {
             items: components["schemas"]["ManufacturerSupplyItemDto"][];
@@ -1286,6 +3610,11 @@ export interface components {
              * @example true
              */
             confirmAccurate: boolean;
+            /**
+             * @description Whether WHO-GMP is applicable to this facility
+             * @example true
+             */
+            whoGmpApplicable?: boolean;
         };
         ManufacturerReviewDocumentDto: {
             /**
@@ -1299,12 +3628,215 @@ export interface components {
              */
             reason?: string;
         };
+        FactoryGalleryEntryDto: {
+            id: string;
+            registrationCode: string;
+            title: string;
+            description?: string | null;
+            fileName: string;
+            fileSize: number;
+            mimeType: string;
+            storageKey: string;
+            imageUrl: string;
+            captureDate?: string | null;
+            factoryLocation: string;
+            gpsCoordinates?: string | null;
+            uploadedBy: string;
+            verificationStatus: string;
+            reviewedBy?: string | null;
+            reviewedAt?: string | null;
+            rejectionReason?: string | null;
+            createdAt: string;
+            updatedAt: string;
+        };
+        UpdateGalleryEntryDto: {
+            /** @description Updated title */
+            title?: string;
+            /** @description Updated description */
+            description?: string;
+            /** @description Photo capture date (YYYY-MM-DD) */
+            captureDate?: string;
+            /** @description Updated factory location */
+            factoryLocation?: string;
+            /** @description Updated GPS coordinates */
+            gpsCoordinates?: string;
+        };
+        ManufacturerAchievementDto: {
+            id: string;
+            registrationCode: string;
+            title: string;
+            awardType: string;
+            issuingOrganization: string;
+            issueDate: string;
+            expiryDate?: string | null;
+            description?: string | null;
+            hasCertificate: boolean;
+            certificateFileName?: string | null;
+            certificateFileSize?: number | null;
+            certificateMimeType?: string | null;
+            certificateUrl?: string | null;
+            verificationStatus: string;
+            reviewedBy?: string | null;
+            reviewedAt?: string | null;
+            rejectionReason?: string | null;
+            createdAt: string;
+            updatedAt: string;
+        };
+        CreateAchievementDto: {
+            /**
+             * @description Achievement or award title
+             * @example National Quality Excellence Award
+             */
+            title: string;
+            /**
+             * @description Award type or recognition category
+             * @example QUALITY_EXCELLENCE
+             */
+            awardType: string;
+            /**
+             * @description Issuing or recognizing organization
+             * @example Indian Pharma Quality Forum (IPQF)
+             */
+            issuingOrganization: string;
+            /**
+             * @description Date of issuance (YYYY-MM-DD)
+             * @example 2025-11-20
+             */
+            issueDate: string;
+            /**
+             * @description Expiry date if applicable (YYYY-MM-DD)
+             * @example 2028-11-19
+             */
+            expiryDate?: string;
+            /** @description Detailed summary of the achievement or audit benchmark */
+            description?: string;
+            /** @description Registration code if not inferred from session */
+            registrationCode?: string;
+        };
+        UpdateAchievementDto: {
+            /** @description Updated title */
+            title?: string;
+            /** @description Updated award type */
+            awardType?: string;
+            /** @description Updated issuing organization */
+            issuingOrganization?: string;
+            /** @description Date of issuance (YYYY-MM-DD) */
+            issueDate?: string;
+            /** @description Expiry date if applicable (YYYY-MM-DD) */
+            expiryDate?: string;
+            /** @description Updated description */
+            description?: string;
+        };
+        ReviewSubmissionDto: {
+            /** @enum {string} */
+            decision: "VERIFIED" | "REJECTED";
+            /** @description Mandatory reason if rejected */
+            reason?: string;
+        };
+        CreateManufacturerProductDto: {
+            /** @description ID of existing product in master catalogue */
+            productId: string;
+            /** @description Manufacturer proprietary product code / catalog reference */
+            manufacturerProductCode?: string;
+            /** @description Manufacturer part number (MPN) */
+            manufacturerPartNumber?: string;
+            /** @description Manufacturer inventory SKU */
+            manufacturerSku?: string;
+            /**
+             * @description Minimum Order Quantity
+             * @default 1000
+             */
+            moq: number;
+            /**
+             * @description Production & dispatch lead time in days
+             * @default 14
+             */
+            leadTimeDays: number;
+            /** @description Packaging and transport configuration details */
+            packagingDetails?: string;
+            /** @description Effective start date (YYYY-MM-DD) */
+            effectiveFrom?: string;
+            /** @description Effective expiry date (YYYY-MM-DD) */
+            effectiveTo?: string;
+            /**
+             * @description Whether this facility is the preferred manufacturer for this product
+             * @default false
+             */
+            isPreferred: boolean;
+            /**
+             * @description Lifecycle status
+             * @default ACTIVE
+             * @enum {string}
+             */
+            lifecycleStatus: "ACTIVE" | "INACTIVE";
+        };
+        UpdateManufacturerProductDto: {
+            /** @description Manufacturer proprietary product code / catalog reference */
+            manufacturerProductCode?: string;
+            /** @description Manufacturer part number (MPN) */
+            manufacturerPartNumber?: string;
+            /** @description Manufacturer inventory SKU */
+            manufacturerSku?: string;
+            /** @description Minimum Order Quantity */
+            moq?: number;
+            /** @description Production & dispatch lead time in days */
+            leadTimeDays?: number;
+            /** @description Packaging and transport configuration details */
+            packagingDetails?: string;
+            /** @description Effective start date (YYYY-MM-DD) */
+            effectiveFrom?: string;
+            /** @description Effective expiry date (YYYY-MM-DD) */
+            effectiveTo?: string;
+            /** @description Whether this facility is the preferred manufacturer for this product */
+            isPreferred?: boolean;
+            /**
+             * @description Lifecycle status
+             * @enum {string}
+             */
+            lifecycleStatus?: "ACTIVE" | "INACTIVE";
+        };
+        UpdateManufacturerProductStatusDto: {
+            /**
+             * @description Target lifecycle status
+             * @enum {string}
+             */
+            status: "ACTIVE" | "INACTIVE";
+        };
+        ManufacturerVerificationPatchDto: {
+            /**
+             * @example APPROVED
+             * @enum {string}
+             */
+            status?: "APPROVED" | "REJECTED" | "NEEDS_REPLACEMENT" | "VALID" | "REQUEST_MORE_DOCUMENTS";
+            /**
+             * @example APPROVED
+             * @enum {string}
+             */
+            decision?: "APPROVED" | "REJECTED" | "NEEDS_REPLACEMENT";
+            /** @example All certifications verified against state FDA register. */
+            remarks?: string;
+            /** @example Certificate is blurred */
+            reason?: string;
+            /** @example All certifications verified. */
+            adminRemarks?: string;
+        };
         ApproveVerificationDto: {
             /**
              * @description Generated customer code if custom
              * @example CUS000101
              */
             customerCode?: string;
+            /**
+             * @description Buyer classification
+             * @example REGULAR
+             * @enum {string}
+             */
+            customerClassification?: "REGULAR" | "SPECIAL_PARTY";
+            /**
+             * @description Approval notes / remarks
+             * @example Verified compliance checks and approved for special terms
+             */
+            remarks?: string;
         };
         RejectVerificationDto: {
             /**
@@ -1338,6 +3870,19 @@ export interface components {
              * @example Rajesh Kumar (Compliance Desk A)
              */
             reviewer?: string;
+        };
+        UpdateClassificationDto: {
+            /**
+             * @description Buyer classification
+             * @example SPECIAL_PARTY
+             * @enum {string}
+             */
+            classification: "REGULAR" | "SPECIAL_PARTY";
+            /**
+             * @description Audit notes / remarks
+             * @example Approved as special buyer after turnover audit
+             */
+            remarks?: string;
         };
         BuyerRegistrationDto: {
             /** @example buyer_pharma_01 */
@@ -1498,6 +4043,859 @@ export interface components {
             success: boolean;
             message: string;
             timestamp: string;
+        };
+        CreateCatalogProductDto: {
+            /**
+             * @description Product database ID
+             * @example prd_01
+             */
+            id?: string;
+            /**
+             * @description Alias for product database ID
+             * @example prd_01
+             */
+            productId?: string;
+            /**
+             * @description Unique central catalog product code
+             * @example PRD001099
+             */
+            productCode?: string;
+            /**
+             * @description Snake-case alias for product code
+             * @example PRD001099
+             */
+            product_code?: string;
+            /**
+             * @description Official product brand/trade name
+             * @example Amoxicillin 500mg Capsules
+             */
+            name: string;
+            /**
+             * @description Display short name
+             * @example Amoxicillin 500
+             */
+            shortName?: string;
+            /**
+             * @description Generic composition name
+             * @example Amoxicillin Trihydrate IP
+             */
+            genericName?: string;
+            /**
+             * @description Dosage formulation form
+             * @example Capsule
+             */
+            dosageForm?: string;
+            /**
+             * @description Product type ID from Category Master
+             * @example pt_med
+             */
+            productTypeId?: string;
+            /**
+             * @description Category database record ID
+             * @example CAT005
+             */
+            categoryId?: string;
+            /**
+             * @description Level 1 Category name
+             * @example Drugs
+             */
+            category: string;
+            /**
+             * @description Level 2 Sub-Category name
+             * @example Capsules
+             */
+            subCategory?: string;
+            /**
+             * @description Level 3 Sub-Sub-Category name
+             * @example Hard Gelatin Capsules
+             */
+            subSubCategory?: string;
+            /**
+             * @description Brand name
+             * @example Amoxipen
+             */
+            brand?: string;
+            /**
+             * @description Brand ID
+             * @example brand_01
+             */
+            brandId?: string;
+            /**
+             * @description Product description
+             * @example Broad-spectrum antibiotic hard gelatin capsule formulation.
+             */
+            description?: string;
+            /**
+             * @description Base unit of measurement
+             * @example Unit
+             */
+            baseUom: string;
+            /**
+             * @description Pack packaging size description
+             * @example 10 x 10 Strip
+             */
+            packSize: string;
+            /**
+             * @description Pack packaging unit of measurement
+             * @example Strip
+             */
+            packUom: string;
+            /**
+             * @description Product lifecycle status
+             * @example ACTIVE
+             * @enum {string}
+             */
+            lifecycleStatus?: "DRAFT" | "ACTIVE" | "INACTIVE" | "DISCONTINUED" | "EOL";
+            /**
+             * @description Available from date (YYYY-MM-DD)
+             * @example 2026-01-01
+             */
+            availableFrom?: string;
+            /**
+             * @description Discontinued on date (YYYY-MM-DD)
+             * @example 2028-12-31
+             */
+            discontinuedOn?: string;
+            /**
+             * @description Replacement product ID or code if discontinued
+             * @example PRD001004
+             */
+            replacementProductId?: string;
+            /**
+             * @description Whether the product is sellable on platform
+             * @example true
+             */
+            isSellable?: boolean;
+            /** @description Category-specific dynamic attribute key-values */
+            attributes?: {
+                [key: string]: unknown;
+            };
+            product_type_id?: string;
+            category_id?: string;
+            sub_category?: string;
+            sub_sub_category?: string;
+            generic_name?: string;
+            short_name?: string;
+            dosage_form?: string;
+            brand_id?: string;
+            base_uom?: string;
+            pack_size?: string;
+            pack_uom?: string;
+            lifecycle_status?: string;
+            available_from?: string;
+            discontinued_on?: string;
+            replacement_product_id?: string;
+            is_sellable?: boolean;
+        };
+        UpdateCatalogProductDto: {
+            /** @example PRD001099 */
+            productCode?: string;
+            /** @example Amoxicillin 500mg Capsules */
+            name?: string;
+            /** @example Amoxicillin 500 */
+            shortName?: string;
+            /** @example Amoxicillin Trihydrate IP */
+            genericName?: string;
+            /** @example Capsule */
+            dosageForm?: string;
+            /** @example pt_med */
+            productTypeId?: string;
+            /** @example CAT005 */
+            categoryId?: string;
+            /** @example Drugs */
+            category?: string;
+            /** @example Capsules */
+            subCategory?: string;
+            /** @example Hard Gelatin Capsules */
+            subSubCategory?: string;
+            /** @example Amoxipen */
+            brand?: string;
+            /** @example brand_01 */
+            brandId?: string;
+            /** @example Updated product description */
+            description?: string;
+            /** @example Unit */
+            baseUom?: string;
+            /** @example 10 x 10 Strip */
+            packSize?: string;
+            /** @example Strip */
+            packUom?: string;
+            /**
+             * @example ACTIVE
+             * @enum {string}
+             */
+            lifecycleStatus?: "DRAFT" | "ACTIVE" | "INACTIVE" | "DISCONTINUED" | "EOL";
+            /** @example 2026-01-01 */
+            availableFrom?: string;
+            /** @example 2028-12-31 */
+            discontinuedOn?: string;
+            /** @example PRD001004 */
+            replacementProductId?: string;
+            /** @example true */
+            isSellable?: boolean;
+            /** @example true */
+            active?: boolean;
+            attributes?: {
+                [key: string]: unknown;
+            };
+        };
+        ProductAttributeValueDto: {
+            /** @example attr_generic_name */
+            attributeId: string;
+            /** @example Paracetamol 500mg */
+            attributeValue: string;
+        };
+        BulkProductAttributesDto: {
+            attributes: components["schemas"]["ProductAttributeValueDto"][];
+        };
+        CreateProductPriceDto: {
+            /** @example prd_1730000000_abc */
+            productId?: string;
+            /**
+             * @description Optional manufacturer link
+             * @example 1
+             */
+            productManufacturerId?: number;
+            /**
+             * @description Customer Segment ID
+             * @example cs_enterprise
+             */
+            customerSegmentId?: string;
+            /**
+             * @default BASE
+             * @example BASE
+             */
+            priceType: string;
+            /**
+             * @default INR
+             * @example INR
+             */
+            currency: string;
+            /**
+             * @description Unit price
+             * @example 45.5
+             */
+            unitPrice: number;
+            /**
+             * @default 1
+             * @example 100
+             */
+            minQuantity: number;
+            /** @example 10000 */
+            maxQuantity?: number;
+            /** @example 2026-01-01 */
+            effectiveFrom?: string;
+            /** @example 2026-12-31 */
+            effectiveTo?: string;
+            /**
+             * @default ACTIVE
+             * @example ACTIVE
+             */
+            priceStatus: string;
+        };
+        MapProductManufacturerDto: {
+            /**
+             * @description Manufacturer Registration ID
+             * @example 1
+             */
+            registrationId: number;
+            /** @example MFG-PRD-001 */
+            manufacturerProductCode?: string;
+            /** @example MPN-9988 */
+            manufacturerPartNumber?: string;
+            /** @example SKU-DRUG-01 */
+            manufacturerSku?: string;
+            /** @example 500 */
+            moq?: number;
+            /** @example 14 */
+            leadTimeDays?: number;
+            /**
+             * @default ACTIVE
+             * @example ACTIVE
+             */
+            lifecycleStatus: string;
+            /**
+             * @default false
+             * @example true
+             */
+            isPreferred: boolean;
+            /** @example 10 strips per box, 50 boxes per master carton */
+            packagingDetails?: string;
+        };
+        ProductTypeAttributeInputDto: {
+            /** @example attr_generic_name */
+            attributeId?: string;
+            /** @example attr_generic_name */
+            attribute_id?: string;
+            /** @example attr_generic_name */
+            id?: string;
+            /** @example GENERIC_NAME */
+            attributeCode?: string;
+            /** @example GENERIC_NAME */
+            attribute_code?: string;
+            /** @example GENERIC_NAME */
+            code?: string;
+            /** @example Generic Composition */
+            attributeName?: string;
+            /** @example Generic Composition */
+            attribute_name?: string;
+            /** @example Generic Composition */
+            name?: string;
+            /**
+             * @example TEXT
+             * @enum {string}
+             */
+            dataType?: "TEXT" | "NUMBER" | "DECIMAL" | "BOOLEAN" | "DATE" | "LIST";
+            /** @example TEXT */
+            data_type?: string;
+            /** @example mg */
+            unitOfMeasure?: string;
+            /** @example mg */
+            unit_of_measure?: string;
+            /**
+             * @example [
+             *       "Option 1",
+             *       "Option 2"
+             *     ]
+             */
+            allowedValues?: string[];
+            /**
+             * @example [
+             *       "Option 1",
+             *       "Option 2"
+             *     ]
+             */
+            allowed_values?: string[];
+            /** @example true */
+            isRequired?: boolean;
+            /** @example true */
+            is_required?: boolean;
+            /** @example true */
+            isFilterable?: boolean;
+            /** @example true */
+            is_filterable?: boolean;
+            /** @example true */
+            isSearchable?: boolean;
+            /** @example true */
+            is_searchable?: boolean;
+            /** @example true */
+            isActive?: boolean;
+            /** @example true */
+            is_active?: boolean;
+            /** @example 1 */
+            displayOrder?: number;
+            /** @example 1 */
+            display_order?: number;
+            /** @example Note */
+            remark?: string;
+        };
+        CreateProductTypeDto: {
+            /**
+             * @description Unique product type identifier
+             * @example pt_med
+             */
+            id?: string;
+            /** @example pt_med */
+            product_type_id?: string;
+            /** @example pt_med */
+            productTypeId?: string;
+            /**
+             * @description Unique product type code
+             * @example PHARMA
+             */
+            productTypeCode?: string;
+            /** @example PHARMA */
+            product_type_code?: string;
+            /** @example PHARMA */
+            code?: string;
+            /**
+             * @description Product type name
+             * @example Pharmaceutical
+             */
+            productTypeName?: string;
+            /** @example Pharmaceutical */
+            product_type_name?: string;
+            /** @example Pharmaceutical */
+            name?: string;
+            /**
+             * @description Description
+             * @example Allopathic pharmaceuticals and therapies
+             */
+            description?: string;
+            /**
+             * @description Lifecycle status
+             * @example ACTIVE
+             */
+            lifecycleStatus?: string;
+            /** @example ACTIVE */
+            lifecycle_status?: string;
+            /** @example Active */
+            status?: string;
+            /**
+             * @description Display order priority
+             * @example 1
+             */
+            displayOrder?: number;
+            /** @example 1 */
+            display_order?: number;
+            /**
+             * @example [
+             *       "attr_generic_name",
+             *       "attr_dosage_form"
+             *     ]
+             */
+            attributeIds?: string[];
+            attribute_ids?: string[];
+            attributes?: components["schemas"]["ProductTypeAttributeInputDto"][];
+        };
+        UpdateProductTypeDto: {
+            /** @example PHARMA */
+            productTypeCode?: string;
+            /** @example PHARMA */
+            product_type_code?: string;
+            /** @example PHARMA */
+            code?: string;
+            /** @example Pharmaceutical */
+            productTypeName?: string;
+            /** @example Pharmaceutical */
+            product_type_name?: string;
+            /** @example Pharmaceutical */
+            name?: string;
+            /** @example Updated description */
+            description?: string;
+            /** @example ACTIVE */
+            lifecycleStatus?: string;
+            /** @example ACTIVE */
+            lifecycle_status?: string;
+            /** @example Active */
+            status?: string;
+            /** @example 1 */
+            displayOrder?: number;
+            /** @example 1 */
+            display_order?: number;
+            /**
+             * @example [
+             *       "attr_generic_name",
+             *       "attr_dosage_form"
+             *     ]
+             */
+            attributeIds?: string[];
+            attribute_ids?: string[];
+            attributes?: components["schemas"]["ProductTypeAttributeInputDto"][];
+        };
+        ProductTypeAttributeItemDto: {
+            /**
+             * @description Attribute Master ID or Code
+             * @example attr_generic_name
+             */
+            attributeId?: string;
+            /** @example attr_generic_name */
+            attribute_id?: string;
+            /**
+             * @default false
+             * @example true
+             */
+            isRequired: boolean;
+            /** @example true */
+            is_required?: boolean;
+            /**
+             * @default 1
+             * @example 1
+             */
+            displayOrder: number;
+            /** @example 1 */
+            display_order?: number;
+            /**
+             * @default ACTIVE
+             * @example ACTIVE
+             */
+            lifecycleStatus: string;
+            /** @example ACTIVE */
+            lifecycle_status?: string;
+            /** @example Applies to this product type formulation */
+            remark?: string;
+        };
+        BulkProductTypeAttributesDto: {
+            attributes: components["schemas"]["ProductTypeAttributeItemDto"][];
+        };
+        UpdateProductTypeAttributeDto: {
+            /** @example true */
+            isRequired?: boolean;
+            /** @example true */
+            is_required?: boolean;
+            /** @example 1 */
+            displayOrder?: number;
+            /** @example 1 */
+            display_order?: number;
+            /** @example ACTIVE */
+            lifecycleStatus?: string;
+            /** @example ACTIVE */
+            lifecycle_status?: string;
+        };
+        CreateCategoryDto: {
+            /**
+             * @description Unique category identifier
+             * @example CAT033
+             */
+            id?: string;
+            /** @example CAT033 */
+            category_id?: string;
+            /** @example CAT033 */
+            categoryId?: string;
+            /**
+             * @description Product type ID (e.g. pt_med, pt_nut, etc.)
+             * @example pt_med
+             */
+            productTypeId?: string;
+            /** @example pt_med */
+            product_type_id?: string;
+            /**
+             * @description Level 1 parent category name
+             * @example Drugs
+             */
+            category?: string;
+            /** @example Drugs */
+            name?: string;
+            /**
+             * @description Level 2 sub-category name
+             * @example Tablets
+             */
+            subCategory?: string;
+            /** @example Tablets */
+            sub_category?: string;
+            /**
+             * @description Level 3 sub-sub-category name
+             * @example Dispersible Tablets
+             */
+            subSubCategory?: string;
+            /** @example Dispersible Tablets */
+            sub_sub_category?: string;
+            /**
+             * @description Unique category code
+             * @example DRUG-TAB-DSP
+             */
+            categoryCode?: string;
+            /** @example DRUG-TAB-DSP */
+            category_code?: string;
+            /** @example DRUG-TAB-DSP */
+            code?: string;
+            /**
+             * @description Category description
+             * @example Dispersible tablets for rapid reconstitution in liquid
+             */
+            description?: string;
+            /**
+             * @description Lifecycle status
+             * @example ACTIVE
+             */
+            lifecycleStatus?: string;
+            /** @example ACTIVE */
+            lifecycle_status?: string;
+            /** @example Active */
+            status?: string;
+            /**
+             * @description Display ordering weight
+             * @example 1
+             */
+            displayOrder?: number;
+            /** @example 1 */
+            display_order?: number;
+        };
+        UpdateCategoryDto: {
+            /** @example pt_med */
+            productTypeId?: string;
+            /** @example pt_med */
+            product_type_id?: string;
+            /** @example Drugs */
+            category?: string;
+            /** @example Drugs */
+            name?: string;
+            /** @example Tablets */
+            subCategory?: string;
+            /** @example Tablets */
+            sub_category?: string;
+            /** @example Dispersible Tablets */
+            subSubCategory?: string;
+            /** @example Dispersible Tablets */
+            sub_sub_category?: string;
+            /** @example DRUG-TAB-DSP */
+            categoryCode?: string;
+            /** @example DRUG-TAB-DSP */
+            category_code?: string;
+            /** @example DRUG-TAB-DSP */
+            code?: string;
+            /** @example Updated category description */
+            description?: string;
+            /** @example ACTIVE */
+            lifecycleStatus?: string;
+            /** @example ACTIVE */
+            lifecycle_status?: string;
+            /** @example Active */
+            status?: string;
+            /** @example 1 */
+            displayOrder?: number;
+            /** @example 1 */
+            display_order?: number;
+        };
+        CreateAttributeMasterDto: {
+            /**
+             * @description Unique identifier or code-based ID
+             * @example attr_generic_name
+             */
+            id?: string;
+            /** @example attr_generic_name */
+            attribute_id?: string;
+            /** @example attr_generic_name */
+            attributeId?: string;
+            /**
+             * @description Unique attribute code across the catalog
+             * @example GENERIC_NAME
+             */
+            attributeCode?: string;
+            /** @example GENERIC_NAME */
+            attribute_code?: string;
+            /** @example GENERIC_NAME */
+            code?: string;
+            /**
+             * @description Human-readable attribute name
+             * @example Generic Name
+             */
+            attributeName?: string;
+            /** @example Generic Name */
+            attribute_name?: string;
+            /** @example Generic Name */
+            name?: string;
+            /**
+             * @example TEXT
+             * @enum {string}
+             */
+            dataType?: "TEXT" | "NUMBER" | "DECIMAL" | "BOOLEAN" | "DATE" | "LIST";
+            /**
+             * @example TEXT
+             * @enum {string}
+             */
+            data_type?: "TEXT" | "NUMBER" | "DECIMAL" | "BOOLEAN" | "DATE" | "LIST";
+            /**
+             * @description Unit of measure (e.g. mg, ml, Months, etc.)
+             * @example mg
+             */
+            unitOfMeasure?: string;
+            /** @example mg */
+            unit_of_measure?: string;
+            /** @example Standard pharmaceutical active entity */
+            remark?: string;
+            /** @example Standard pharmaceutical active entity */
+            description?: string;
+            /**
+             * @description Allowed values for LIST data type
+             * @example [
+             *       "Tablet",
+             *       "Capsule",
+             *       "Syrup"
+             *     ]
+             */
+            allowedValues?: Record<string, never>[];
+            /**
+             * @example [
+             *       "Tablet",
+             *       "Capsule"
+             *     ]
+             */
+            allowed_values?: Record<string, never>[];
+            /**
+             * @default true
+             * @example true
+             */
+            isFilterable: boolean;
+            /** @example true */
+            is_filterable?: boolean;
+            /**
+             * @default true
+             * @example true
+             */
+            isSearchable: boolean;
+            /** @example true */
+            is_searchable?: boolean;
+            /**
+             * @default false
+             * @example false
+             */
+            isRequired: boolean;
+            /** @example false */
+            is_required?: boolean;
+            /**
+             * @default true
+             * @example true
+             */
+            isActive: boolean;
+            /** @example true */
+            is_active?: boolean;
+        };
+        UpdateAttributeMasterDto: {
+            /** @example GENERIC_NAME */
+            attributeCode?: string;
+            /** @example GENERIC_NAME */
+            attribute_code?: string;
+            /** @example GENERIC_NAME */
+            code?: string;
+            /** @example Generic Name */
+            attributeName?: string;
+            /** @example Generic Name */
+            attribute_name?: string;
+            /** @example Generic Name */
+            name?: string;
+            /**
+             * @example TEXT
+             * @enum {string}
+             */
+            dataType?: "TEXT" | "NUMBER" | "DECIMAL" | "BOOLEAN" | "DATE" | "LIST";
+            /**
+             * @example TEXT
+             * @enum {string}
+             */
+            data_type?: "TEXT" | "NUMBER" | "DECIMAL" | "BOOLEAN" | "DATE" | "LIST";
+            /** @example mg */
+            unitOfMeasure?: string;
+            /** @example mg */
+            unit_of_measure?: string;
+            /** @example Updated remark */
+            remark?: string;
+            /** @example Updated remark */
+            description?: string;
+            /**
+             * @example [
+             *       "Tablet",
+             *       "Capsule"
+             *     ]
+             */
+            allowedValues?: Record<string, never>[];
+            /**
+             * @example [
+             *       "Tablet",
+             *       "Capsule"
+             *     ]
+             */
+            allowed_values?: Record<string, never>[];
+            /** @example true */
+            isFilterable?: boolean;
+            /** @example true */
+            is_filterable?: boolean;
+            /** @example true */
+            isSearchable?: boolean;
+            /** @example true */
+            is_searchable?: boolean;
+            /** @example false */
+            isRequired?: boolean;
+            /** @example false */
+            is_required?: boolean;
+            /** @example true */
+            isActive?: boolean;
+            /** @example true */
+            is_active?: boolean;
+        };
+        CreateRfqLineDto: {
+            /** @description Catalog Product ID (if selected from master catalog) */
+            productId?: string;
+            /** @description Product or molecule name */
+            productName: string;
+            /** @description Product code */
+            productCode?: string;
+            /** @description Category */
+            category?: string;
+            /** @description Sub-category */
+            subCategory?: string;
+            /** @description Sub-sub-category */
+            subSubCategory?: string;
+            /**
+             * @description Product Type (BRANDED | GENERIC)
+             * @default BRANDED
+             * @enum {string}
+             */
+            productType: "BRANDED" | "GENERIC";
+            /** @description Dosage Form */
+            dosageForm?: string;
+            /** @description Pack Size */
+            packSize?: string;
+            /**
+             * @description Unit of Measure
+             * @default Units
+             */
+            uom: string;
+            /** @description Quantity required */
+            quantity: number;
+            /** @description Target price per unit */
+            targetPrice?: number;
+            /** @description Agreed unit price for Special Party buyer pre-agreed pricing workflow */
+            buyerProvidedPrice?: number;
+            /** @description Required delivery date (YYYY-MM-DD) */
+            requiredDate?: string;
+            /** @description Line-level remarks/instructions */
+            remarks?: string;
+            /** @description Generic molecule/active ingredient */
+            molecule?: string;
+            /** @description Strength/specification */
+            strength?: string;
+        };
+        CreateRfqDto: {
+            /**
+             * @default STANDARD
+             * @enum {string}
+             */
+            priority: "STANDARD" | "HIGH" | "URGENT";
+            /** @description Delivery location / address */
+            deliveryLocation: string;
+            /** @description RFQ header required date (YYYY-MM-DD) */
+            requiredDate?: string;
+            /** @description RFQ quotation deadline date (YYYY-MM-DD) */
+            deadlineDate?: string;
+            /** @description Header remarks or special instructions */
+            remarks?: string;
+            /**
+             * @description Whether credit terms are requested
+             * @default false
+             */
+            creditRequired: boolean;
+            /** @description Requested credit terms description */
+            creditTerms?: string;
+            /**
+             * @description Whether RFQ contains generic molecules
+             * @default false
+             */
+            isGeneric: boolean;
+            /**
+             * @description Customer classification (REGULAR or SPECIAL_PARTY)
+             * @default REGULAR
+             */
+            customerClassification: string;
+            /**
+             * @default Draft
+             * @enum {string}
+             */
+            status: "Draft" | "Submitted";
+            /** @description Product lines for this RFQ */
+            lines: components["schemas"]["CreateRfqLineDto"][];
+        };
+        UpdateRfqDto: {
+            /** @enum {string} */
+            priority?: "STANDARD" | "HIGH" | "URGENT";
+            /** @description Delivery location / address */
+            deliveryLocation?: string;
+            /** @description RFQ header required date */
+            requiredDate?: string;
+            /** @description RFQ quotation deadline date */
+            deadlineDate?: string;
+            /** @description Header remarks */
+            remarks?: string;
+            /** @description Whether credit terms are requested */
+            creditRequired?: boolean;
+            /** @description Requested credit terms */
+            creditTerms?: string;
+            /** @description Whether RFQ contains generic molecules */
+            isGeneric?: boolean;
+            /** @description Customer classification */
+            customerClassification?: string;
+            /** @description Product lines */
+            lines?: components["schemas"]["CreateRfqLineDto"][];
         };
     };
     responses: never;
@@ -1738,6 +5136,25 @@ export interface operations {
             };
         };
     };
+    BuyerRegistrationController_downloadDocumentById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     BuyerRegistrationController_submitRegistration: {
         parameters: {
             query?: never;
@@ -1800,6 +5217,24 @@ export interface operations {
             };
         };
     };
+    BuyerRegistrationController_getBuyerProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Consolidated buyer profile and verification status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     BuyerRegistrationController_getRegistration: {
         parameters: {
             query?: never;
@@ -1841,7 +5276,163 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_listCatalog: {
+    BuyerBrandDocumentsController_listMyDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuyerBrandDocumentDto"][];
+                };
+            };
+        };
+    };
+    BuyerBrandDocumentsController_uploadDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuyerBrandDocumentDto"];
+                };
+            };
+        };
+    };
+    BuyerBrandDocumentsController_updateDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuyerBrandDocumentDto"];
+                };
+            };
+        };
+    };
+    BuyerBrandDocumentsController_downloadDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuyerTrademarkDocumentsController_listMyDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuyerTrademarkDocumentDto"][];
+                };
+            };
+        };
+    };
+    BuyerTrademarkDocumentsController_uploadDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuyerTrademarkDocumentDto"];
+                };
+            };
+        };
+    };
+    BuyerTrademarkDocumentsController_updateDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuyerTrademarkDocumentDto"];
+                };
+            };
+        };
+    };
+    BuyerTrademarkDocumentsController_downloadDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_listCatalog[0]": {
         parameters: {
             query?: {
                 /** @description Filter by name, generic name, category */
@@ -1861,7 +5452,61 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_saveStep1: {
+    "ManufacturerRegistrationController_listCatalog[1]": {
+        parameters: {
+            query?: {
+                /** @description Filter by name, generic name, category */
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_listCategories[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_listCategories[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_saveStep1[0]": {
         parameters: {
             query?: {
                 /** @description Optional code when updating an existing draft */
@@ -1887,13 +5532,41 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_uploadDocument: {
+    "ManufacturerRegistrationController_saveStep1[1]": {
+        parameters: {
+            query?: {
+                /** @description Optional code when updating an existing draft */
+                registrationCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerStep1Dto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerStepResponseDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_uploadDocument[0]": {
         parameters: {
             query: {
-                category: "mfgLicense" | "gmpCert" | "whoGmpCert" | "isoCert" | "factoryReg" | "pollutionCert";
+                category: "mfgLicense" | "gmpCert" | "whoGmpCert" | "isoCert" | "pollutionCert" | "factoryReg" | "otherCert";
                 registrationCode: string;
-                issueDate: string;
-                expiryDate: string;
+                issueDate?: string;
+                expiryDate?: string;
+                /** @description Optional official certificate or license number */
+                documentNumber?: string;
             };
             header?: never;
             path?: never;
@@ -1919,7 +5592,41 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_removeDocument: {
+    "ManufacturerRegistrationController_uploadDocument[1]": {
+        parameters: {
+            query: {
+                category: "mfgLicense" | "gmpCert" | "whoGmpCert" | "isoCert" | "pollutionCert" | "factoryReg" | "otherCert";
+                registrationCode: string;
+                issueDate?: string;
+                expiryDate?: string;
+                /** @description Optional official certificate or license number */
+                documentNumber?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description Certification PDF/Image (max 10MB)
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_removeDocument[0]": {
         parameters: {
             query?: never;
             header?: never;
@@ -1939,7 +5646,27 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_saveStep2: {
+    "ManufacturerRegistrationController_removeDocument[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Document ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_saveStep2[0]": {
         parameters: {
             query: {
                 registrationCode: string;
@@ -1964,7 +5691,32 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_saveStep3: {
+    "ManufacturerRegistrationController_saveStep2[1]": {
+        parameters: {
+            query: {
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerStep2Dto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerStepResponseDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_saveStep3[0]": {
         parameters: {
             query: {
                 registrationCode: string;
@@ -1989,7 +5741,32 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_saveStep4: {
+    "ManufacturerRegistrationController_saveStep3[1]": {
+        parameters: {
+            query: {
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerStep3Dto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerStepResponseDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_saveStep4[0]": {
         parameters: {
             query: {
                 registrationCode: string;
@@ -2014,7 +5791,32 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_submit: {
+    "ManufacturerRegistrationController_saveStep4[1]": {
+        parameters: {
+            query: {
+                registrationCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerStep4Dto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerStepResponseDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_submit[0]": {
         parameters: {
             query?: never;
             header?: never;
@@ -2035,7 +5837,28 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_getMyRegistration: {
+    "ManufacturerRegistrationController_submit[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerSubmitDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getMyRegistration[0]": {
         parameters: {
             query?: never;
             header?: never;
@@ -2052,7 +5875,188 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_getRegistration: {
+    "ManufacturerRegistrationController_getMyRegistration[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getMyDocuments[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_uploadMyDocument[0]": {
+        parameters: {
+            query?: {
+                category?: string;
+                documentType?: string;
+                issueDate?: string;
+                expiryDate?: string;
+                documentNumber?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getMyDocuments[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_uploadMyDocument[1]": {
+        parameters: {
+            query?: {
+                category?: string;
+                documentType?: string;
+                issueDate?: string;
+                expiryDate?: string;
+                documentNumber?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_replaceMyDocument[0]": {
+        parameters: {
+            query?: {
+                issueDate?: string;
+                expiryDate?: string;
+                documentNumber?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_replaceMyDocument[1]": {
+        parameters: {
+            query?: {
+                issueDate?: string;
+                expiryDate?: string;
+                documentNumber?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_downloadMyDocument[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_downloadMyDocument[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getRegistration[0]": {
         parameters: {
             query?: never;
             header?: never;
@@ -2072,7 +6076,27 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_getDocuments: {
+    "ManufacturerRegistrationController_getRegistration[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration code (REG-MFG-...) */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getDocuments[0]": {
         parameters: {
             query?: {
                 /** @description Optional for authenticated manufacturer */
@@ -2092,9 +6116,32 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_downloadDocument: {
+    "ManufacturerRegistrationController_getDocuments[1]": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional for authenticated manufacturer */
+                registrationCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_downloadDocument[0]": {
+        parameters: {
+            query?: {
+                /** @description Optional registration code for pre-login draft view */
+                registrationCode?: string;
+            };
             header?: never;
             path: {
                 /** @description Document ID */
@@ -2112,7 +6159,30 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_listForReview: {
+    "ManufacturerRegistrationController_downloadDocument[1]": {
+        parameters: {
+            query?: {
+                /** @description Optional registration code for pre-login draft view */
+                registrationCode?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Document ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_listForReview[0]": {
         parameters: {
             query?: {
                 status?: string;
@@ -2132,7 +6202,27 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_getForReview: {
+    "ManufacturerRegistrationController_listForReview[1]": {
+        parameters: {
+            query?: {
+                status?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getForReview[0]": {
         parameters: {
             query?: never;
             header?: never;
@@ -2152,7 +6242,27 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_reviewDocument: {
+    "ManufacturerRegistrationController_getForReview[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_reviewDocument[0]": {
         parameters: {
             query?: never;
             header?: never;
@@ -2178,7 +6288,33 @@ export interface operations {
             };
         };
     };
-    ManufacturerRegistrationController_approve: {
+    "ManufacturerRegistrationController_reviewDocument[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+                /** @description Document ID */
+                docId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerReviewDocumentDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_approve[0]": {
         parameters: {
             query?: never;
             header?: never;
@@ -2191,6 +6327,1015 @@ export interface operations {
         requestBody?: never;
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_approve[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_reject[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_reject[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_requestDocs[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_requestDocs[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_listGallery[0]": {
+        parameters: {
+            query?: {
+                /** @description Optional registration code (or inferred from session) */
+                registrationCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryGalleryEntryDto"][];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_listGallery[1]": {
+        parameters: {
+            query?: {
+                /** @description Optional registration code (or inferred from session) */
+                registrationCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryGalleryEntryDto"][];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_uploadGalleryEntry[0]": {
+        parameters: {
+            query?: {
+                registrationCode?: string;
+                title?: string;
+                factoryLocation?: string;
+                locationName?: string;
+                captureDate?: string;
+                capturedAt?: string;
+                description?: string;
+                gpsCoordinates?: string;
+                latitude?: string;
+                longitude?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryGalleryEntryDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_uploadGalleryEntry[1]": {
+        parameters: {
+            query?: {
+                registrationCode?: string;
+                title?: string;
+                factoryLocation?: string;
+                locationName?: string;
+                captureDate?: string;
+                capturedAt?: string;
+                description?: string;
+                gpsCoordinates?: string;
+                latitude?: string;
+                longitude?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryGalleryEntryDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getGalleryImage[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Gallery entry ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getGalleryImage[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Gallery entry ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_deleteGalleryEntry[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Gallery entry ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_updateGalleryEntry[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Gallery entry ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGalleryEntryDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryGalleryEntryDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_deleteGalleryEntry[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Gallery entry ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_updateGalleryEntry[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Gallery entry ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGalleryEntryDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryGalleryEntryDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_listAchievements[0]": {
+        parameters: {
+            query?: {
+                /** @description Optional registration code */
+                registrationCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"][];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_createAchievement[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAchievementDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_listAchievements[1]": {
+        parameters: {
+            query?: {
+                /** @description Optional registration code */
+                registrationCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"][];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_createAchievement[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAchievementDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_deleteAchievement[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_updateAchievement[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAchievementDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_deleteAchievement[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_updateAchievement[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAchievementDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getAchievementCertificate[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_uploadAchievementCertificate[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_getAchievementCertificate[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "ManufacturerRegistrationController_uploadAchievementCertificate[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_reviewGalleryEntry[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+                /** @description Gallery Entry ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewSubmissionDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryGalleryEntryDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_reviewGalleryEntry[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+                /** @description Gallery Entry ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewSubmissionDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryGalleryEntryDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_reviewAchievement[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewSubmissionDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"];
+                };
+            };
+        };
+    };
+    "ManufacturerRegistrationController_reviewAchievement[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Registration Code */
+                code: string;
+                /** @description Achievement ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewSubmissionDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManufacturerAchievementDto"];
+                };
+            };
+        };
+    };
+    ManufacturerProductController_getSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerProductController_listMappedProducts: {
+        parameters: {
+            query?: {
+                /** @description Search term across name, code, composition, SKU */
+                search?: string;
+                /** @description Filter by category */
+                category?: string;
+                /** @description Filter by sub-category */
+                subCategory?: string;
+                /** @description Filter by sub-sub-category */
+                subSubCategory?: string;
+                /** @description Filter by lifecycle status (ACTIVE, INACTIVE, ALL) */
+                status?: string;
+                /** @description Page number (1-based) */
+                page?: number;
+                /** @description Page size limit */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerProductController_createMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateManufacturerProductDto"];
+            };
+        };
+        responses: {
+            /** @description Product mapped successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerProductController_getMappingById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product mapping ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerProductController_updateMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product mapping ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateManufacturerProductDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerProductController_deleteMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product mapping ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ManufacturerProductController_updateStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product mapping ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateManufacturerProductStatusDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "AdminManufacturerController_getDocuments[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Manufacturer ID, Registration Code, or Manufacturer Code */
+                manufacturerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "AdminManufacturerController_getDocuments[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Manufacturer ID, Registration Code, or Manufacturer Code */
+                manufacturerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "AdminManufacturerController_downloadDocument[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Manufacturer ID, Registration Code, or Manufacturer Code */
+                manufacturerId: string;
+                /** @description Document ID */
+                documentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "AdminManufacturerController_downloadDocument[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Manufacturer ID, Registration Code, or Manufacturer Code */
+                manufacturerId: string;
+                /** @description Document ID */
+                documentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "AdminManufacturerController_verifyDocument[0]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Manufacturer ID, Registration Code, or Manufacturer Code */
+                manufacturerId: string;
+                /** @description Document ID */
+                documentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerVerificationPatchDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "AdminManufacturerController_verifyDocument[1]": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Manufacturer ID, Registration Code, or Manufacturer Code */
+                manufacturerId: string;
+                /** @description Document ID */
+                documentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManufacturerVerificationPatchDto"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2363,6 +7508,355 @@ export interface operations {
         };
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ComplianceController_downloadCaseDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ComplianceController_updateClassification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Request Code or database ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateClassificationDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    ComplianceDocumentController_downloadDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BrandVerificationController_listAll: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BrandVerificationController_getById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BrandVerificationController_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BrandVerificationController_requestAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BrandVerificationController_reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BrandVerificationController_updateCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BrandVerificationController_download: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TrademarkVerificationController_listAll: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TrademarkVerificationController_getById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TrademarkVerificationController_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TrademarkVerificationController_markConflict: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TrademarkVerificationController_markExpired: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TrademarkVerificationController_reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TrademarkVerificationController_updateCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TrademarkVerificationController_download: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2638,33 +8132,6 @@ export interface operations {
             };
         };
     };
-    BuyerAccessController_profile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PortalProfileResponseDto"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponseDto"];
-                };
-            };
-        };
-    };
     ManufacturerAccessController_dashboard: {
         parameters: {
             query?: never;
@@ -2716,6 +8183,1858 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorResponseDto"];
                 };
+            };
+        };
+    };
+    CatalogController_listProducts: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page index (0, 1, 2...) or 1-based index */
+                page?: number;
+                /** @description Number of items per page (10, 20, 50, 100) */
+                size?: number;
+                /** @description Alias for size (limit) */
+                limit?: number;
+                /** @description Sort criteria: fieldName,asc|desc (e.g. createdAt,desc) */
+                sort?: string;
+                /** @description Search query */
+                search?: string;
+                /** @description Filter by category name or ID */
+                category?: string;
+                /** @description Filter by sub-category */
+                subCategory?: string;
+                /** @description Filter by sub-sub-category */
+                subSubCategory?: string;
+                /** @description Filter by product type ID */
+                productTypeId?: string;
+                /** @description Filter by lifecycle status */
+                lifecycleStatus?: string;
+                /** @description Only return active products */
+                activeOnly?: boolean;
+                /** @description Filter by dosage formulation form */
+                dosageForm?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_createProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCatalogProductDto"];
+            };
+        };
+        responses: {
+            /** @description Product created successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_updateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCatalogProductDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_deleteProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_toggleProductStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getProductAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_saveProductAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkProductAttributesDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getProductPrices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_createProductPrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductPriceDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getProductManufacturers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_mapProductManufacturer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapProductManufacturerDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_listCategories: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page index (0, 1, 2...) or 1-based index */
+                page?: number;
+                /** @description Number of items per page (10, 20, 50, 100) */
+                size?: number;
+                /** @description Alias for size (limit) */
+                limit?: number;
+                /** @description Sort criteria: fieldName,asc|desc (e.g. createdAt,desc) */
+                sort?: string;
+                /** @description Search query */
+                search?: string;
+                /** @description Filter by Product Type ID or code */
+                productTypeId?: string;
+                /** @description Filter by lifecycle status (ACTIVE, INACTIVE, ALL) */
+                status?: string;
+                /** @description Only return active category records */
+                activeOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_createCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Category ID or category code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_updateCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCategoryDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_listProductTypes: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page index (0, 1, 2...) or 1-based index */
+                page?: number;
+                /** @description Number of items per page (10, 20, 50, 100) */
+                size?: number;
+                /** @description Alias for size (limit) */
+                limit?: number;
+                /** @description Sort criteria: fieldName,asc|desc (e.g. createdAt,desc) */
+                sort?: string;
+                /** @description Search query */
+                search?: string;
+                /** @description Filter by lifecycle status (ACTIVE, INACTIVE, ALL) */
+                status?: string;
+                /** @description Only return active product types */
+                activeOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_createProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductTypeDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product type ID or code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_updateProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductTypeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_deleteProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_toggleProductTypeStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getProductTypeAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_bulkUpdateProductTypeAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkProductTypeAttributesDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_assignProductTypeAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductTypeAttributeItemDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_updateProductTypeAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+                /** @description Attribute ID or Code */
+                attributeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductTypeAttributeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_removeProductTypeAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+                /** @description Attribute ID or Code */
+                attributeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_toggleCategoryStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_listAttributes: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page index (0, 1, 2...) or 1-based index */
+                page?: number;
+                /** @description Number of items per page (10, 20, 50, 100) */
+                size?: number;
+                /** @description Alias for size (limit) */
+                limit?: number;
+                /** @description Sort criteria: fieldName,asc|desc (e.g. createdAt,desc) */
+                sort?: string;
+                /** @description Search query */
+                search?: string;
+                /** @description Filter by data type */
+                dataType?: "ALL" | "TEXT" | "NUMBER" | "DECIMAL" | "BOOLEAN" | "DATE" | "LIST";
+                /** @description Filter by status */
+                status?: "ALL" | "ACTIVE" | "INACTIVE";
+                /** @description Only return active attributes */
+                activeOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_createAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAttributeMasterDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_updateAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAttributeMasterDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_toggleAttributeStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_assignAttributeToProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Attribute ID or code */
+                id: string;
+                /** @description Product Type ID or code */
+                productTypeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_removeAttributeFromProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Attribute ID or code */
+                id: string;
+                /** @description Product Type ID or code */
+                productTypeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_listProducts: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page index (0, 1, 2...) or 1-based index */
+                page?: number;
+                /** @description Number of items per page (10, 20, 50, 100) */
+                size?: number;
+                /** @description Alias for size (limit) */
+                limit?: number;
+                /** @description Sort criteria: fieldName,asc|desc (e.g. createdAt,desc) */
+                sort?: string;
+                /** @description Text search by name, code, composition */
+                search?: string;
+                /** @description Filter by category name or ID */
+                category?: string;
+                /** @description Filter by sub-category */
+                subCategory?: string;
+                /** @description Filter by sub-sub-category */
+                subSubCategory?: string;
+                /** @description Filter by product type ID */
+                productTypeId?: string;
+                /** @description Filter by lifecycle status */
+                lifecycleStatus?: string;
+                /** @description Only return active products */
+                activeOnly?: boolean;
+                /** @description Filter by dosage formulation form */
+                dosageForm?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_createProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCatalogProductDto"];
+            };
+        };
+        responses: {
+            /** @description Product created successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_searchProducts: {
+        parameters: {
+            query?: {
+                q?: string;
+                /** @description Zero-based page index (0, 1, 2...) or 1-based index */
+                page?: number;
+                /** @description Number of items per page (10, 20, 50, 100) */
+                size?: number;
+                /** @description Alias for size (limit) */
+                limit?: number;
+                /** @description Sort criteria: fieldName,asc|desc (e.g. createdAt,desc) */
+                sort?: string;
+                /** @description Search query */
+                search?: string;
+                /** @description Filter by category name or ID */
+                category?: string;
+                /** @description Filter by sub-category */
+                subCategory?: string;
+                /** @description Filter by sub-sub-category */
+                subSubCategory?: string;
+                /** @description Filter by product type ID */
+                productTypeId?: string;
+                /** @description Filter by lifecycle status */
+                lifecycleStatus?: string;
+                /** @description Only return active products */
+                activeOnly?: boolean;
+                /** @description Filter by dosage formulation form */
+                dosageForm?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_getProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_updateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCatalogProductDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_toggleProductStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_getProductAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_saveProductAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkProductAttributesDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_getProductPrices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_createProductPrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductPriceDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_getProductManufacturers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_mapProductManufacturer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapProductManufacturerDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CategoriesController_listCategories: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page index (0, 1, 2...) or 1-based index */
+                page?: number;
+                /** @description Number of items per page (10, 20, 50, 100) */
+                size?: number;
+                /** @description Alias for size (limit) */
+                limit?: number;
+                /** @description Sort criteria: fieldName,asc|desc (e.g. createdAt,desc) */
+                sort?: string;
+                /** @description Search query */
+                search?: string;
+                /** @description Filter by Product Type ID or code */
+                productTypeId?: string;
+                /** @description Filter by lifecycle status (ACTIVE, INACTIVE, ALL) */
+                status?: string;
+                /** @description Only return active category records */
+                activeOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CategoriesController_createCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CategoriesController_listProductTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CategoriesController_getCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Category ID or category code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CategoriesController_updateCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCategoryDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CategoriesController_deleteCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CategoriesController_toggleCategoryStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CategoriesController_getSubCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Category name, ID or code */
+                categoryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    CategoriesController_getSubSubCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Category name, ID or code */
+                categoryId: string;
+                /** @description Sub-category name */
+                subCategory: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    AttributesController_listAttributes: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page index (0, 1, 2...) or 1-based index */
+                page?: number;
+                /** @description Number of items per page (10, 20, 50, 100) */
+                size?: number;
+                /** @description Alias for size (limit) */
+                limit?: number;
+                /** @description Sort criteria: fieldName,asc|desc (e.g. createdAt,desc) */
+                sort?: string;
+                /** @description Filter by attribute name or code */
+                search?: string;
+                /** @description Filter by data type */
+                dataType?: "ALL" | "TEXT" | "NUMBER" | "DECIMAL" | "BOOLEAN" | "DATE" | "LIST";
+                /** @description Filter by status */
+                status?: "ALL" | "ACTIVE" | "INACTIVE";
+                /** @description Only return active attributes */
+                activeOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AttributesController_createAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAttributeMasterDto"];
+            };
+        };
+        responses: {
+            /** @description Attribute created successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AttributesController_getAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Attribute ID or attribute code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AttributesController_updateAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Attribute ID or attribute code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAttributeMasterDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AttributesController_toggleAttributeStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Attribute ID or attribute code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AttributesController_assignToProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Attribute ID or code */
+                id: string;
+                /** @description Product Type ID or code */
+                productTypeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AttributesController_removeFromProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Attribute ID or code */
+                id: string;
+                /** @description Product Type ID or code */
+                productTypeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_listProductTypes: {
+        parameters: {
+            query?: {
+                /** @description Zero-based page index (0, 1, 2...) or 1-based index */
+                page?: number;
+                /** @description Number of items per page (10, 20, 50, 100) */
+                size?: number;
+                /** @description Alias for size (limit) */
+                limit?: number;
+                /** @description Sort criteria: fieldName,asc|desc (e.g. createdAt,desc) */
+                sort?: string;
+                /** @description Search query */
+                search?: string;
+                /** @description Filter by lifecycle status (ACTIVE, INACTIVE, ALL) */
+                status?: string;
+                /** @description Only return active product types */
+                activeOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_createProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductTypeDto"];
+            };
+        };
+        responses: {
+            /** @description Product Type successfully created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_getProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product type ID (e.g. pt_med) or code (e.g. PHARMA) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_updateProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductTypeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_deleteProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_toggleProductTypeStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_getProductTypeAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_bulkUpdateProductTypeAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkProductTypeAttributesDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_assignProductTypeAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductTypeAttributeItemDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_updateProductTypeAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+                /** @description Attribute ID or Code */
+                attributeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductTypeAttributeDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductTypesController_removeProductTypeAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID or Code */
+                id: string;
+                /** @description Attribute ID or Code */
+                attributeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RfqController_listRfqs: {
+        parameters: {
+            query?: {
+                /** @description Filter by status (Draft, Submitted, etc.) */
+                status?: string;
+                /** @description Search term for RFQ number, company, or product */
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RfqController_createRfq: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRfqDto"];
+            };
+        };
+        responses: {
+            /** @description RFQ created successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RfqController_getRfq: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description RFQ numeric ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RfqController_updateRfq: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description RFQ numeric ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRfqDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RfqController_submitRfq: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description RFQ numeric ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RfqController_matchManufacturers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description RFQ numeric ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

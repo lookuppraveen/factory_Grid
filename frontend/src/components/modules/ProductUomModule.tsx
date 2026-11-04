@@ -3,8 +3,9 @@ import {
   Layers, Search, Plus, Filter, Edit2, Trash2, X, AlertTriangle,
   Package, CheckCircle2, Clock, Eye, Power, Hash, Calendar
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 import { ProductUom } from '../../types';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export const ProductUomModule: React.FC = () => {
   const {
@@ -77,11 +78,23 @@ export const ProductUomModule: React.FC = () => {
 
       const matchesPrd = selectedProductId === 'ALL' || (u.product_id || (u as any).productId) === selectedProductId;
       const isActive = (u.is_active ?? (u as any).isActive ?? true);
-      const matchesActive = activeFilter === 'ALL' || (activeFilter === 'ACTIVE' ? isActive : !isActive);
-
       return matchesSearch && matchesPrd && matchesActive;
+    }).sort((a, b) => {
+      const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
+      const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return (b.product_uom_id || (b as any).id || '').localeCompare(a.product_uom_id || (a as any).id || '');
     });
   }, [productUoms, products, searchTerm, selectedProductId, activeFilter]);
+
+  const {
+    paginatedItems: paginatedUoms,
+    paginationProps,
+    resetPage
+  } = usePagination(filteredUoms, {
+    initialPageSize: 10,
+    resetDeps: [searchTerm, selectedProductId, activeFilter]
+  });
 
   // Handlers
   const handleOpenAddModal = (defaultProductId?: string) => {
@@ -191,6 +204,7 @@ export const ProductUomModule: React.FC = () => {
       };
       addProductUom(newUom);
       addAuditLog('ADD_PRODUCT_UOM', `Created UOM ${formData.uom} for product ${formData.product_id}`);
+      resetPage();
     }
 
     setIsModalOpen(false);
@@ -482,7 +496,7 @@ export const ProductUomModule: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredUoms.map(u => {
+              paginatedUoms.map(u => {
                 const prd = getProductRecord(u.product_id || (u as any).productId || '');
                 const prdName = prd?.product_name || prd?.name || u.product_id;
                 const prdCode = prd?.product_code || prd?.code || u.product_id;
@@ -675,6 +689,7 @@ export const ProductUomModule: React.FC = () => {
             )}
           </tbody>
         </table>
+        <PaginationControl {...paginationProps} />
       </div>
 
       {/* ── VIEW DETAILS MODAL ────────────────────────────────────── */}

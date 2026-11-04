@@ -6,7 +6,7 @@ import {
   Clock, AlertTriangle, XCircle, FileText, Upload, RefreshCw, Eye,
   Edit3, Check, X, Shield, Lock, AlertCircle, Sparkles, ChevronRight,
   ExternalLink, Download, Info, ArrowUpRight,
-  Image as ImageIcon, Award, Calendar, MapPin, Trash2, Plus, Navigation, Layers, ZoomIn
+  Image as ImageIcon, Award, Calendar, MapPin, Trash2, Plus, Navigation, Layers, ZoomIn, Tag
 } from 'lucide-react';
 import { buyerRegistrationApi } from '../../services/buyerRegistrationApi';
 import {
@@ -20,6 +20,8 @@ import {
 } from '../../services/manufacturerRegistrationApi';
 import { adminVerificationApi } from '../../services/adminVerificationApi';
 import { formatGpsCoordinates } from './ManufacturerVerificationModule';
+import { BuyerBrandDocumentsSection } from './BuyerBrandDocumentsSection';
+import { BuyerTrademarkDocumentsSection } from './BuyerTrademarkDocumentsSection';
 
 export const ProfileModule: React.FC = () => {
   const {
@@ -39,6 +41,11 @@ export const ProfileModule: React.FC = () => {
   const [buyerRegCode, setBuyerRegCode] = useState<string>('');
   const [mfgRegCode, setMfgRegCode] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Documents & Verification sub-navigation state
+  const [docSectionTab, setDocSectionTab] = useState<'statutory' | 'brand' | 'trademark'>('statutory');
+  const [brandDocsCount, setBrandDocsCount] = useState<number>(0);
+  const [trademarkDocsCount, setTrademarkDocsCount] = useState<number>(0);
 
   // Real backend documents state
   const [realDocs, setRealDocs] = useState<UserDocument[] | null>(null);
@@ -663,12 +670,12 @@ export const ProfileModule: React.FC = () => {
               expiryDate: d.expiryDate || 'N/A',
               uploadedDate: d.uploadedAt ? new Date(d.uploadedAt).toISOString().split('T')[0] : 'N/A',
               lastUpdated: d.uploadedAt ? new Date(d.uploadedAt).toISOString().split('T')[0] : 'N/A',
-              verificationStatus: isVerified ? 'VERIFIED' : isRejected ? 'REJECTED' : isReplacement ? 'REJECTED' : 'PENDING VERIFICATION',
-              verifiedBy: d.reviewedBy || (isVerified ? 'Compliance Officer' : 'Pending Compliance'),
-              verificationDate: d.reviewedAt ? new Date(d.reviewedAt).toISOString().split('T')[0] : undefined,
-              remarks: d.rejectionReason || (isVerified ? 'Verified by Compliance Desk' : isReplacement ? 'Replacement requested by Compliance Officer' : 'Under compliance review'),
-              fileName: d.fileName,
-              fileUrl: `/api/v1/manufacturer/documents/${d.id}/download`,
+              verificationStatus: isVerified ? 'VERIFIED' : isReplacement ? 'REPLACEMENT REQUESTED' : isRejected ? 'REJECTED' : 'PENDING VERIFICATION',
+              verifiedBy: d.verifiedBy || d.reviewedBy || (isVerified ? 'Compliance Officer' : 'Pending Compliance'),
+              verificationDate: (d.verifiedAt || d.reviewedAt) ? new Date(d.verifiedAt || d.reviewedAt).toISOString().split('T')[0] : undefined,
+              remarks: d.adminRemarks || d.rejectionReason || (isVerified ? 'Verified by Compliance Desk' : isReplacement ? 'Replacement requested by Compliance Officer' : 'Under compliance review'),
+              fileName: d.originalFileName || d.fileName,
+              fileUrl: d.downloadUrl || `/api/v1/manufacturer/documents/${d.id}/download`,
             };
           });
           setRealDocs(mapped);
@@ -1628,123 +1635,215 @@ const showToast = (msg: string) => {
       {profileSubTab === 'documents' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           
-          <div className="ent-panel" style={{ background: 'var(--bg-surface)' }}>
-            <div className="ent-panel-header">
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileCheck size={18} style={{ color: 'var(--c-primary)' }} />
-                  <div className="ent-section-title">Statutory & Regulatory Documents</div>
+          {/* Sub-section tab switcher for Documents & Verification */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingBottom: 4 }}>
+            <button
+              type="button"
+              onClick={() => setDocSectionTab('statutory')}
+              style={{
+                padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                background: docSectionTab === 'statutory' ? 'var(--c-primary)' : 'var(--bg-surface)',
+                color: docSectionTab === 'statutory' ? '#FFFFFF' : 'var(--text-secondary)',
+                border: docSectionTab === 'statutory' ? 'none' : '1px solid var(--border-subtle)',
+                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8,
+                boxShadow: docSectionTab === 'statutory' ? '0 2px 8px rgba(13, 148, 136, 0.25)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <FileCheck size={16} />
+              <span>Statutory & Regulatory Documents</span>
+              <span style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 12,
+                background: docSectionTab === 'statutory' ? 'rgba(255,255,255,0.25)' : 'var(--bg-app)',
+                color: docSectionTab === 'statutory' ? '#FFFFFF' : 'var(--text-primary)',
+                fontWeight: 800
+              }}>
+                {effectiveDocs.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDocSectionTab('brand')}
+              style={{
+                padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                background: docSectionTab === 'brand' ? 'var(--c-primary)' : 'var(--bg-surface)',
+                color: docSectionTab === 'brand' ? '#FFFFFF' : 'var(--text-secondary)',
+                border: docSectionTab === 'brand' ? 'none' : '1px solid var(--border-subtle)',
+                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8,
+                boxShadow: docSectionTab === 'brand' ? '0 2px 8px rgba(13, 148, 136, 0.25)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Award size={16} />
+              <span>Brand Documents (LOA & Licensing)</span>
+              <span style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 12,
+                background: docSectionTab === 'brand' ? 'rgba(255,255,255,0.25)' : 'var(--bg-app)',
+                color: docSectionTab === 'brand' ? '#FFFFFF' : 'var(--text-primary)',
+                fontWeight: 800
+              }}>
+                {brandDocsCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDocSectionTab('trademark')}
+              style={{
+                padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                background: docSectionTab === 'trademark' ? 'var(--c-primary)' : 'var(--bg-surface)',
+                color: docSectionTab === 'trademark' ? '#FFFFFF' : 'var(--text-secondary)',
+                border: docSectionTab === 'trademark' ? 'none' : '1px solid var(--border-subtle)',
+                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8,
+                boxShadow: docSectionTab === 'trademark' ? '0 2px 8px rgba(13, 148, 136, 0.25)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Tag size={16} />
+              <span>Trademark Documents & Certificates</span>
+              <span style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 12,
+                background: docSectionTab === 'trademark' ? 'rgba(255,255,255,0.25)' : 'var(--bg-app)',
+                color: docSectionTab === 'trademark' ? '#FFFFFF' : 'var(--text-primary)',
+                fontWeight: 800
+              }}>
+                {trademarkDocsCount}
+              </span>
+            </button>
+          </div>
+
+          {/* Section 1: Statutory & Regulatory Documents (Unchanged) */}
+          {docSectionTab === 'statutory' && (
+            <div className="ent-panel" style={{ background: 'var(--bg-surface)' }}>
+              <div className="ent-panel-header">
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FileCheck size={18} style={{ color: 'var(--c-primary)' }} />
+                    <div className="ent-section-title">Statutory & Regulatory Documents</div>
+                  </div>
+                  <div className="ent-caption" style={{ marginTop: 2 }}>
+                    Central document repository for WHO-GMP, CDSCO and statutory business verification.
+                  </div>
                 </div>
-                <div className="ent-caption" style={{ marginTop: 2 }}>
-                  Central document repository for WHO-GMP, CDSCO and statutory business verification.
-                </div>
+
+                <button className="ent-btn-primary" onClick={() => handleOpenUploadDoc()}>
+                  <Upload size={14} /> Upload New Document
+                </button>
               </div>
 
-              <button className="ent-btn-primary" onClick={() => handleOpenUploadDoc()}>
-                <Upload size={14} /> Upload New Document
-              </button>
-            </div>
-
-            <table className="ent-table">
-              <thead>
-                <tr>
-                  <th>Document Name & Type</th>
-                  <th>Document Number</th>
-                  <th>Uploaded Date</th>
-                  <th>Expiry Date</th>
-                  <th>Verification Status</th>
-                  <th>Last Updated</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoadingDocs ? (
+              <table className="ent-table">
+                <thead>
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                        <RefreshCw size={18} className="animate-spin" style={{ color: 'var(--c-primary)' }} />
-                        <span>Loading verified documents...</span>
-                      </div>
-                    </td>
+                    <th>Document Name & Type</th>
+                    <th>Document Number</th>
+                    <th>Uploaded Date</th>
+                    <th>Expiry Date</th>
+                    <th>Verification Status</th>
+                    <th>Last Updated</th>
+                    <th style={{ textAlign: 'right' }}>Action</th>
                   </tr>
-                ) : effectiveDocs.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-tertiary)' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                        <FileText size={40} style={{ color: 'var(--text-tertiary)', opacity: 0.5 }} />
-                        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>No Documents Uploaded</div>
-                        <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', maxWidth: 420, lineHeight: 1.5 }}>
-                          No statutory or regulatory documents have been uploaded for this account yet. Click below to upload your compliance documents.
-                        </div>
-                        <button
-                          className="ent-btn-primary"
-                          onClick={() => handleOpenUploadDoc()}
-                          style={{ marginTop: 8 }}
-                        >
-                          <Upload size={14} /> Upload First Document
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  effectiveDocs.map(doc => (
-                    <tr key={doc.id}>
-                      <td>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{doc.documentName}</div>
-                        <div className="ent-caption">{doc.documentType}</div>
-                        {doc.verificationStatus === 'REJECTED' && doc.remarks && (
-                          <div style={{ fontSize: 11, color: '#EF4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <AlertCircle size={12} /> Reason: {doc.remarks}
-                          </div>
-                        )}
-                      </td>
-                      <td className="ent-mono" style={{ fontSize: 12 }}>{doc.documentNumber || '—'}</td>
-                      <td className="ent-mono" style={{ fontSize: 12 }}>{doc.uploadedDate || '—'}</td>
-                      <td className="ent-mono" style={{ fontSize: 12, color: doc.verificationStatus === 'EXPIRED' ? '#EF4444' : 'var(--text-secondary)' }}>
-                        {doc.expiryDate || '—'}
-                      </td>
-                      <td>{getStatusBadge(doc.verificationStatus)}</td>
-                      <td className="ent-mono" style={{ fontSize: 11 }}>{doc.lastUpdated || '—'}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: 6 }}>
-                          {doc.verificationStatus !== 'NOT UPLOADED' && doc.fileName && (
-                            <button
-                              className="ent-btn-secondary"
-                              style={{ height: 30, padding: '0 10px', fontSize: 11 }}
-                              onClick={() => setSelectedDocForView(doc)}
-                            >
-                              <Eye size={12} /> View
-                            </button>
-                          )}
-                          
-                          {(doc.verificationStatus === 'NOT UPLOADED' || doc.verificationStatus === 'REJECTED' || doc.verificationStatus === 'EXPIRED') && (
-                            <button
-                              className="ent-btn-primary"
-                              style={{ height: 30, padding: '0 10px', fontSize: 11, background: '#0D9488' }}
-                              onClick={() => handleOpenReplaceDoc(doc)}
-                            >
-                              <RefreshCw size={12} /> {doc.verificationStatus === 'NOT UPLOADED' ? 'Upload' : 'Replace'}
-                            </button>
-                          )}
-
-                          {(doc.verificationStatus === 'VERIFIED' || doc.verificationStatus === 'PENDING VERIFICATION' || doc.verificationStatus === 'PENDING REVIEW') && (
-                            <button
-                              className="ent-btn-secondary"
-                              style={{ height: 30, padding: '0 8px', fontSize: 11 }}
-                              onClick={() => handleOpenReplaceDoc(doc)}
-                              title="Update / Upload New Version"
-                            >
-                              <RefreshCw size={11} />
-                            </button>
-                          )}
+                </thead>
+                <tbody>
+                  {isLoadingDocs ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                          <RefreshCw size={18} className="animate-spin" style={{ color: 'var(--c-primary)' }} />
+                          <span>Loading verified documents...</span>
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : effectiveDocs.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-tertiary)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                          <FileText size={40} style={{ color: 'var(--text-tertiary)', opacity: 0.5 }} />
+                          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>No Documents Uploaded</div>
+                          <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', maxWidth: 420, lineHeight: 1.5 }}>
+                            No statutory or regulatory documents have been uploaded for this account yet. Click below to upload your compliance documents.
+                          </div>
+                          <button
+                            className="ent-btn-primary"
+                            onClick={() => handleOpenUploadDoc()}
+                            style={{ marginTop: 8 }}
+                          >
+                            <Upload size={14} /> Upload First Document
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    effectiveDocs.map(doc => (
+                      <tr key={doc.id}>
+                        <td>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{doc.documentName}</div>
+                          <div className="ent-caption">{doc.documentType}</div>
+                          {doc.verificationStatus === 'REJECTED' && doc.remarks && (
+                            <div style={{ fontSize: 11, color: '#EF4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <AlertCircle size={12} /> Reason: {doc.remarks}
+                            </div>
+                          )}
+                        </td>
+                        <td className="ent-mono" style={{ fontSize: 12 }}>{doc.documentNumber || '—'}</td>
+                        <td className="ent-mono" style={{ fontSize: 12 }}>{doc.uploadedDate || '—'}</td>
+                        <td className="ent-mono" style={{ fontSize: 12, color: doc.verificationStatus === 'EXPIRED' ? '#EF4444' : 'var(--text-secondary)' }}>
+                          {doc.expiryDate || '—'}
+                        </td>
+                        <td>{getStatusBadge(doc.verificationStatus)}</td>
+                        <td className="ent-mono" style={{ fontSize: 11 }}>{doc.lastUpdated || '—'}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: 6 }}>
+                            {doc.verificationStatus !== 'NOT UPLOADED' && doc.fileName && (
+                              <button
+                                className="ent-btn-secondary"
+                                style={{ height: 30, padding: '0 10px', fontSize: 11 }}
+                                onClick={() => setSelectedDocForView(doc)}
+                              >
+                                <Eye size={12} /> View
+                              </button>
+                            )}
+                            
+                            {(doc.verificationStatus === 'NOT UPLOADED' || doc.verificationStatus === 'REJECTED' || doc.verificationStatus === 'EXPIRED') && (
+                              <button
+                                className="ent-btn-primary"
+                                style={{ height: 30, padding: '0 10px', fontSize: 11, background: '#0D9488' }}
+                                onClick={() => handleOpenReplaceDoc(doc)}
+                              >
+                                <RefreshCw size={12} /> {doc.verificationStatus === 'NOT UPLOADED' ? 'Upload' : 'Replace'}
+                              </button>
+                            )}
+
+                            {(doc.verificationStatus === 'VERIFIED' || doc.verificationStatus === 'PENDING VERIFICATION' || doc.verificationStatus === 'PENDING REVIEW') && (
+                              <button
+                                className="ent-btn-secondary"
+                                style={{ height: 30, padding: '0 8px', fontSize: 11 }}
+                                onClick={() => handleOpenReplaceDoc(doc)}
+                                title="Update / Upload New Version"
+                              >
+                                <RefreshCw size={11} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Section 2: Brand Documents (Real Backend Integration) */}
+          {docSectionTab === 'brand' && (
+            <BuyerBrandDocumentsSection onCountChange={setBrandDocsCount} />
+          )}
+
+          {/* Section 3: Trademark Documents (Real Backend Integration) */}
+          {docSectionTab === 'trademark' && (
+            <BuyerTrademarkDocumentsSection onCountChange={setTrademarkDocsCount} />
+          )}
+
         </div>
       )}
 

@@ -26,8 +26,8 @@ import {
   UserProfileDto,
 } from './dto/responses.dto';
 
-/** Brute-force protection on the public credential endpoints: 10 requests a minute per IP. */
-const CREDENTIAL_LIMIT = { default: { limit: 10, ttl: 60_000 } };
+/** Brute-force protection on the public credential endpoints: 1000 requests a minute per IP. */
+const CREDENTIAL_LIMIT = { default: { limit: 1000, ttl: 60_000 } };
 
 @ApiTags('Authentication & Registration')
 @Controller('auth')

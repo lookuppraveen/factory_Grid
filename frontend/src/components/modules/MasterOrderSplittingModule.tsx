@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { ProformaInvoiceSection } from '../common/ProformaInvoiceSection';
 import { AdvancePaymentSection } from '../common/AdvancePaymentSection';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export const MasterOrderSplittingModule: React.FC = () => {
   const {
@@ -662,8 +664,24 @@ export const MasterOrderSplittingModule: React.FC = () => {
       else if (statusFilter === 'CLOSED') matchStatus = o.status === 'COMPLETED';
 
       return matchSearch && matchStatus;
+    }).sort((a, b) => {
+      // Latest record first (created_at DESC), secondary stable sort on orderNumber DESC
+      const timeA = new Date((a as any).createdAt || (a as any).created_at || a.createdDate || 0).getTime();
+      const timeB = new Date((b as any).createdAt || (b as any).created_at || b.createdDate || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+        return timeB - timeA;
+      }
+      return String(b.orderNumber || b.id || '').localeCompare(String(a.orderNumber || a.id || ''));
     });
   }, [orders, searchTerm, statusFilter]);
+
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredOrders.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, statusFilter]
+  });
+  const paginatedOrders = pagination.paginateItems(filteredOrders);
 
   const handleRemoveFile = (subCode: string, prodKey: string, fileId: string) => {
     setProductArtworksStore(prev => {
@@ -1953,7 +1971,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map(order => {
+                  {paginatedOrders.map(order => {
                     const subCount = order.subOrders?.length || 3;
                     const prodCount = order.subOrders?.reduce((acc, s) => acc + (s.lines?.length || 1), 0) || 4;
                     const poCount = order.poNumber ? subCount : (poCreatedCount || subCount);
@@ -2106,6 +2124,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
                   })}
                 </tbody>
               </table>
+              <PaginationControl {...pagination.paginationProps} itemName="orders" />
             </div>
           )}
         </div>

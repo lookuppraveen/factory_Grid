@@ -13,6 +13,7 @@ import { IamModule } from './modules/iam/iam.module';
 import { ManufacturerModule } from './modules/manufacturer/manufacturer.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RfqModule } from './modules/rfq/rfq.module';
 
 /**
  * One deployable app made of modules that keep the plan's service boundaries.
@@ -48,6 +49,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ComplianceModule,
     IamModule,
     CatalogModule,
+    RfqModule,
   ],
 
   controllers: [HealthController],

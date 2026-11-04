@@ -196,6 +196,23 @@ paths:
       summary: Download a regulatory document from private storage
       tags:
         - Buyer Onboarding & Registration
+  /api/v1/buyer/documents/{id}/download:
+    get:
+      operationId: BuyerRegistrationController_downloadDocumentById
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download or stream an uploaded buyer regulatory document by ID
+      tags:
+        - Buyer Onboarding & Registration
   /api/v1/buyer/registration/submit:
     post:
       description: >-
@@ -237,6 +254,18 @@ paths:
       summary: Get current authenticated buyer registration, documents, and verification status
       tags:
         - Buyer Onboarding & Registration
+  /api/v1/buyer/profile:
+    get:
+      operationId: BuyerRegistrationController_getBuyerProfile
+      parameters: []
+      responses:
+        '200':
+          description: Consolidated buyer profile and verification status
+      security:
+        - bearer: []
+      summary: Get authenticated buyer profile, registration, and compliance status
+      tags:
+        - Buyer Onboarding & Registration
   /api/v1/buyer/registration/{code}:
     get:
       operationId: BuyerRegistrationController_getRegistration
@@ -261,9 +290,151 @@ paths:
       summary: Get buyer registration details by code or email
       tags:
         - Buyer Onboarding & Registration
+  /api/v1/buyer/brand-documents:
+    get:
+      operationId: BuyerBrandDocumentsController_listMyDocuments
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BuyerBrandDocumentDto'
+      security:
+        - bearer: []
+      summary: List authenticated buyer brand documents
+      tags:
+        - Buyer Brand Documents
+    post:
+      operationId: BuyerBrandDocumentsController_uploadDocument
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerBrandDocumentDto'
+      security:
+        - bearer: []
+      summary: Upload a new brand document
+      tags:
+        - Buyer Brand Documents
+  /api/v1/buyer/brand-documents/{id}:
+    put:
+      operationId: BuyerBrandDocumentsController_updateDocument
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerBrandDocumentDto'
+      security:
+        - bearer: []
+      summary: Update or re-upload a brand document
+      tags:
+        - Buyer Brand Documents
+  /api/v1/buyer/brand-documents/{id}/download:
+    get:
+      operationId: BuyerBrandDocumentsController_downloadDocument
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download / view authorized brand document
+      tags:
+        - Buyer Brand Documents
+  /api/v1/buyer/trademark-documents:
+    get:
+      operationId: BuyerTrademarkDocumentsController_listMyDocuments
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BuyerTrademarkDocumentDto'
+      security:
+        - bearer: []
+      summary: List authenticated buyer trademark documents
+      tags:
+        - Buyer Trademark Documents
+    post:
+      operationId: BuyerTrademarkDocumentsController_uploadDocument
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerTrademarkDocumentDto'
+      security:
+        - bearer: []
+      summary: Upload a new trademark document
+      tags:
+        - Buyer Trademark Documents
+  /api/v1/buyer/trademark-documents/{id}:
+    put:
+      operationId: BuyerTrademarkDocumentsController_updateDocument
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuyerTrademarkDocumentDto'
+      security:
+        - bearer: []
+      summary: Update or re-upload a trademark document
+      tags:
+        - Buyer Trademark Documents
+  /api/v1/buyer/trademark-documents/{id}/download:
+    get:
+      operationId: BuyerTrademarkDocumentsController_downloadDocument
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download / view authorized trademark document
+      tags:
+        - Buyer Trademark Documents
   /api/v1/manufacturer/catalog:
     get:
-      operationId: ManufacturerRegistrationController_listCatalog
+      operationId: ManufacturerRegistrationController_listCatalog[0]
       parameters:
         - name: search
           required: false
@@ -277,9 +448,71 @@ paths:
       summary: List master product catalogue for manufacturer capabilities
       tags:
         - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/catalog:
+    get:
+      operationId: ManufacturerRegistrationController_listCatalog[1]
+      parameters:
+        - name: search
+          required: false
+          in: query
+          description: Filter by name, generic name, category
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: List master product catalogue for manufacturer capabilities
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/categories:
+    get:
+      operationId: ManufacturerRegistrationController_listCategories[0]
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      summary: List Category -> Sub-Category -> Sub-Sub-Category hierarchy for manufacturer onboarding
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/categories:
+    get:
+      operationId: ManufacturerRegistrationController_listCategories[1]
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      summary: List Category -> Sub-Category -> Sub-Sub-Category hierarchy for manufacturer onboarding
+      tags:
+        - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/registration/step-1:
     post:
-      operationId: ManufacturerRegistrationController_saveStep1
+      operationId: ManufacturerRegistrationController_saveStep1[0]
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional code when updating an existing draft
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerStep1Dto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerStepResponseDto'
+      summary: 'Step 1: Save Company & Plant Information'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/registration/step-1:
+    post:
+      operationId: ManufacturerRegistrationController_saveStep1[1]
       parameters:
         - name: registrationCode
           required: false
@@ -308,7 +541,7 @@ paths:
       description: >-
         Accepts multipart/form-data for one of the 6 mandatory certification categories. Stores file in MinIO/S3 and
         records metadata.
-      operationId: ManufacturerRegistrationController_uploadDocument
+      operationId: ManufacturerRegistrationController_uploadDocument[0]
       parameters:
         - name: category
           required: true
@@ -319,8 +552,9 @@ paths:
               - gmpCert
               - whoGmpCert
               - isoCert
-              - factoryReg
               - pollutionCert
+              - factoryReg
+              - otherCert
             type: string
         - name: registrationCode
           required: true
@@ -328,16 +562,84 @@ paths:
           schema:
             type: string
         - name: issueDate
-          required: true
+          required: false
           in: query
           schema:
             example: '2023-04-15'
             type: string
         - name: expiryDate
-          required: true
+          required: false
           in: query
           schema:
             example: '2028-04-14'
+            type: string
+        - name: documentNumber
+          required: false
+          in: query
+          description: Optional official certificate or license number
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Certification PDF/Image (max 10MB)
+              required:
+                - file
+      responses:
+        '201':
+          description: ''
+      summary: 'Step 2 & Document Re-upload: Upload Mandatory Certification Document'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/documents/upload:
+    post:
+      description: >-
+        Accepts multipart/form-data for one of the 6 mandatory certification categories. Stores file in MinIO/S3 and
+        records metadata.
+      operationId: ManufacturerRegistrationController_uploadDocument[1]
+      parameters:
+        - name: category
+          required: true
+          in: query
+          schema:
+            enum:
+              - mfgLicense
+              - gmpCert
+              - whoGmpCert
+              - isoCert
+              - pollutionCert
+              - factoryReg
+              - otherCert
+            type: string
+        - name: registrationCode
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: issueDate
+          required: false
+          in: query
+          schema:
+            example: '2023-04-15'
+            type: string
+        - name: expiryDate
+          required: false
+          in: query
+          schema:
+            example: '2028-04-14'
+            type: string
+        - name: documentNumber
+          required: false
+          in: query
+          description: Optional official certificate or license number
+          schema:
             type: string
       requestBody:
         required: true
@@ -360,7 +662,25 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/documents/{id}:
     delete:
-      operationId: ManufacturerRegistrationController_removeDocument
+      operationId: ManufacturerRegistrationController_removeDocument[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Remove an uploaded document before submission
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/documents/{id}:
+    delete:
+      operationId: ManufacturerRegistrationController_removeDocument[1]
       parameters:
         - name: id
           required: true
@@ -378,7 +698,32 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/registration/step-2:
     post:
-      operationId: ManufacturerRegistrationController_saveStep2
+      operationId: ManufacturerRegistrationController_saveStep2[0]
+      parameters:
+        - name: registrationCode
+          required: true
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerStep2Dto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerStepResponseDto'
+      summary: 'Step 2: Save Certification Expiry and Issue Dates'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/registration/step-2:
+    post:
+      operationId: ManufacturerRegistrationController_saveStep2[1]
       parameters:
         - name: registrationCode
           required: true
@@ -403,7 +748,32 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/registration/step-3:
     post:
-      operationId: ManufacturerRegistrationController_saveStep3
+      operationId: ManufacturerRegistrationController_saveStep3[0]
+      parameters:
+        - name: registrationCode
+          required: true
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerStep3Dto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerStepResponseDto'
+      summary: 'Step 3: Save Product Manufacturing Capabilities'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/registration/step-3:
+    post:
+      operationId: ManufacturerRegistrationController_saveStep3[1]
       parameters:
         - name: registrationCode
           required: true
@@ -428,7 +798,32 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/registration/step-4:
     post:
-      operationId: ManufacturerRegistrationController_saveStep4
+      operationId: ManufacturerRegistrationController_saveStep4[0]
+      parameters:
+        - name: registrationCode
+          required: true
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerStep4Dto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerStepResponseDto'
+      summary: 'Step 4: Save MOQ and Delivery Schedule'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/registration/step-4:
+    post:
+      operationId: ManufacturerRegistrationController_saveStep4[1]
       parameters:
         - name: registrationCode
           required: true
@@ -453,7 +848,23 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/registration/submit:
     post:
-      operationId: ManufacturerRegistrationController_submit
+      operationId: ManufacturerRegistrationController_submit[0]
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerSubmitDto'
+      responses:
+        '201':
+          description: ''
+      summary: 'Step 5: Review & Submit Complete Manufacturer Registration'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/registration/submit:
+    post:
+      operationId: ManufacturerRegistrationController_submit[1]
       parameters: []
       requestBody:
         required: true
@@ -469,7 +880,7 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/my-registration:
     get:
-      operationId: ManufacturerRegistrationController_getMyRegistration
+      operationId: ManufacturerRegistrationController_getMyRegistration[0]
       parameters: []
       responses:
         '200':
@@ -479,9 +890,233 @@ paths:
       summary: Get current authenticated manufacturer registration details, documents, and status
       tags:
         - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/my-registration:
+    get:
+      operationId: ManufacturerRegistrationController_getMyRegistration[1]
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get current authenticated manufacturer registration details, documents, and status
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/me/documents:
+    get:
+      operationId: ManufacturerRegistrationController_getMyDocuments[0]
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get current authenticated manufacturer uploaded certification documents
+      tags:
+        - Manufacturer Registration & Onboarding
+    post:
+      operationId: ManufacturerRegistrationController_uploadMyDocument[0]
+      parameters:
+        - name: category
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: documentType
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: issueDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: expiryDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: documentNumber
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Upload a new certification document for the authenticated manufacturer
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/me/documents:
+    get:
+      operationId: ManufacturerRegistrationController_getMyDocuments[1]
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get current authenticated manufacturer uploaded certification documents
+      tags:
+        - Manufacturer Registration & Onboarding
+    post:
+      operationId: ManufacturerRegistrationController_uploadMyDocument[1]
+      parameters:
+        - name: category
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: documentType
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: issueDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: expiryDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: documentNumber
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Upload a new certification document for the authenticated manufacturer
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/me/documents/{id}:
+    put:
+      operationId: ManufacturerRegistrationController_replaceMyDocument[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: issueDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: expiryDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: documentNumber
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Replace an existing certification document for the authenticated manufacturer
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/me/documents/{id}:
+    put:
+      operationId: ManufacturerRegistrationController_replaceMyDocument[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: issueDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: expiryDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: documentNumber
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Replace an existing certification document for the authenticated manufacturer
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/me/documents/{id}/download:
+    get:
+      operationId: ManufacturerRegistrationController_downloadMyDocument[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download or stream an authenticated manufacturer certification document
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/me/documents/{id}/download:
+    get:
+      operationId: ManufacturerRegistrationController_downloadMyDocument[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download or stream an authenticated manufacturer certification document
+      tags:
+        - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/registration/{code}:
     get:
-      operationId: ManufacturerRegistrationController_getRegistration
+      operationId: ManufacturerRegistrationController_getRegistration[0]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration code (REG-MFG-...)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get manufacturer registration by registration code
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/registration/{code}:
+    get:
+      operationId: ManufacturerRegistrationController_getRegistration[1]
       parameters:
         - name: code
           required: true
@@ -499,7 +1134,25 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/documents:
     get:
-      operationId: ManufacturerRegistrationController_getDocuments
+      operationId: ManufacturerRegistrationController_getDocuments[0]
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional for authenticated manufacturer
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: List certifications for a registration
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/documents:
+    get:
+      operationId: ManufacturerRegistrationController_getDocuments[1]
       parameters:
         - name: registrationCode
           required: false
@@ -517,7 +1170,7 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/documents/{id}/download:
     get:
-      operationId: ManufacturerRegistrationController_downloadDocument
+      operationId: ManufacturerRegistrationController_downloadDocument[0]
       parameters:
         - name: id
           required: true
@@ -525,17 +1178,69 @@ paths:
           description: Document ID
           schema:
             type: string
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional registration code for pre-login draft view
+          schema:
+            type: string
       responses:
         '200':
           description: ''
       security:
         - bearer: []
-      summary: Download a manufacturer certification document
+      summary: Download or view a manufacturer certification document
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/documents/{id}/download:
+    get:
+      operationId: ManufacturerRegistrationController_downloadDocument[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional registration code for pre-login draft view
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download or view a manufacturer certification document
       tags:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/review/verifications:
     get:
-      operationId: ManufacturerRegistrationController_listForReview
+      operationId: ManufacturerRegistrationController_listForReview[0]
+      parameters:
+        - name: status
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: search
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: List submitted manufacturer registrations for review'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/review/verifications:
+    get:
+      operationId: ManufacturerRegistrationController_listForReview[1]
       parameters:
         - name: status
           required: false
@@ -557,7 +1262,25 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/review/verifications/{code}:
     get:
-      operationId: ManufacturerRegistrationController_getForReview
+      operationId: ManufacturerRegistrationController_getForReview[0]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Get single manufacturer registration with documents for audit'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/review/verifications/{code}:
+    get:
+      operationId: ManufacturerRegistrationController_getForReview[1]
       parameters:
         - name: code
           required: true
@@ -575,7 +1298,37 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/review/verifications/{code}/documents/{docId}/review:
     post:
-      operationId: ManufacturerRegistrationController_reviewDocument
+      operationId: ManufacturerRegistrationController_reviewDocument[0]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+        - name: docId
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerReviewDocumentDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Approve, reject, or request replacement for a manufacturer certification'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/review/verifications/{code}/documents/{docId}/review:
+    post:
+      operationId: ManufacturerRegistrationController_reviewDocument[1]
       parameters:
         - name: code
           required: true
@@ -605,7 +1358,7 @@ paths:
         - Manufacturer Registration & Onboarding
   /api/v1/manufacturer/review/verifications/{code}/approve:
     post:
-      operationId: ManufacturerRegistrationController_approve
+      operationId: ManufacturerRegistrationController_approve[0]
       parameters:
         - name: code
           required: true
@@ -621,6 +1374,1108 @@ paths:
       summary: 'Admin/Compliance: Final approve manufacturer registration and activate account'
       tags:
         - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/review/verifications/{code}/approve:
+    post:
+      operationId: ManufacturerRegistrationController_approve[1]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Final approve manufacturer registration and activate account'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/review/verifications/{code}/reject:
+    post:
+      operationId: ManufacturerRegistrationController_reject[0]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Reject manufacturer registration with reason'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/review/verifications/{code}/reject:
+    post:
+      operationId: ManufacturerRegistrationController_reject[1]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Reject manufacturer registration with reason'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/review/verifications/{code}/request-docs:
+    post:
+      operationId: ManufacturerRegistrationController_requestDocs[0]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Request replacement/additional certifications with notes'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/review/verifications/{code}/request-docs:
+    post:
+      operationId: ManufacturerRegistrationController_requestDocs[1]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Request replacement/additional certifications with notes'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/gallery:
+    get:
+      operationId: ManufacturerRegistrationController_listGallery[0]
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional registration code (or inferred from session)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FactoryGalleryEntryDto'
+      security:
+        - bearer: []
+      summary: List factory gallery entries for a manufacturer
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/gallery:
+    get:
+      operationId: ManufacturerRegistrationController_listGallery[1]
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional registration code (or inferred from session)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FactoryGalleryEntryDto'
+      security:
+        - bearer: []
+      summary: List factory gallery entries for a manufacturer
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/gallery/upload:
+    post:
+      description: >-
+        Accepts multipart/form-data containing image file (JPG, PNG, WebP; max 10MB) and metadata (title,
+        factoryLocation, captureDate, description, gpsCoordinates).
+      operationId: ManufacturerRegistrationController_uploadGalleryEntry[0]
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: title
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: factoryLocation
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: locationName
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: captureDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: capturedAt
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: description
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: gpsCoordinates
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: latitude
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: longitude
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryGalleryEntryDto'
+      security:
+        - bearer: []
+      summary: Upload a factory photo to the gallery
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/gallery/upload:
+    post:
+      description: >-
+        Accepts multipart/form-data containing image file (JPG, PNG, WebP; max 10MB) and metadata (title,
+        factoryLocation, captureDate, description, gpsCoordinates).
+      operationId: ManufacturerRegistrationController_uploadGalleryEntry[1]
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: title
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: factoryLocation
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: locationName
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: captureDate
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: capturedAt
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: description
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: gpsCoordinates
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: latitude
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: longitude
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryGalleryEntryDto'
+      security:
+        - bearer: []
+      summary: Upload a factory photo to the gallery
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/gallery/{id}/image:
+    get:
+      operationId: ManufacturerRegistrationController_getGalleryImage[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Gallery entry ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Stream factory gallery photo
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/gallery/{id}/image:
+    get:
+      operationId: ManufacturerRegistrationController_getGalleryImage[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Gallery entry ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Stream factory gallery photo
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/gallery/{id}:
+    patch:
+      operationId: ManufacturerRegistrationController_updateGalleryEntry[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Gallery entry ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGalleryEntryDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryGalleryEntryDto'
+      security:
+        - bearer: []
+      summary: Update factory gallery photo metadata
+      tags:
+        - Manufacturer Registration & Onboarding
+    delete:
+      operationId: ManufacturerRegistrationController_deleteGalleryEntry[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Gallery entry ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Delete a factory gallery entry
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/gallery/{id}:
+    patch:
+      operationId: ManufacturerRegistrationController_updateGalleryEntry[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Gallery entry ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGalleryEntryDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryGalleryEntryDto'
+      security:
+        - bearer: []
+      summary: Update factory gallery photo metadata
+      tags:
+        - Manufacturer Registration & Onboarding
+    delete:
+      operationId: ManufacturerRegistrationController_deleteGalleryEntry[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Gallery entry ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Delete a factory gallery entry
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/achievements:
+    get:
+      operationId: ManufacturerRegistrationController_listAchievements[0]
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional registration code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: List achievements and awards for a manufacturer
+      tags:
+        - Manufacturer Registration & Onboarding
+    post:
+      operationId: ManufacturerRegistrationController_createAchievement[0]
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAchievementDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: Create an achievement or award record
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/achievements:
+    get:
+      operationId: ManufacturerRegistrationController_listAchievements[1]
+      parameters:
+        - name: registrationCode
+          required: false
+          in: query
+          description: Optional registration code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: List achievements and awards for a manufacturer
+      tags:
+        - Manufacturer Registration & Onboarding
+    post:
+      operationId: ManufacturerRegistrationController_createAchievement[1]
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAchievementDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: Create an achievement or award record
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/achievements/{id}:
+    patch:
+      operationId: ManufacturerRegistrationController_updateAchievement[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAchievementDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: Update an achievement or award record
+      tags:
+        - Manufacturer Registration & Onboarding
+    delete:
+      operationId: ManufacturerRegistrationController_deleteAchievement[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Delete an achievement or award
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/achievements/{id}:
+    patch:
+      operationId: ManufacturerRegistrationController_updateAchievement[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAchievementDto'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: Update an achievement or award record
+      tags:
+        - Manufacturer Registration & Onboarding
+    delete:
+      operationId: ManufacturerRegistrationController_deleteAchievement[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Delete an achievement or award
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/achievements/{id}/certificate:
+    post:
+      operationId: ManufacturerRegistrationController_uploadAchievementCertificate[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: Upload or replace supporting document/certificate for an achievement
+      tags:
+        - Manufacturer Registration & Onboarding
+    get:
+      operationId: ManufacturerRegistrationController_getAchievementCertificate[0]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Download or view achievement supporting certificate
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/achievements/{id}/certificate:
+    post:
+      operationId: ManufacturerRegistrationController_uploadAchievementCertificate[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: Upload or replace supporting document/certificate for an achievement
+      tags:
+        - Manufacturer Registration & Onboarding
+    get:
+      operationId: ManufacturerRegistrationController_getAchievementCertificate[1]
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Download or view achievement supporting certificate
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/review/verifications/{code}/gallery/{id}/review:
+    post:
+      operationId: ManufacturerRegistrationController_reviewGalleryEntry[0]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          description: Gallery Entry ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmissionDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryGalleryEntryDto'
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Verify or reject a manufacturer factory gallery entry'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/review/verifications/{code}/gallery/{id}/review:
+    post:
+      operationId: ManufacturerRegistrationController_reviewGalleryEntry[1]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          description: Gallery Entry ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmissionDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryGalleryEntryDto'
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Verify or reject a manufacturer factory gallery entry'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/review/verifications/{code}/achievements/{id}/review:
+    post:
+      operationId: ManufacturerRegistrationController_reviewAchievement[0]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmissionDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Verify or reject a manufacturer achievement or award'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturers/review/verifications/{code}/achievements/{id}/review:
+    post:
+      operationId: ManufacturerRegistrationController_reviewAchievement[1]
+      parameters:
+        - name: code
+          required: true
+          in: path
+          description: Registration Code
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          description: Achievement ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmissionDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturerAchievementDto'
+      security:
+        - bearer: []
+      summary: 'Admin/Compliance: Verify or reject a manufacturer achievement or award'
+      tags:
+        - Manufacturer Registration & Onboarding
+  /api/v1/manufacturer/products/summary:
+    get:
+      operationId: ManufacturerProductController_getSummary
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get summary statistics of mapped products for authenticated manufacturer
+      tags:
+        - Manufacturer Product Catalog
+  /api/v1/manufacturer/products:
+    get:
+      operationId: ManufacturerProductController_listMappedProducts
+      parameters:
+        - name: search
+          required: false
+          in: query
+          description: Search term across name, code, composition, SKU
+          schema:
+            type: string
+        - name: category
+          required: false
+          in: query
+          description: Filter by category
+          schema:
+            type: string
+        - name: subCategory
+          required: false
+          in: query
+          description: Filter by sub-category
+          schema:
+            type: string
+        - name: subSubCategory
+          required: false
+          in: query
+          description: Filter by sub-sub-category
+          schema:
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: Filter by lifecycle status (ACTIVE, INACTIVE, ALL)
+          schema:
+            default: ALL
+            type: string
+        - name: page
+          required: false
+          in: query
+          description: Page number (1-based)
+          schema:
+            minimum: 1
+            default: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Page size limit
+          schema:
+            minimum: 1
+            default: 50
+            type: number
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: List products mapped exclusively to authenticated manufacturer facility
+      tags:
+        - Manufacturer Product Catalog
+    post:
+      operationId: ManufacturerProductController_createMapping
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateManufacturerProductDto'
+      responses:
+        '201':
+          description: Product mapped successfully
+      security:
+        - bearer: []
+      summary: Add product mapping from master catalogue to manufacturer facility
+      tags:
+        - Manufacturer Product Catalog
+  /api/v1/manufacturer/products/{id}:
+    get:
+      operationId: ManufacturerProductController_getMappingById
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product mapping ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get single product mapping details by mapping ID
+      tags:
+        - Manufacturer Product Catalog
+    put:
+      operationId: ManufacturerProductController_updateMapping
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product mapping ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateManufacturerProductDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Update manufacturer-specific details of a mapped product
+      tags:
+        - Manufacturer Product Catalog
+    delete:
+      operationId: ManufacturerProductController_deleteMapping
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product mapping ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Remove product mapping from facility
+      tags:
+        - Manufacturer Product Catalog
+  /api/v1/manufacturer/products/{id}/status:
+    patch:
+      operationId: ManufacturerProductController_updateStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product mapping ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateManufacturerProductStatusDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Activate or deactivate product mapping
+      tags:
+        - Manufacturer Product Catalog
+  /api/v1/admin/manufacturers/{manufacturerId}/documents:
+    get:
+      operationId: AdminManufacturerController_getDocuments[0]
+      parameters:
+        - name: manufacturerId
+          required: true
+          in: path
+          description: Manufacturer ID, Registration Code, or Manufacturer Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: List all uploaded certification documents for a manufacturer'
+      tags:
+        - Admin Manufacturer Document Verification
+  /api/v1/admin/manufacturer/{manufacturerId}/documents:
+    get:
+      operationId: AdminManufacturerController_getDocuments[1]
+      parameters:
+        - name: manufacturerId
+          required: true
+          in: path
+          description: Manufacturer ID, Registration Code, or Manufacturer Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: List all uploaded certification documents for a manufacturer'
+      tags:
+        - Admin Manufacturer Document Verification
+  /api/v1/admin/manufacturers/{manufacturerId}/documents/{documentId}/download:
+    get:
+      operationId: AdminManufacturerController_downloadDocument[0]
+      parameters:
+        - name: manufacturerId
+          required: true
+          in: path
+          description: Manufacturer ID, Registration Code, or Manufacturer Code
+          schema:
+            type: string
+        - name: documentId
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Download or stream a manufacturer certification document'
+      tags:
+        - Admin Manufacturer Document Verification
+  /api/v1/admin/manufacturer/{manufacturerId}/documents/{documentId}/download:
+    get:
+      operationId: AdminManufacturerController_downloadDocument[1]
+      parameters:
+        - name: manufacturerId
+          required: true
+          in: path
+          description: Manufacturer ID, Registration Code, or Manufacturer Code
+          schema:
+            type: string
+        - name: documentId
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Download or stream a manufacturer certification document'
+      tags:
+        - Admin Manufacturer Document Verification
+  /api/v1/admin/manufacturers/{manufacturerId}/documents/{documentId}/verification:
+    patch:
+      operationId: AdminManufacturerController_verifyDocument[0]
+      parameters:
+        - name: manufacturerId
+          required: true
+          in: path
+          description: Manufacturer ID, Registration Code, or Manufacturer Code
+          schema:
+            type: string
+        - name: documentId
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerVerificationPatchDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Verify, approve, reject or request replacement for a manufacturer certification document'
+      tags:
+        - Admin Manufacturer Document Verification
+  /api/v1/admin/manufacturer/{manufacturerId}/documents/{documentId}/verification:
+    patch:
+      operationId: AdminManufacturerController_verifyDocument[1]
+      parameters:
+        - name: manufacturerId
+          required: true
+          in: path
+          description: Manufacturer ID, Registration Code, or Manufacturer Code
+          schema:
+            type: string
+        - name: documentId
+          required: true
+          in: path
+          description: Document ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManufacturerVerificationPatchDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Verify, approve, reject or request replacement for a manufacturer certification document'
+      tags:
+        - Admin Manufacturer Document Verification
   /api/v1/compliance/customer-verifications:
     get:
       description: Retrieves onboarding buyer verification cases with filters for status and search query.
@@ -812,6 +2667,323 @@ paths:
       summary: Review an individual uploaded regulatory document
       tags:
         - Compliance & Customer Verification
+  /api/v1/compliance/customer-verifications/{id}/documents/{docId}/download:
+    get:
+      operationId: ComplianceController_downloadCaseDocument
+      parameters:
+        - name: docId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Stream an uploaded buyer document within a customer verification case
+      tags:
+        - Compliance & Customer Verification
+  /api/v1/compliance/customer-verifications/{id}/classification:
+    post:
+      operationId: ComplianceController_updateClassification
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Request Code or database ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClassificationDto'
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+        - bearer: []
+      summary: Update customer classification (REGULAR or SPECIAL_PARTY)
+      tags:
+        - Compliance & Customer Verification
+  /api/v1/compliance/documents/{id}/download:
+    get:
+      operationId: ComplianceDocumentController_downloadDocument
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download or stream uploaded regulatory document for PDF viewer
+      tags:
+        - Compliance Documents
+  /api/v1/compliance/brand-verifications:
+    get:
+      operationId: BrandVerificationController_listAll
+      parameters:
+        - name: status
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: List all brand verification records for compliance desk
+      tags:
+        - Admin Brand Verification
+  /api/v1/compliance/brand-verifications/{id}:
+    get:
+      operationId: BrandVerificationController_getById
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get brand verification details by ID
+      tags:
+        - Admin Brand Verification
+  /api/v1/compliance/brand-verifications/{id}/approve:
+    post:
+      operationId: BrandVerificationController_approve
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Approve brand authorization
+      tags:
+        - Admin Brand Verification
+  /api/v1/compliance/brand-verifications/{id}/request-auth:
+    post:
+      operationId: BrandVerificationController_requestAuth
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Request Letter of Authorization / additional documents
+      tags:
+        - Admin Brand Verification
+  /api/v1/compliance/brand-verifications/{id}/reject:
+    post:
+      operationId: BrandVerificationController_reject
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Reject brand authorization
+      tags:
+        - Admin Brand Verification
+  /api/v1/compliance/brand-verifications/{id}/checks:
+    post:
+      operationId: BrandVerificationController_updateCheck
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Update a specific verification check
+      tags:
+        - Admin Brand Verification
+  /api/v1/compliance/brand-verifications/{id}/download:
+    get:
+      operationId: BrandVerificationController_download
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download uploaded brand document file
+      tags:
+        - Admin Brand Verification
+  /api/v1/compliance/trademark-verifications:
+    get:
+      operationId: TrademarkVerificationController_listAll
+      parameters:
+        - name: status
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: List all trademark verification records for compliance desk
+      tags:
+        - Admin Trademark Verification
+  /api/v1/compliance/trademark-verifications/{id}:
+    get:
+      operationId: TrademarkVerificationController_getById
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get trademark verification details by ID
+      tags:
+        - Admin Trademark Verification
+  /api/v1/compliance/trademark-verifications/{id}/approve:
+    post:
+      operationId: TrademarkVerificationController_approve
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Approve trademark filing
+      tags:
+        - Admin Trademark Verification
+  /api/v1/compliance/trademark-verifications/{id}/conflict:
+    post:
+      operationId: TrademarkVerificationController_markConflict
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Mark conflict on trademark registration
+      tags:
+        - Admin Trademark Verification
+  /api/v1/compliance/trademark-verifications/{id}/expired:
+    post:
+      operationId: TrademarkVerificationController_markExpired
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Mark trademark registration as expired
+      tags:
+        - Admin Trademark Verification
+  /api/v1/compliance/trademark-verifications/{id}/reject:
+    post:
+      operationId: TrademarkVerificationController_reject
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Reject trademark filing
+      tags:
+        - Admin Trademark Verification
+  /api/v1/compliance/trademark-verifications/{id}/checks:
+    post:
+      operationId: TrademarkVerificationController_updateCheck
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Update a specific verification check
+      tags:
+        - Admin Trademark Verification
+  /api/v1/compliance/trademark-verifications/{id}/download:
+    get:
+      operationId: TrademarkVerificationController_download
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Download uploaded trademark certificate file
+      tags:
+        - Admin Trademark Verification
   /api/v1/auth/register/buyer:
     post:
       description: Creates a user with ROLE_BUYER only.
@@ -1032,28 +3204,6 @@ paths:
       summary: Buyer portal access check
       tags:
         - Buyer Access Isolation
-  /api/v1/buyer/profile:
-    get:
-      operationId: BuyerAccessController_profile
-      parameters: []
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PortalProfileResponseDto'
-        '403':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponseDto'
-      security:
-        - bearer: []
-      summary: Buyer profile access check
-      tags:
-        - Buyer Access Isolation
   /api/v1/manufacturer/dashboard:
     get:
       operationId: ManufacturerAccessController_dashboard
@@ -1098,6 +3248,2116 @@ paths:
       summary: Manufacturer profile access check
       tags:
         - Manufacturer Access Isolation
+  /api/v1/catalog/products:
+    get:
+      description: Publicly readable by buyers, manufacturers and admins with query filtering.
+      operationId: CatalogController_listProducts
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: Zero-based page index (0, 1, 2...) or 1-based index
+          schema:
+            minimum: 0
+            default: 0
+            example: 0
+            type: number
+        - name: size
+          required: false
+          in: query
+          description: Number of items per page (10, 20, 50, 100)
+          schema:
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Alias for size (limit)
+          schema:
+            minimum: 1
+            maximum: 100
+            example: 10
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: 'Sort criteria: fieldName,asc|desc (e.g. createdAt,desc)'
+          schema:
+            default: createdAt,desc
+            example: createdAt,desc
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search query
+          schema:
+            type: string
+        - name: category
+          required: false
+          in: query
+          description: Filter by category name or ID
+          schema:
+            type: string
+        - name: subCategory
+          required: false
+          in: query
+          description: Filter by sub-category
+          schema:
+            type: string
+        - name: subSubCategory
+          required: false
+          in: query
+          description: Filter by sub-sub-category
+          schema:
+            type: string
+        - name: productTypeId
+          required: false
+          in: query
+          description: Filter by product type ID
+          schema:
+            type: string
+        - name: lifecycleStatus
+          required: false
+          in: query
+          description: Filter by lifecycle status
+          schema:
+            type: string
+        - name: activeOnly
+          required: false
+          in: query
+          description: Only return active products
+          schema:
+            type: boolean
+        - name: dosageForm
+          required: false
+          in: query
+          description: Filter by dosage formulation form
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: List master product catalog with filters
+      tags:
+        - Product Catalog & Category Master
+    post:
+      description: Requires platform Administrator credentials. Persists directly into PostgreSQL.
+      operationId: CatalogController_createProduct
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCatalogProductDto'
+      responses:
+        '201':
+          description: Product created successfully
+      security:
+        - bearer: []
+      summary: 'Admin: Create new central catalog product'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/products/{id}:
+    get:
+      operationId: CatalogController_getProduct
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get single catalog product by ID or Code
+      tags:
+        - Product Catalog & Category Master
+    put:
+      operationId: CatalogController_updateProduct
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCatalogProductDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update central catalog product'
+      tags:
+        - Product Catalog & Category Master
+    delete:
+      operationId: CatalogController_deleteProduct
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Delete or deactivate product'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/products/{id}/status:
+    patch:
+      operationId: CatalogController_toggleProductStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Toggle or update product lifecycle status'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/products/{id}/attributes:
+    get:
+      operationId: CatalogController_getProductAttributes
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get dynamic attributes for product
+      tags:
+        - Product Catalog & Category Master
+    put:
+      operationId: CatalogController_saveProductAttributes
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkProductAttributesDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update dynamic attributes for product'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/products/{id}/prices:
+    get:
+      operationId: CatalogController_getProductPrices
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get prices for product
+      tags:
+        - Product Catalog & Category Master
+    post:
+      operationId: CatalogController_createProductPrice
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductPriceDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Add product price definition
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/products/{id}/manufacturers:
+    get:
+      operationId: CatalogController_getProductManufacturers
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get manufacturer mappings for product
+      tags:
+        - Product Catalog & Category Master
+    post:
+      operationId: CatalogController_mapProductManufacturer
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MapProductManufacturerDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Map product to manufacturer
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/categories:
+    get:
+      operationId: CatalogController_listCategories
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: Zero-based page index (0, 1, 2...) or 1-based index
+          schema:
+            minimum: 0
+            default: 0
+            example: 0
+            type: number
+        - name: size
+          required: false
+          in: query
+          description: Number of items per page (10, 20, 50, 100)
+          schema:
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Alias for size (limit)
+          schema:
+            minimum: 1
+            maximum: 100
+            example: 10
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: 'Sort criteria: fieldName,asc|desc (e.g. createdAt,desc)'
+          schema:
+            default: createdAt,desc
+            example: createdAt,desc
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search query
+          schema:
+            type: string
+        - name: productTypeId
+          required: false
+          in: query
+          description: Filter by Product Type ID or code
+          schema:
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: Filter by lifecycle status (ACTIVE, INACTIVE, ALL)
+          schema:
+            type: string
+        - name: activeOnly
+          required: false
+          in: query
+          description: Only return active category records
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: ''
+      summary: List Category -> Sub-Category -> Sub-Sub-Category hierarchy with pagination and filters
+      tags:
+        - Product Catalog & Category Master
+    post:
+      operationId: CatalogController_createCategory
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Create new Category hierarchy record'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/categories/{id}:
+    get:
+      operationId: CatalogController_getCategory
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Category ID or category code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get single category by ID or Code
+      tags:
+        - Product Catalog & Category Master
+    put:
+      operationId: CatalogController_updateCategory
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update Category record'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/product-types:
+    get:
+      operationId: CatalogController_listProductTypes
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: Zero-based page index (0, 1, 2...) or 1-based index
+          schema:
+            minimum: 0
+            default: 0
+            example: 0
+            type: number
+        - name: size
+          required: false
+          in: query
+          description: Number of items per page (10, 20, 50, 100)
+          schema:
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Alias for size (limit)
+          schema:
+            minimum: 1
+            maximum: 100
+            example: 10
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: 'Sort criteria: fieldName,asc|desc (e.g. createdAt,desc)'
+          schema:
+            default: createdAt,desc
+            example: createdAt,desc
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search query
+          schema:
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: Filter by lifecycle status (ACTIVE, INACTIVE, ALL)
+          schema:
+            type: string
+        - name: activeOnly
+          required: false
+          in: query
+          description: Only return active product types
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: ''
+      summary: List all active product types from database with pagination and filters
+      tags:
+        - Product Catalog & Category Master
+    post:
+      operationId: CatalogController_createProductType
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductTypeDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Create new Product Type'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/product-types/{id}:
+    get:
+      operationId: CatalogController_getProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product type ID or code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get Product Type by ID or Code
+      tags:
+        - Product Catalog & Category Master
+    put:
+      operationId: CatalogController_updateProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductTypeDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update Product Type'
+      tags:
+        - Product Catalog & Category Master
+    delete:
+      operationId: CatalogController_deleteProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Delete Product Type'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/product-types/{id}/status:
+    patch:
+      operationId: CatalogController_toggleProductTypeStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Toggle Product Type active/inactive status'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/product-types/{id}/attributes:
+    get:
+      operationId: CatalogController_getProductTypeAttributes
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get attributes applicable to this Product Type
+      tags:
+        - Product Catalog & Category Master
+    post:
+      operationId: CatalogController_assignProductTypeAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductTypeAttributeItemDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Assign an attribute to this Product Type'
+      tags:
+        - Product Catalog & Category Master
+    put:
+      operationId: CatalogController_bulkUpdateProductTypeAttributes
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkProductTypeAttributesDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Bulk update assigned attributes for this Product Type'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/product-types/{id}/attributes/{attributeId}:
+    put:
+      operationId: CatalogController_updateProductTypeAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+        - name: attributeId
+          required: true
+          in: path
+          description: Attribute ID or Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductTypeAttributeDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update attribute configuration for this Product Type'
+      tags:
+        - Product Catalog & Category Master
+    delete:
+      operationId: CatalogController_removeProductTypeAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+        - name: attributeId
+          required: true
+          in: path
+          description: Attribute ID or Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Remove attribute assignment from Product Type'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/categories/{id}/status:
+    patch:
+      operationId: CatalogController_toggleCategoryStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Toggle category status between ACTIVE and INACTIVE'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/attributes:
+    get:
+      operationId: CatalogController_listAttributes
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: Zero-based page index (0, 1, 2...) or 1-based index
+          schema:
+            minimum: 0
+            default: 0
+            example: 0
+            type: number
+        - name: size
+          required: false
+          in: query
+          description: Number of items per page (10, 20, 50, 100)
+          schema:
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Alias for size (limit)
+          schema:
+            minimum: 1
+            maximum: 100
+            example: 10
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: 'Sort criteria: fieldName,asc|desc (e.g. createdAt,desc)'
+          schema:
+            default: createdAt,desc
+            example: createdAt,desc
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search query
+          schema:
+            type: string
+        - name: dataType
+          required: false
+          in: query
+          description: Filter by data type
+          schema:
+            type: string
+            enum:
+              - ALL
+              - TEXT
+              - NUMBER
+              - DECIMAL
+              - BOOLEAN
+              - DATE
+              - LIST
+        - name: status
+          required: false
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+            enum:
+              - ALL
+              - ACTIVE
+              - INACTIVE
+        - name: activeOnly
+          required: false
+          in: query
+          description: Only return active attributes
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: ''
+      summary: List reusable central attribute master definitions
+      tags:
+        - Product Catalog & Category Master
+    post:
+      operationId: CatalogController_createAttribute
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAttributeMasterDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Create new central reusable attribute'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/attributes/{id}:
+    get:
+      operationId: CatalogController_getAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get attribute definition by ID or code
+      tags:
+        - Product Catalog & Category Master
+    put:
+      operationId: CatalogController_updateAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAttributeMasterDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update attribute definition'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/attributes/{id}/status:
+    patch:
+      operationId: CatalogController_toggleAttributeStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Toggle attribute status'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/catalog/attributes/{id}/product-types/{productTypeId}:
+    post:
+      operationId: CatalogController_assignAttributeToProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Attribute ID or code
+          schema:
+            type: string
+        - name: productTypeId
+          required: true
+          in: path
+          description: Product Type ID or code
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Assign attribute to Product Type'
+      tags:
+        - Product Catalog & Category Master
+    delete:
+      operationId: CatalogController_removeAttributeFromProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Attribute ID or code
+          schema:
+            type: string
+        - name: productTypeId
+          required: true
+          in: path
+          description: Product Type ID or code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Remove attribute from Product Type'
+      tags:
+        - Product Catalog & Category Master
+  /api/v1/products:
+    get:
+      description: Public read-only formulation catalogue from PostgreSQL for buyers and marketplace users.
+      operationId: ProductsController_listProducts
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: Zero-based page index (0, 1, 2...) or 1-based index
+          schema:
+            minimum: 0
+            default: 0
+            example: 0
+            type: number
+        - name: size
+          required: false
+          in: query
+          description: Number of items per page (10, 20, 50, 100)
+          schema:
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Alias for size (limit)
+          schema:
+            minimum: 1
+            maximum: 100
+            example: 10
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: 'Sort criteria: fieldName,asc|desc (e.g. createdAt,desc)'
+          schema:
+            default: createdAt,desc
+            example: createdAt,desc
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Text search by name, code, composition
+          schema:
+            type: string
+        - name: category
+          required: false
+          in: query
+          description: Filter by category name or ID
+          schema:
+            type: string
+        - name: subCategory
+          required: false
+          in: query
+          description: Filter by sub-category
+          schema:
+            type: string
+        - name: subSubCategory
+          required: false
+          in: query
+          description: Filter by sub-sub-category
+          schema:
+            type: string
+        - name: productTypeId
+          required: false
+          in: query
+          description: Filter by product type ID
+          schema:
+            type: string
+        - name: lifecycleStatus
+          required: false
+          in: query
+          description: Filter by lifecycle status
+          schema:
+            type: string
+        - name: activeOnly
+          required: false
+          in: query
+          description: Only return active products
+          schema:
+            type: boolean
+        - name: dosageForm
+          required: false
+          in: query
+          description: Filter by dosage formulation form
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: List master product catalog with filters and pagination
+      tags:
+        - Products (Catalogue & Procurement)
+    post:
+      operationId: ProductsController_createProduct
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCatalogProductDto'
+      responses:
+        '201':
+          description: Product created successfully
+      security:
+        - bearer: []
+      summary: 'Admin: Create new central catalog product'
+      tags:
+        - Products (Catalogue & Procurement)
+  /api/v1/products/search:
+    get:
+      operationId: ProductsController_searchProducts
+      parameters:
+        - name: q
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: page
+          required: false
+          in: query
+          description: Zero-based page index (0, 1, 2...) or 1-based index
+          schema:
+            minimum: 0
+            default: 0
+            example: 0
+            type: number
+        - name: size
+          required: false
+          in: query
+          description: Number of items per page (10, 20, 50, 100)
+          schema:
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Alias for size (limit)
+          schema:
+            minimum: 1
+            maximum: 100
+            example: 10
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: 'Sort criteria: fieldName,asc|desc (e.g. createdAt,desc)'
+          schema:
+            default: createdAt,desc
+            example: createdAt,desc
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search query
+          schema:
+            type: string
+        - name: category
+          required: false
+          in: query
+          description: Filter by category name or ID
+          schema:
+            type: string
+        - name: subCategory
+          required: false
+          in: query
+          description: Filter by sub-category
+          schema:
+            type: string
+        - name: subSubCategory
+          required: false
+          in: query
+          description: Filter by sub-sub-category
+          schema:
+            type: string
+        - name: productTypeId
+          required: false
+          in: query
+          description: Filter by product type ID
+          schema:
+            type: string
+        - name: lifecycleStatus
+          required: false
+          in: query
+          description: Filter by lifecycle status
+          schema:
+            type: string
+        - name: activeOnly
+          required: false
+          in: query
+          description: Only return active products
+          schema:
+            type: boolean
+        - name: dosageForm
+          required: false
+          in: query
+          description: Filter by dosage formulation form
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Search products by query string
+      tags:
+        - Products (Catalogue & Procurement)
+  /api/v1/products/{id}:
+    get:
+      operationId: ProductsController_getProduct
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get single catalog product by ID or Code
+      tags:
+        - Products (Catalogue & Procurement)
+    put:
+      operationId: ProductsController_updateProduct
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCatalogProductDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update central catalog product'
+      tags:
+        - Products (Catalogue & Procurement)
+  /api/v1/products/{id}/status:
+    patch:
+      operationId: ProductsController_toggleProductStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Toggle or update product lifecycle status'
+      tags:
+        - Products (Catalogue & Procurement)
+  /api/v1/products/{id}/attributes:
+    get:
+      operationId: ProductsController_getProductAttributes
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get dynamic attributes for product
+      tags:
+        - Products (Catalogue & Procurement)
+    put:
+      operationId: ProductsController_saveProductAttributes
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkProductAttributesDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update dynamic attributes for product'
+      tags:
+        - Products (Catalogue & Procurement)
+  /api/v1/products/{id}/prices:
+    get:
+      operationId: ProductsController_getProductPrices
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get price list for product
+      tags:
+        - Products (Catalogue & Procurement)
+    post:
+      operationId: ProductsController_createProductPrice
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductPriceDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Add product price definition
+      tags:
+        - Products (Catalogue & Procurement)
+  /api/v1/products/{id}/manufacturers:
+    get:
+      operationId: ProductsController_getProductManufacturers
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get manufacturer mappings for product
+      tags:
+        - Products (Catalogue & Procurement)
+    post:
+      operationId: ProductsController_mapProductManufacturer
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MapProductManufacturerDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Map product to manufacturer
+      tags:
+        - Products (Catalogue & Procurement)
+  /api/v1/categories:
+    get:
+      operationId: CategoriesController_listCategories
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: Zero-based page index (0, 1, 2...) or 1-based index
+          schema:
+            minimum: 0
+            default: 0
+            example: 0
+            type: number
+        - name: size
+          required: false
+          in: query
+          description: Number of items per page (10, 20, 50, 100)
+          schema:
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Alias for size (limit)
+          schema:
+            minimum: 1
+            maximum: 100
+            example: 10
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: 'Sort criteria: fieldName,asc|desc (e.g. createdAt,desc)'
+          schema:
+            default: createdAt,desc
+            example: createdAt,desc
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search query
+          schema:
+            type: string
+        - name: productTypeId
+          required: false
+          in: query
+          description: Filter by Product Type ID or code
+          schema:
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: Filter by lifecycle status (ACTIVE, INACTIVE, ALL)
+          schema:
+            type: string
+        - name: activeOnly
+          required: false
+          in: query
+          description: Only return active category records
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: ''
+      summary: List Category -> Sub-Category -> Sub-Sub-Category hierarchy with pagination and filters
+      tags:
+        - Categories & Hierarchies
+    post:
+      operationId: CategoriesController_createCategory
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Create new Category hierarchy record'
+      tags:
+        - Categories & Hierarchies
+  /api/v1/categories/product-types:
+    get:
+      operationId: CategoriesController_listProductTypes
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      summary: List all active product types from database
+      tags:
+        - Categories & Hierarchies
+  /api/v1/categories/{id}:
+    get:
+      operationId: CategoriesController_getCategory
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Category ID or category code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get category by ID or Code
+      tags:
+        - Categories & Hierarchies
+    put:
+      operationId: CategoriesController_updateCategory
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update Category record'
+      tags:
+        - Categories & Hierarchies
+    delete:
+      operationId: CategoriesController_deleteCategory
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Delete Category record'
+      tags:
+        - Categories & Hierarchies
+  /api/v1/categories/{id}/status:
+    patch:
+      operationId: CategoriesController_toggleCategoryStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Toggle category status between ACTIVE and INACTIVE'
+      tags:
+        - Categories & Hierarchies
+  /api/v1/categories/{categoryId}/sub-categories:
+    get:
+      operationId: CategoriesController_getSubCategories
+      parameters:
+        - name: categoryId
+          required: true
+          in: path
+          description: Category name, ID or code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+      summary: List sub-categories for a given category
+      tags:
+        - Categories & Hierarchies
+  /api/v1/categories/{categoryId}/sub-categories/{subCategory}/sub-sub-categories:
+    get:
+      operationId: CategoriesController_getSubSubCategories
+      parameters:
+        - name: categoryId
+          required: true
+          in: path
+          description: Category name, ID or code
+          schema:
+            type: string
+        - name: subCategory
+          required: true
+          in: path
+          description: Sub-category name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+      summary: List sub-sub-categories for a given category and sub-category
+      tags:
+        - Categories & Hierarchies
+  /api/v1/attributes:
+    get:
+      description: Fetch reusable enterprise attributes with filters for data type, status, and text search.
+      operationId: AttributesController_listAttributes
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: Zero-based page index (0, 1, 2...) or 1-based index
+          schema:
+            minimum: 0
+            default: 0
+            example: 0
+            type: number
+        - name: size
+          required: false
+          in: query
+          description: Number of items per page (10, 20, 50, 100)
+          schema:
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Alias for size (limit)
+          schema:
+            minimum: 1
+            maximum: 100
+            example: 10
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: 'Sort criteria: fieldName,asc|desc (e.g. createdAt,desc)'
+          schema:
+            default: createdAt,desc
+            example: createdAt,desc
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Filter by attribute name or code
+          schema:
+            type: string
+        - name: dataType
+          required: false
+          in: query
+          description: Filter by data type
+          schema:
+            enum:
+              - ALL
+              - TEXT
+              - NUMBER
+              - DECIMAL
+              - BOOLEAN
+              - DATE
+              - LIST
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: Filter by status
+          schema:
+            enum:
+              - ALL
+              - ACTIVE
+              - INACTIVE
+            type: string
+        - name: activeOnly
+          required: false
+          in: query
+          description: Only return active attributes
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: ''
+      summary: List central Attribute Master records
+      tags:
+        - Attributes (Attribute Master)
+    post:
+      description: Persists reusable attribute into PostgreSQL attribute_masters table.
+      operationId: AttributesController_createAttribute
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAttributeMasterDto'
+      responses:
+        '201':
+          description: Attribute created successfully
+      security:
+        - bearer: []
+      summary: 'Admin: Create new central reusable attribute'
+      tags:
+        - Attributes (Attribute Master)
+  /api/v1/attributes/{id}:
+    get:
+      operationId: AttributesController_getAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Attribute ID or attribute code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get attribute definition by ID or code
+      tags:
+        - Attributes (Attribute Master)
+    put:
+      operationId: AttributesController_updateAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Attribute ID or attribute code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAttributeMasterDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update attribute definition'
+      tags:
+        - Attributes (Attribute Master)
+  /api/v1/attributes/{id}/status:
+    patch:
+      operationId: AttributesController_toggleAttributeStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Attribute ID or attribute code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Toggle attribute active status'
+      tags:
+        - Attributes (Attribute Master)
+  /api/v1/attributes/{id}/product-types/{productTypeId}:
+    post:
+      operationId: AttributesController_assignToProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Attribute ID or code
+          schema:
+            type: string
+        - name: productTypeId
+          required: true
+          in: path
+          description: Product Type ID or code
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Assign this attribute to a Product Type'
+      tags:
+        - Attributes (Attribute Master)
+    delete:
+      operationId: AttributesController_removeFromProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Attribute ID or code
+          schema:
+            type: string
+        - name: productTypeId
+          required: true
+          in: path
+          description: Product Type ID or code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Remove this attribute from a Product Type'
+      tags:
+        - Attributes (Attribute Master)
+  /api/v1/product-types:
+    get:
+      operationId: ProductTypesController_listProductTypes
+      parameters:
+        - name: page
+          required: false
+          in: query
+          description: Zero-based page index (0, 1, 2...) or 1-based index
+          schema:
+            minimum: 0
+            default: 0
+            example: 0
+            type: number
+        - name: size
+          required: false
+          in: query
+          description: Number of items per page (10, 20, 50, 100)
+          schema:
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+            type: number
+        - name: limit
+          required: false
+          in: query
+          description: Alias for size (limit)
+          schema:
+            minimum: 1
+            maximum: 100
+            example: 10
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: 'Sort criteria: fieldName,asc|desc (e.g. createdAt,desc)'
+          schema:
+            default: createdAt,desc
+            example: createdAt,desc
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search query
+          schema:
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: Filter by lifecycle status (ACTIVE, INACTIVE, ALL)
+          schema:
+            type: string
+        - name: activeOnly
+          required: false
+          in: query
+          description: Only return active product types
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: ''
+      summary: List all Product Types with pagination, search, and lifecycle filtering
+      tags:
+        - Product Types
+    post:
+      operationId: ProductTypesController_createProductType
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductTypeDto'
+      responses:
+        '201':
+          description: Product Type successfully created
+      security:
+        - bearer: []
+      summary: 'Admin: Create new Product Type'
+      tags:
+        - Product Types
+  /api/v1/product-types/{id}:
+    get:
+      operationId: ProductTypesController_getProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product type ID (e.g. pt_med) or code (e.g. PHARMA)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get Product Type by ID or Code
+      tags:
+        - Product Types
+    put:
+      operationId: ProductTypesController_updateProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductTypeDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update Product Type'
+      tags:
+        - Product Types
+    delete:
+      operationId: ProductTypesController_deleteProductType
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Delete Product Type'
+      tags:
+        - Product Types
+  /api/v1/product-types/{id}/status:
+    patch:
+      operationId: ProductTypesController_toggleProductTypeStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Toggle Product Type active/inactive lifecycle status'
+      tags:
+        - Product Types
+  /api/v1/product-types/{id}/attributes:
+    get:
+      description: Returns all attributes assigned to this Product Type with attribute definitions from Attribute Master.
+      operationId: ProductTypesController_getProductTypeAttributes
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get attributes applicable to this Product Type
+      tags:
+        - Product Types
+    post:
+      operationId: ProductTypesController_assignProductTypeAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductTypeAttributeItemDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Assign an attribute to this Product Type'
+      tags:
+        - Product Types
+    put:
+      operationId: ProductTypesController_bulkUpdateProductTypeAttributes
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkProductTypeAttributesDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Bulk update assigned attributes for this Product Type'
+      tags:
+        - Product Types
+  /api/v1/product-types/{id}/attributes/{attributeId}:
+    put:
+      operationId: ProductTypesController_updateProductTypeAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+        - name: attributeId
+          required: true
+          in: path
+          description: Attribute ID or Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductTypeAttributeDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Update attribute configuration for this Product Type'
+      tags:
+        - Product Types
+    delete:
+      operationId: ProductTypesController_removeProductTypeAttribute
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product Type ID or Code
+          schema:
+            type: string
+        - name: attributeId
+          required: true
+          in: path
+          description: Attribute ID or Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Remove attribute assignment from Product Type'
+      tags:
+        - Product Types
+  /api/v1/buyer/rfqs:
+    post:
+      description: Creates an RFQ bound to the authenticated buyer identity. Automatically assigns sequential RFQ number.
+      operationId: RfqController_createRfq
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRfqDto'
+      responses:
+        '201':
+          description: RFQ created successfully
+      security:
+        - bearer: []
+      summary: Create or draft a new Buyer RFQ
+      tags:
+        - Buyer RFQ Workflow
+    get:
+      description: Returns all RFQs belonging to the authenticated buyer. Administrators can view all RFQs.
+      operationId: RfqController_listRfqs
+      parameters:
+        - name: status
+          required: false
+          in: query
+          description: Filter by status (Draft, Submitted, etc.)
+          schema:
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search term for RFQ number, company, or product
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: List RFQs for current authenticated buyer
+      tags:
+        - Buyer RFQ Workflow
+  /api/v1/buyer/rfqs/{id}:
+    get:
+      operationId: RfqController_getRfq
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: RFQ numeric ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Get single RFQ details with product lines
+      tags:
+        - Buyer RFQ Workflow
+    put:
+      operationId: RfqController_updateRfq
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: RFQ numeric ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRfqDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Update an existing draft RFQ
+      tags:
+        - Buyer RFQ Workflow
+  /api/v1/buyer/rfqs/{id}/submit:
+    post:
+      operationId: RfqController_submitRfq
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: RFQ numeric ID
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Submit a valid draft RFQ for pricing and manufacturer distribution
+      tags:
+        - Buyer RFQ Workflow
+  /api/v1/buyer/rfqs/{id}/match:
+    post:
+      description: Matches eligible manufacturers for products in the RFQ. Does NOT submit the RFQ.
+      operationId: RfqController_matchManufacturers
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: RFQ numeric ID
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Run AI/Rule-based manufacturer matching against real PostgreSQL records
+      tags:
+        - Buyer RFQ Workflow
 info:
   title: FactoryGrid API
   description: FactoryGrid B2B pharmaceutical manufacturing marketplace API.
@@ -1657,6 +5917,182 @@ components:
         - verificationStatus
         - autoValidation
         - createdAt
+    BuyerBrandDocumentDto:
+      type: object
+      properties:
+        id:
+          type: string
+          example: '1'
+        userId:
+          type: string
+          example: '14'
+        registrationId:
+          type: string
+          nullable: true
+          example: '17'
+        brandName:
+          type: string
+          example: CROCIN PLUS
+        brandReference:
+          type: string
+          nullable: true
+          example: SKU-CP-01
+        documentType:
+          type: string
+          example: Letter of Authorization (LOA)
+        documentNumber:
+          type: string
+          nullable: true
+          example: LOA-2026-001
+        dosageForm:
+          type: string
+          nullable: true
+          example: Paracetamol & Caffeine Tablets (500mg/65mg)
+        tmRegistrationNo:
+          type: string
+          nullable: true
+          example: TM-908124
+        issueDate:
+          type: string
+          nullable: true
+          example: '2026-01-01'
+        expiryDate:
+          type: string
+          nullable: true
+          example: '2028-01-01'
+        fileName:
+          type: string
+          example: LOA_Signed.pdf
+        fileSize:
+          type: number
+          example: 1048576
+        mimeType:
+          type: string
+          example: application/pdf
+        status:
+          type: string
+          example: UNDER REVIEW
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        authNotes:
+          type: string
+          nullable: true
+        reviewedBy:
+          type: string
+          nullable: true
+        reviewedAt:
+          type: string
+          nullable: true
+        approvedAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - userId
+        - brandName
+        - documentType
+        - fileName
+        - fileSize
+        - mimeType
+        - status
+        - createdAt
+        - updatedAt
+    BuyerTrademarkDocumentDto:
+      type: object
+      properties:
+        id:
+          type: string
+          example: '1'
+        userId:
+          type: string
+          example: '14'
+        registrationId:
+          type: string
+          nullable: true
+          example: '17'
+        trademarkName:
+          type: string
+          example: CROCIN PLUS
+        tmNumber:
+          type: string
+          example: TM-908124
+        tmClass:
+          type: string
+          example: Class 5 (Pharmaceuticals & Medicinal Preparations)
+        documentType:
+          type: string
+          example: Trademark Registration Certificate
+        verificationSource:
+          type: string
+          example: Customer Uploaded TM Certificate
+        issueDate:
+          type: string
+          nullable: true
+          example: '2026-01-01'
+        expiryDate:
+          type: string
+          nullable: true
+          example: '2030-10-15'
+        fileName:
+          type: string
+          example: TM_Certificate.pdf
+        fileSize:
+          type: number
+          example: 2097152
+        mimeType:
+          type: string
+          example: application/pdf
+        status:
+          type: string
+          example: UNDER REVIEW
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+        conflictNotes:
+          type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        reviewedBy:
+          type: string
+          nullable: true
+        reviewedAt:
+          type: string
+          nullable: true
+        approvedAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - userId
+        - trademarkName
+        - tmNumber
+        - tmClass
+        - documentType
+        - verificationSource
+        - fileName
+        - fileSize
+        - mimeType
+        - status
+        - createdAt
+        - updatedAt
     ManufacturerStep1Dto:
       type: object
       properties:
@@ -1685,7 +6121,7 @@ components:
           type: string
           maxLength: 150
           example: 10,000,000 Units / Month
-          description: Monthly installed manufacturing capacity
+          description: Plant manufacturing capacity (optional)
         contactPerson:
           type: string
           maxLength: 150
@@ -1699,7 +6135,7 @@ components:
           maxLength: 150
           format: email
           example: plant@sunbiolabs.com
-          description: Official plant email (also the login identifier)
+          description: Email address (also the login identifier)
         phone:
           type: string
           example: +91 98765 43210
@@ -1709,7 +6145,6 @@ components:
         - city
         - state
         - pincode
-        - mfgCapacity
         - contactPerson
         - designation
         - email
@@ -1745,8 +6180,9 @@ components:
             - gmpCert
             - whoGmpCert
             - isoCert
-            - factoryReg
             - pollutionCert
+            - factoryReg
+            - otherCert
         issueDate:
           type: string
           pattern: ^\d{4}-\d{2}-\d{2}$
@@ -1757,10 +6193,13 @@ components:
           pattern: ^\d{4}-\d{2}-\d{2}$
           example: '2028-04-14'
           description: ISO date (YYYY-MM-DD); must be after issueDate and not already expired
+        documentNumber:
+          type: string
+          maxLength: 100
+          example: GMP-MH-2023-4819
+          description: Official registration or license number
       required:
         - category
-        - issueDate
-        - expiryDate
     ManufacturerStep2Dto:
       type: object
       properties:
@@ -1769,11 +6208,24 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ManufacturerDocumentDatesDto'
-      required:
-        - documents
+        whoGmpApplicable:
+          type: boolean
+          example: true
+          description: >-
+            Whether WHO-GMP is applicable to this manufacturing facility (defaults to true; set to false for domestic
+            Schedule M only facilities)
     ManufacturerStep3Dto:
       type: object
       properties:
+        categoryIds:
+          uniqueItems: true
+          example:
+            - cat-tablets
+            - cat-capsules
+          description: Manufacturing category IDs
+          type: array
+          items:
+            type: string
         productIds:
           uniqueItems: true
           example:
@@ -1783,30 +6235,39 @@ components:
           type: array
           items:
             type: string
-      required:
-        - productIds
     ManufacturerSupplyItemDto:
       type: object
       properties:
         productId:
           type: string
           example: p1
+        categoryId:
+          type: string
+          example: cat-tablets
+        batchSize:
+          type: number
+          minimum: 1
+          maximum: 2000000000
+          example: 1000
+          description: Batch Size / Minimum order quantity (positive integer)
         moq:
           type: number
           minimum: 1
           maximum: 2000000000
           example: 1000
           description: Minimum order quantity (positive integer)
+        deliveryScheduleDays:
+          type: number
+          minimum: 1
+          maximum: 3650
+          example: 14
+          description: Delivery schedule in days (positive integer)
         leadTimeDays:
           type: number
           minimum: 1
           maximum: 3650
           example: 14
           description: Typical production delivery schedule in days (positive integer)
-      required:
-        - productId
-        - moq
-        - leadTimeDays
     ManufacturerStep4Dto:
       type: object
       properties:
@@ -1832,6 +6293,10 @@ components:
           type: boolean
           example: true
           description: Declaration that all information and documents are accurate
+        whoGmpApplicable:
+          type: boolean
+          example: true
+          description: Whether WHO-GMP is applicable to this facility
       required:
         - registrationCode
         - password
@@ -1853,6 +6318,359 @@ components:
           description: Mandatory when rejected or replacement is requested
       required:
         - decision
+    FactoryGalleryEntryDto:
+      type: object
+      properties:
+        id:
+          type: string
+        registrationCode:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        fileName:
+          type: string
+        fileSize:
+          type: number
+        mimeType:
+          type: string
+        storageKey:
+          type: string
+        imageUrl:
+          type: string
+        captureDate:
+          type: string
+          nullable: true
+        factoryLocation:
+          type: string
+        gpsCoordinates:
+          type: string
+          nullable: true
+        uploadedBy:
+          type: string
+        verificationStatus:
+          type: string
+        reviewedBy:
+          type: string
+          nullable: true
+        reviewedAt:
+          type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - registrationCode
+        - title
+        - fileName
+        - fileSize
+        - mimeType
+        - storageKey
+        - imageUrl
+        - factoryLocation
+        - uploadedBy
+        - verificationStatus
+        - createdAt
+        - updatedAt
+    UpdateGalleryEntryDto:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          description: Updated title
+        description:
+          type: string
+          maxLength: 1000
+          description: Updated description
+        captureDate:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Photo capture date (YYYY-MM-DD)
+        factoryLocation:
+          type: string
+          maxLength: 255
+          description: Updated factory location
+        gpsCoordinates:
+          type: string
+          maxLength: 100
+          description: Updated GPS coordinates
+    ManufacturerAchievementDto:
+      type: object
+      properties:
+        id:
+          type: string
+        registrationCode:
+          type: string
+        title:
+          type: string
+        awardType:
+          type: string
+        issuingOrganization:
+          type: string
+        issueDate:
+          type: string
+        expiryDate:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        hasCertificate:
+          type: boolean
+        certificateFileName:
+          type: string
+          nullable: true
+        certificateFileSize:
+          type: number
+          nullable: true
+        certificateMimeType:
+          type: string
+          nullable: true
+        certificateUrl:
+          type: string
+          nullable: true
+        verificationStatus:
+          type: string
+        reviewedBy:
+          type: string
+          nullable: true
+        reviewedAt:
+          type: string
+          nullable: true
+        rejectionReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - registrationCode
+        - title
+        - awardType
+        - issuingOrganization
+        - issueDate
+        - hasCertificate
+        - verificationStatus
+        - createdAt
+        - updatedAt
+    CreateAchievementDto:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 250
+          description: Achievement or award title
+          example: National Quality Excellence Award
+        awardType:
+          type: string
+          maxLength: 100
+          description: Award type or recognition category
+          example: QUALITY_EXCELLENCE
+        issuingOrganization:
+          type: string
+          maxLength: 200
+          description: Issuing or recognizing organization
+          example: Indian Pharma Quality Forum (IPQF)
+        issueDate:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Date of issuance (YYYY-MM-DD)
+          example: '2025-11-20'
+        expiryDate:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Expiry date if applicable (YYYY-MM-DD)
+          example: '2028-11-19'
+        description:
+          type: string
+          maxLength: 1000
+          description: Detailed summary of the achievement or audit benchmark
+        registrationCode:
+          type: string
+          description: Registration code if not inferred from session
+      required:
+        - title
+        - awardType
+        - issuingOrganization
+        - issueDate
+    UpdateAchievementDto:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 250
+          description: Updated title
+        awardType:
+          type: string
+          maxLength: 100
+          description: Updated award type
+        issuingOrganization:
+          type: string
+          maxLength: 200
+          description: Updated issuing organization
+        issueDate:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Date of issuance (YYYY-MM-DD)
+        expiryDate:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Expiry date if applicable (YYYY-MM-DD)
+        description:
+          type: string
+          maxLength: 1000
+          description: Updated description
+    ReviewSubmissionDto:
+      type: object
+      properties:
+        decision:
+          enum:
+            - VERIFIED
+            - REJECTED
+          type: string
+        reason:
+          type: string
+          maxLength: 500
+          description: Mandatory reason if rejected
+      required:
+        - decision
+    CreateManufacturerProductDto:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: ID of existing product in master catalogue
+        manufacturerProductCode:
+          type: string
+          description: Manufacturer proprietary product code / catalog reference
+        manufacturerPartNumber:
+          type: string
+          description: Manufacturer part number (MPN)
+        manufacturerSku:
+          type: string
+          description: Manufacturer inventory SKU
+        moq:
+          type: number
+          minimum: 1
+          description: Minimum Order Quantity
+          default: 1000
+        leadTimeDays:
+          type: number
+          minimum: 1
+          description: Production & dispatch lead time in days
+          default: 14
+        packagingDetails:
+          type: string
+          description: Packaging and transport configuration details
+        effectiveFrom:
+          type: string
+          description: Effective start date (YYYY-MM-DD)
+        effectiveTo:
+          type: string
+          description: Effective expiry date (YYYY-MM-DD)
+        isPreferred:
+          type: boolean
+          description: Whether this facility is the preferred manufacturer for this product
+          default: false
+        lifecycleStatus:
+          enum:
+            - ACTIVE
+            - INACTIVE
+          type: string
+          description: Lifecycle status
+          default: ACTIVE
+      required:
+        - productId
+    UpdateManufacturerProductDto:
+      type: object
+      properties:
+        manufacturerProductCode:
+          type: string
+          description: Manufacturer proprietary product code / catalog reference
+        manufacturerPartNumber:
+          type: string
+          description: Manufacturer part number (MPN)
+        manufacturerSku:
+          type: string
+          description: Manufacturer inventory SKU
+        moq:
+          type: number
+          minimum: 1
+          description: Minimum Order Quantity
+        leadTimeDays:
+          type: number
+          minimum: 1
+          description: Production & dispatch lead time in days
+        packagingDetails:
+          type: string
+          description: Packaging and transport configuration details
+        effectiveFrom:
+          type: string
+          description: Effective start date (YYYY-MM-DD)
+        effectiveTo:
+          type: string
+          description: Effective expiry date (YYYY-MM-DD)
+        isPreferred:
+          type: boolean
+          description: Whether this facility is the preferred manufacturer for this product
+        lifecycleStatus:
+          enum:
+            - ACTIVE
+            - INACTIVE
+          type: string
+          description: Lifecycle status
+    UpdateManufacturerProductStatusDto:
+      type: object
+      properties:
+        status:
+          enum:
+            - ACTIVE
+            - INACTIVE
+          type: string
+          description: Target lifecycle status
+      required:
+        - status
+    ManufacturerVerificationPatchDto:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - APPROVED
+            - REJECTED
+            - NEEDS_REPLACEMENT
+            - VALID
+            - REQUEST_MORE_DOCUMENTS
+          example: APPROVED
+        decision:
+          type: string
+          enum:
+            - APPROVED
+            - REJECTED
+            - NEEDS_REPLACEMENT
+          example: APPROVED
+        remarks:
+          type: string
+          maxLength: 500
+          example: All certifications verified against state FDA register.
+        reason:
+          type: string
+          maxLength: 500
+          example: Certificate is blurred
+        adminRemarks:
+          type: string
+          maxLength: 500
+          example: All certifications verified.
     ApproveVerificationDto:
       type: object
       properties:
@@ -1860,6 +6678,17 @@ components:
           type: string
           example: CUS000101
           description: Generated customer code if custom
+        customerClassification:
+          enum:
+            - REGULAR
+            - SPECIAL_PARTY
+          type: string
+          example: REGULAR
+          description: Buyer classification
+        remarks:
+          type: string
+          example: Verified compliance checks and approved for special terms
+          description: Approval notes / remarks
     RejectVerificationDto:
       type: object
       properties:
@@ -1903,6 +6732,22 @@ components:
           description: Auditor or officer who reviewed the document (defaults to the authenticated reviewer)
       required:
         - decision
+    UpdateClassificationDto:
+      type: object
+      properties:
+        classification:
+          enum:
+            - REGULAR
+            - SPECIAL_PARTY
+          type: string
+          example: SPECIAL_PARTY
+          description: Buyer classification
+        remarks:
+          type: string
+          example: Approved as special buyer after turnover audit
+          description: Audit notes / remarks
+      required:
+        - classification
     BuyerRegistrationDto:
       type: object
       properties:
@@ -2234,3 +7079,1224 @@ components:
         - success
         - message
         - timestamp
+    CreateCatalogProductDto:
+      type: object
+      properties:
+        id:
+          type: string
+          maxLength: 100
+          example: prd_01
+          description: Product database ID
+        productId:
+          type: string
+          maxLength: 100
+          example: prd_01
+          description: Alias for product database ID
+        productCode:
+          type: string
+          maxLength: 50
+          example: PRD001099
+          description: Unique central catalog product code
+        product_code:
+          type: string
+          maxLength: 50
+          example: PRD001099
+          description: Snake-case alias for product code
+        name:
+          type: string
+          maxLength: 200
+          example: Amoxicillin 500mg Capsules
+          description: Official product brand/trade name
+        shortName:
+          type: string
+          maxLength: 150
+          example: Amoxicillin 500
+          description: Display short name
+        genericName:
+          type: string
+          maxLength: 250
+          example: Amoxicillin Trihydrate IP
+          description: Generic composition name
+        dosageForm:
+          type: string
+          maxLength: 100
+          example: Capsule
+          description: Dosage formulation form
+        productTypeId:
+          type: string
+          maxLength: 50
+          example: pt_med
+          description: Product type ID from Category Master
+        categoryId:
+          type: string
+          maxLength: 50
+          example: CAT005
+          description: Category database record ID
+        category:
+          type: string
+          maxLength: 150
+          example: Drugs
+          description: Level 1 Category name
+        subCategory:
+          type: string
+          maxLength: 150
+          example: Capsules
+          description: Level 2 Sub-Category name
+        subSubCategory:
+          type: string
+          maxLength: 150
+          example: Hard Gelatin Capsules
+          description: Level 3 Sub-Sub-Category name
+        brand:
+          type: string
+          maxLength: 100
+          example: Amoxipen
+          description: Brand name
+        brandId:
+          type: string
+          maxLength: 50
+          example: brand_01
+          description: Brand ID
+        description:
+          type: string
+          maxLength: 1000
+          example: Broad-spectrum antibiotic hard gelatin capsule formulation.
+          description: Product description
+        baseUom:
+          type: string
+          maxLength: 50
+          example: Unit
+          description: Base unit of measurement
+        packSize:
+          type: string
+          maxLength: 100
+          example: 10 x 10 Strip
+          description: Pack packaging size description
+        packUom:
+          type: string
+          maxLength: 50
+          example: Strip
+          description: Pack packaging unit of measurement
+        lifecycleStatus:
+          type: string
+          enum:
+            - DRAFT
+            - ACTIVE
+            - INACTIVE
+            - DISCONTINUED
+            - EOL
+          example: ACTIVE
+          description: Product lifecycle status
+        availableFrom:
+          type: string
+          example: '2026-01-01'
+          description: Available from date (YYYY-MM-DD)
+        discontinuedOn:
+          type: string
+          example: '2028-12-31'
+          description: Discontinued on date (YYYY-MM-DD)
+        replacementProductId:
+          type: string
+          maxLength: 50
+          example: PRD001004
+          description: Replacement product ID or code if discontinued
+        isSellable:
+          type: boolean
+          example: true
+          description: Whether the product is sellable on platform
+        attributes:
+          type: object
+          additionalProperties: true
+          description: Category-specific dynamic attribute key-values
+        product_type_id:
+          type: string
+        category_id:
+          type: string
+        sub_category:
+          type: string
+        sub_sub_category:
+          type: string
+        generic_name:
+          type: string
+        short_name:
+          type: string
+        dosage_form:
+          type: string
+        brand_id:
+          type: string
+        base_uom:
+          type: string
+        pack_size:
+          type: string
+        pack_uom:
+          type: string
+        lifecycle_status:
+          type: string
+        available_from:
+          type: string
+        discontinued_on:
+          type: string
+        replacement_product_id:
+          type: string
+        is_sellable:
+          type: boolean
+      required:
+        - name
+        - category
+        - baseUom
+        - packSize
+        - packUom
+    UpdateCatalogProductDto:
+      type: object
+      properties:
+        productCode:
+          type: string
+          maxLength: 50
+          example: PRD001099
+        name:
+          type: string
+          maxLength: 200
+          example: Amoxicillin 500mg Capsules
+        shortName:
+          type: string
+          maxLength: 150
+          example: Amoxicillin 500
+        genericName:
+          type: string
+          maxLength: 250
+          example: Amoxicillin Trihydrate IP
+        dosageForm:
+          type: string
+          maxLength: 100
+          example: Capsule
+        productTypeId:
+          type: string
+          maxLength: 50
+          example: pt_med
+        categoryId:
+          type: string
+          maxLength: 50
+          example: CAT005
+        category:
+          type: string
+          maxLength: 150
+          example: Drugs
+        subCategory:
+          type: string
+          maxLength: 150
+          example: Capsules
+        subSubCategory:
+          type: string
+          maxLength: 150
+          example: Hard Gelatin Capsules
+        brand:
+          type: string
+          maxLength: 100
+          example: Amoxipen
+        brandId:
+          type: string
+          maxLength: 50
+          example: brand_01
+        description:
+          type: string
+          maxLength: 1000
+          example: Updated product description
+        baseUom:
+          type: string
+          maxLength: 50
+          example: Unit
+        packSize:
+          type: string
+          maxLength: 100
+          example: 10 x 10 Strip
+        packUom:
+          type: string
+          maxLength: 50
+          example: Strip
+        lifecycleStatus:
+          type: string
+          enum:
+            - DRAFT
+            - ACTIVE
+            - INACTIVE
+            - DISCONTINUED
+            - EOL
+          example: ACTIVE
+        availableFrom:
+          type: string
+          example: '2026-01-01'
+        discontinuedOn:
+          type: string
+          example: '2028-12-31'
+        replacementProductId:
+          type: string
+          maxLength: 50
+          example: PRD001004
+        isSellable:
+          type: boolean
+          example: true
+        active:
+          type: boolean
+          example: true
+        attributes:
+          type: object
+          additionalProperties: true
+    ProductAttributeValueDto:
+      type: object
+      properties:
+        attributeId:
+          type: string
+          example: attr_generic_name
+        attributeValue:
+          type: string
+          example: Paracetamol 500mg
+      required:
+        - attributeId
+        - attributeValue
+    BulkProductAttributesDto:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductAttributeValueDto'
+      required:
+        - attributes
+    CreateProductPriceDto:
+      type: object
+      properties:
+        productId:
+          type: string
+          example: prd_1730000000_abc
+        productManufacturerId:
+          type: number
+          example: 1
+          description: Optional manufacturer link
+        customerSegmentId:
+          type: string
+          example: cs_enterprise
+          description: Customer Segment ID
+        priceType:
+          type: string
+          example: BASE
+          default: BASE
+        currency:
+          type: string
+          example: INR
+          default: INR
+        unitPrice:
+          type: number
+          example: 45.5
+          description: Unit price
+        minQuantity:
+          type: number
+          minimum: 1
+          example: 100
+          default: 1
+        maxQuantity:
+          type: number
+          minimum: 1
+          example: 10000
+        effectiveFrom:
+          type: string
+          example: '2026-01-01'
+        effectiveTo:
+          type: string
+          example: '2026-12-31'
+        priceStatus:
+          type: string
+          example: ACTIVE
+          default: ACTIVE
+      required:
+        - unitPrice
+    MapProductManufacturerDto:
+      type: object
+      properties:
+        registrationId:
+          type: number
+          example: 1
+          description: Manufacturer Registration ID
+        manufacturerProductCode:
+          type: string
+          example: MFG-PRD-001
+        manufacturerPartNumber:
+          type: string
+          example: MPN-9988
+        manufacturerSku:
+          type: string
+          example: SKU-DRUG-01
+        moq:
+          type: number
+          minimum: 1
+          example: 500
+        leadTimeDays:
+          type: number
+          minimum: 1
+          example: 14
+        lifecycleStatus:
+          type: string
+          example: ACTIVE
+          default: ACTIVE
+        isPreferred:
+          type: boolean
+          example: true
+          default: false
+        packagingDetails:
+          type: string
+          example: 10 strips per box, 50 boxes per master carton
+      required:
+        - registrationId
+    ProductTypeAttributeInputDto:
+      type: object
+      properties:
+        attributeId:
+          type: string
+          example: attr_generic_name
+        attribute_id:
+          type: string
+          example: attr_generic_name
+        id:
+          type: string
+          example: attr_generic_name
+        attributeCode:
+          type: string
+          example: GENERIC_NAME
+        attribute_code:
+          type: string
+          example: GENERIC_NAME
+        code:
+          type: string
+          example: GENERIC_NAME
+        attributeName:
+          type: string
+          example: Generic Composition
+        attribute_name:
+          type: string
+          example: Generic Composition
+        name:
+          type: string
+          example: Generic Composition
+        dataType:
+          type: string
+          example: TEXT
+          enum:
+            - TEXT
+            - NUMBER
+            - DECIMAL
+            - BOOLEAN
+            - DATE
+            - LIST
+        data_type:
+          type: string
+          example: TEXT
+        unitOfMeasure:
+          type: string
+          example: mg
+        unit_of_measure:
+          type: string
+          example: mg
+        allowedValues:
+          example:
+            - Option 1
+            - Option 2
+          type: array
+          items:
+            type: string
+        allowed_values:
+          example:
+            - Option 1
+            - Option 2
+          type: array
+          items:
+            type: string
+        isRequired:
+          type: boolean
+          example: true
+        is_required:
+          type: boolean
+          example: true
+        isFilterable:
+          type: boolean
+          example: true
+        is_filterable:
+          type: boolean
+          example: true
+        isSearchable:
+          type: boolean
+          example: true
+        is_searchable:
+          type: boolean
+          example: true
+        isActive:
+          type: boolean
+          example: true
+        is_active:
+          type: boolean
+          example: true
+        displayOrder:
+          type: number
+          example: 1
+        display_order:
+          type: number
+          example: 1
+        remark:
+          type: string
+          example: Note
+    CreateProductTypeDto:
+      type: object
+      properties:
+        id:
+          type: string
+          maxLength: 50
+          example: pt_med
+          description: Unique product type identifier
+        product_type_id:
+          type: string
+          maxLength: 50
+          example: pt_med
+        productTypeId:
+          type: string
+          maxLength: 50
+          example: pt_med
+        productTypeCode:
+          type: string
+          maxLength: 50
+          example: PHARMA
+          description: Unique product type code
+        product_type_code:
+          type: string
+          maxLength: 50
+          example: PHARMA
+        code:
+          type: string
+          maxLength: 50
+          example: PHARMA
+        productTypeName:
+          type: string
+          maxLength: 150
+          example: Pharmaceutical
+          description: Product type name
+        product_type_name:
+          type: string
+          maxLength: 150
+          example: Pharmaceutical
+        name:
+          type: string
+          maxLength: 150
+          example: Pharmaceutical
+        description:
+          type: string
+          maxLength: 500
+          example: Allopathic pharmaceuticals and therapies
+          description: Description
+        lifecycleStatus:
+          type: string
+          maxLength: 50
+          example: ACTIVE
+          description: Lifecycle status
+        lifecycle_status:
+          type: string
+          maxLength: 50
+          example: ACTIVE
+        status:
+          type: string
+          maxLength: 50
+          example: Active
+        displayOrder:
+          type: number
+          minimum: 0
+          example: 1
+          description: Display order priority
+        display_order:
+          type: number
+          minimum: 0
+          example: 1
+        attributeIds:
+          example:
+            - attr_generic_name
+            - attr_dosage_form
+          type: array
+          items:
+            type: string
+        attribute_ids:
+          type: array
+          items:
+            type: string
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductTypeAttributeInputDto'
+    UpdateProductTypeDto:
+      type: object
+      properties:
+        productTypeCode:
+          type: string
+          maxLength: 50
+          example: PHARMA
+        product_type_code:
+          type: string
+          maxLength: 50
+          example: PHARMA
+        code:
+          type: string
+          maxLength: 50
+          example: PHARMA
+        productTypeName:
+          type: string
+          maxLength: 150
+          example: Pharmaceutical
+        product_type_name:
+          type: string
+          maxLength: 150
+          example: Pharmaceutical
+        name:
+          type: string
+          maxLength: 150
+          example: Pharmaceutical
+        description:
+          type: string
+          maxLength: 500
+          example: Updated description
+        lifecycleStatus:
+          type: string
+          maxLength: 50
+          example: ACTIVE
+        lifecycle_status:
+          type: string
+          maxLength: 50
+          example: ACTIVE
+        status:
+          type: string
+          maxLength: 50
+          example: Active
+        displayOrder:
+          type: number
+          minimum: 0
+          example: 1
+        display_order:
+          type: number
+          minimum: 0
+          example: 1
+        attributeIds:
+          example:
+            - attr_generic_name
+            - attr_dosage_form
+          type: array
+          items:
+            type: string
+        attribute_ids:
+          type: array
+          items:
+            type: string
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductTypeAttributeInputDto'
+    ProductTypeAttributeItemDto:
+      type: object
+      properties:
+        attributeId:
+          type: string
+          example: attr_generic_name
+          description: Attribute Master ID or Code
+        attribute_id:
+          type: string
+          example: attr_generic_name
+        isRequired:
+          type: boolean
+          example: true
+          default: false
+        is_required:
+          type: boolean
+          example: true
+        displayOrder:
+          type: number
+          minimum: 1
+          example: 1
+          default: 1
+        display_order:
+          type: number
+          minimum: 1
+          example: 1
+        lifecycleStatus:
+          type: string
+          example: ACTIVE
+          default: ACTIVE
+        lifecycle_status:
+          type: string
+          example: ACTIVE
+        remark:
+          type: string
+          maxLength: 255
+          example: Applies to this product type formulation
+    BulkProductTypeAttributesDto:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductTypeAttributeItemDto'
+      required:
+        - attributes
+    UpdateProductTypeAttributeDto:
+      type: object
+      properties:
+        isRequired:
+          type: boolean
+          example: true
+        is_required:
+          type: boolean
+          example: true
+        displayOrder:
+          type: number
+          minimum: 1
+          example: 1
+        display_order:
+          type: number
+          minimum: 1
+          example: 1
+        lifecycleStatus:
+          type: string
+          example: ACTIVE
+        lifecycle_status:
+          type: string
+          example: ACTIVE
+    CreateCategoryDto:
+      type: object
+      properties:
+        id:
+          type: string
+          maxLength: 50
+          example: CAT033
+          description: Unique category identifier
+        category_id:
+          type: string
+          maxLength: 50
+          example: CAT033
+        categoryId:
+          type: string
+          maxLength: 50
+          example: CAT033
+        productTypeId:
+          type: string
+          maxLength: 50
+          example: pt_med
+          description: Product type ID (e.g. pt_med, pt_nut, etc.)
+        product_type_id:
+          type: string
+          maxLength: 50
+          example: pt_med
+        category:
+          type: string
+          maxLength: 150
+          example: Drugs
+          description: Level 1 parent category name
+        name:
+          type: string
+          maxLength: 150
+          example: Drugs
+        subCategory:
+          type: string
+          maxLength: 150
+          example: Tablets
+          description: Level 2 sub-category name
+        sub_category:
+          type: string
+          maxLength: 150
+          example: Tablets
+        subSubCategory:
+          type: string
+          maxLength: 150
+          example: Dispersible Tablets
+          description: Level 3 sub-sub-category name
+        sub_sub_category:
+          type: string
+          maxLength: 150
+          example: Dispersible Tablets
+        categoryCode:
+          type: string
+          maxLength: 50
+          example: DRUG-TAB-DSP
+          description: Unique category code
+        category_code:
+          type: string
+          maxLength: 50
+          example: DRUG-TAB-DSP
+        code:
+          type: string
+          maxLength: 50
+          example: DRUG-TAB-DSP
+        description:
+          type: string
+          maxLength: 500
+          example: Dispersible tablets for rapid reconstitution in liquid
+          description: Category description
+        lifecycleStatus:
+          type: string
+          maxLength: 50
+          example: ACTIVE
+          description: Lifecycle status
+        lifecycle_status:
+          type: string
+          maxLength: 50
+          example: ACTIVE
+        status:
+          type: string
+          maxLength: 50
+          example: Active
+        displayOrder:
+          type: number
+          minimum: 0
+          example: 1
+          description: Display ordering weight
+        display_order:
+          type: number
+          minimum: 0
+          example: 1
+    UpdateCategoryDto:
+      type: object
+      properties:
+        productTypeId:
+          type: string
+          maxLength: 50
+          example: pt_med
+        product_type_id:
+          type: string
+          maxLength: 50
+          example: pt_med
+        category:
+          type: string
+          maxLength: 150
+          example: Drugs
+        name:
+          type: string
+          maxLength: 150
+          example: Drugs
+        subCategory:
+          type: string
+          maxLength: 150
+          example: Tablets
+        sub_category:
+          type: string
+          maxLength: 150
+          example: Tablets
+        subSubCategory:
+          type: string
+          maxLength: 150
+          example: Dispersible Tablets
+        sub_sub_category:
+          type: string
+          maxLength: 150
+          example: Dispersible Tablets
+        categoryCode:
+          type: string
+          maxLength: 50
+          example: DRUG-TAB-DSP
+        category_code:
+          type: string
+          maxLength: 50
+          example: DRUG-TAB-DSP
+        code:
+          type: string
+          maxLength: 50
+          example: DRUG-TAB-DSP
+        description:
+          type: string
+          maxLength: 500
+          example: Updated category description
+        lifecycleStatus:
+          type: string
+          maxLength: 50
+          example: ACTIVE
+        lifecycle_status:
+          type: string
+          maxLength: 50
+          example: ACTIVE
+        status:
+          type: string
+          maxLength: 50
+          example: Active
+        displayOrder:
+          type: number
+          minimum: 0
+          example: 1
+        display_order:
+          type: number
+          minimum: 0
+          example: 1
+    CreateAttributeMasterDto:
+      type: object
+      properties:
+        id:
+          type: string
+          maxLength: 50
+          example: attr_generic_name
+          description: Unique identifier or code-based ID
+        attribute_id:
+          type: string
+          maxLength: 50
+          example: attr_generic_name
+        attributeId:
+          type: string
+          maxLength: 50
+          example: attr_generic_name
+        attributeCode:
+          type: string
+          maxLength: 50
+          example: GENERIC_NAME
+          description: Unique attribute code across the catalog
+        attribute_code:
+          type: string
+          maxLength: 50
+          example: GENERIC_NAME
+        code:
+          type: string
+          maxLength: 50
+          example: GENERIC_NAME
+        attributeName:
+          type: string
+          maxLength: 150
+          example: Generic Name
+          description: Human-readable attribute name
+        attribute_name:
+          type: string
+          maxLength: 150
+          example: Generic Name
+        name:
+          type: string
+          maxLength: 150
+          example: Generic Name
+        dataType:
+          enum:
+            - TEXT
+            - NUMBER
+            - DECIMAL
+            - BOOLEAN
+            - DATE
+            - LIST
+          type: string
+          example: TEXT
+        data_type:
+          enum:
+            - TEXT
+            - NUMBER
+            - DECIMAL
+            - BOOLEAN
+            - DATE
+            - LIST
+          type: string
+          example: TEXT
+        unitOfMeasure:
+          type: string
+          maxLength: 50
+          example: mg
+          description: Unit of measure (e.g. mg, ml, Months, etc.)
+        unit_of_measure:
+          type: string
+          maxLength: 50
+          example: mg
+        remark:
+          type: string
+          maxLength: 500
+          example: Standard pharmaceutical active entity
+        description:
+          type: string
+          maxLength: 500
+          example: Standard pharmaceutical active entity
+        allowedValues:
+          example:
+            - Tablet
+            - Capsule
+            - Syrup
+          description: Allowed values for LIST data type
+          type: array
+          items:
+            type: object
+        allowed_values:
+          example:
+            - Tablet
+            - Capsule
+          type: array
+          items:
+            type: object
+        isFilterable:
+          type: boolean
+          example: true
+          default: true
+        is_filterable:
+          type: boolean
+          example: true
+        isSearchable:
+          type: boolean
+          example: true
+          default: true
+        is_searchable:
+          type: boolean
+          example: true
+        isRequired:
+          type: boolean
+          example: false
+          default: false
+        is_required:
+          type: boolean
+          example: false
+        isActive:
+          type: boolean
+          example: true
+          default: true
+        is_active:
+          type: boolean
+          example: true
+    UpdateAttributeMasterDto:
+      type: object
+      properties:
+        attributeCode:
+          type: string
+          maxLength: 50
+          example: GENERIC_NAME
+        attribute_code:
+          type: string
+          maxLength: 50
+          example: GENERIC_NAME
+        code:
+          type: string
+          maxLength: 50
+          example: GENERIC_NAME
+        attributeName:
+          type: string
+          maxLength: 150
+          example: Generic Name
+        attribute_name:
+          type: string
+          maxLength: 150
+          example: Generic Name
+        name:
+          type: string
+          maxLength: 150
+          example: Generic Name
+        dataType:
+          enum:
+            - TEXT
+            - NUMBER
+            - DECIMAL
+            - BOOLEAN
+            - DATE
+            - LIST
+          type: string
+          example: TEXT
+        data_type:
+          enum:
+            - TEXT
+            - NUMBER
+            - DECIMAL
+            - BOOLEAN
+            - DATE
+            - LIST
+          type: string
+          example: TEXT
+        unitOfMeasure:
+          type: string
+          maxLength: 50
+          example: mg
+        unit_of_measure:
+          type: string
+          maxLength: 50
+          example: mg
+        remark:
+          type: string
+          maxLength: 500
+          example: Updated remark
+        description:
+          type: string
+          maxLength: 500
+          example: Updated remark
+        allowedValues:
+          example:
+            - Tablet
+            - Capsule
+          type: array
+          items:
+            type: object
+        allowed_values:
+          example:
+            - Tablet
+            - Capsule
+          type: array
+          items:
+            type: object
+        isFilterable:
+          type: boolean
+          example: true
+        is_filterable:
+          type: boolean
+          example: true
+        isSearchable:
+          type: boolean
+          example: true
+        is_searchable:
+          type: boolean
+          example: true
+        isRequired:
+          type: boolean
+          example: false
+        is_required:
+          type: boolean
+          example: false
+        isActive:
+          type: boolean
+          example: true
+        is_active:
+          type: boolean
+          example: true
+    CreateRfqLineDto:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: Catalog Product ID (if selected from master catalog)
+        productName:
+          type: string
+          description: Product or molecule name
+        productCode:
+          type: string
+          description: Product code
+        category:
+          type: string
+          description: Category
+        subCategory:
+          type: string
+          description: Sub-category
+        subSubCategory:
+          type: string
+          description: Sub-sub-category
+        productType:
+          enum:
+            - BRANDED
+            - GENERIC
+          type: string
+          description: Product Type (BRANDED | GENERIC)
+          default: BRANDED
+        dosageForm:
+          type: string
+          description: Dosage Form
+        packSize:
+          type: string
+          description: Pack Size
+        uom:
+          type: string
+          description: Unit of Measure
+          default: Units
+        quantity:
+          type: number
+          minimum: 1
+          description: Quantity required
+        targetPrice:
+          type: number
+          description: Target price per unit
+        buyerProvidedPrice:
+          type: number
+          description: Agreed unit price for Special Party buyer pre-agreed pricing workflow
+        requiredDate:
+          type: string
+          description: Required delivery date (YYYY-MM-DD)
+        remarks:
+          type: string
+          description: Line-level remarks/instructions
+        molecule:
+          type: string
+          description: Generic molecule/active ingredient
+        strength:
+          type: string
+          description: Strength/specification
+      required:
+        - productName
+        - quantity
+    CreateRfqDto:
+      type: object
+      properties:
+        priority:
+          enum:
+            - STANDARD
+            - HIGH
+            - URGENT
+          type: string
+          default: STANDARD
+        deliveryLocation:
+          type: string
+          description: Delivery location / address
+        requiredDate:
+          type: string
+          description: RFQ header required date (YYYY-MM-DD)
+        deadlineDate:
+          type: string
+          description: RFQ quotation deadline date (YYYY-MM-DD)
+        remarks:
+          type: string
+          description: Header remarks or special instructions
+        creditRequired:
+          type: boolean
+          description: Whether credit terms are requested
+          default: false
+        creditTerms:
+          type: string
+          description: Requested credit terms description
+        isGeneric:
+          type: boolean
+          description: Whether RFQ contains generic molecules
+          default: false
+        customerClassification:
+          type: string
+          description: Customer classification (REGULAR or SPECIAL_PARTY)
+          default: REGULAR
+        status:
+          type: string
+          enum:
+            - Draft
+            - Submitted
+          default: Draft
+        lines:
+          description: Product lines for this RFQ
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateRfqLineDto'
+      required:
+        - deliveryLocation
+        - lines
+    UpdateRfqDto:
+      type: object
+      properties:
+        priority:
+          enum:
+            - STANDARD
+            - HIGH
+            - URGENT
+          type: string
+        deliveryLocation:
+          type: string
+          description: Delivery location / address
+        requiredDate:
+          type: string
+          description: RFQ header required date
+        deadlineDate:
+          type: string
+          description: RFQ quotation deadline date
+        remarks:
+          type: string
+          description: Header remarks
+        creditRequired:
+          type: boolean
+          description: Whether credit terms are requested
+        creditTerms:
+          type: string
+          description: Requested credit terms
+        isGeneric:
+          type: boolean
+          description: Whether RFQ contains generic molecules
+        customerClassification:
+          type: string
+          description: Customer classification
+        lines:
+          description: Product lines
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateRfqLineDto'

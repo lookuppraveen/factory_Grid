@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Manufacturer, ManufacturerLifecycleStatus } from '../../types';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 import {
   Factory, Search, Plus, Edit3, Trash2, CheckCircle2,
   AlertTriangle, X, Power, Eye, Package, ArrowRight,
@@ -95,8 +97,26 @@ export const ManufacturerMasterModule: React.FC = () => {
       const matchesStatus = statusFilter === 'ALL' || status === statusFilter;
 
       return matchesSearch && matchesStatus;
+    }).sort((a, b) => {
+      // Latest record first (created_at DESC), secondary stable sort on id DESC
+      const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
+      const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+        return timeB - timeA;
+      }
+      const idA = String(a.manufacturer_id || a.id || '');
+      const idB = String(b.manufacturer_id || b.id || '');
+      return idB.localeCompare(idA);
     });
   }, [manufacturers, searchTerm, statusFilter]);
+
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredManufacturers.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, statusFilter]
+  });
+  const paginatedManufacturers = pagination.paginateItems(filteredManufacturers);
 
   // Open Add Modal
   const handleOpenAddModal = () => {
@@ -210,6 +230,7 @@ export const ManufacturerMasterModule: React.FC = () => {
         activeSubOrders: 0
       };
       addManufacturer(newMfg);
+      pagination.resetPage();
       showToast(`Manufacturer "${cleanName}" created successfully.`);
     }
 
@@ -477,7 +498,7 @@ export const ManufacturerMasterModule: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredManufacturers.map((mfg) => {
+              paginatedManufacturers.map((mfg) => {
                 const codeStr = mfg.manufacturer_code || mfg.code;
                 const nameStr = mfg.manufacturer_name || mfg.companyName || mfg.name;
                 const statusStr = mfg.lifecycle_status || (mfg.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE');
@@ -607,6 +628,7 @@ export const ManufacturerMasterModule: React.FC = () => {
           </tbody>
         </table>
       </div>
+      <PaginationControl {...pagination.paginationProps} itemName="manufacturers" />
 
       {/* ── CREATE / EDIT MANUFACTURER MODAL ──────────────────────── */}
       {isModalOpen && (

@@ -21,6 +21,7 @@ import {
   ManufacturerStep4Dto,
   ManufacturerStepResponseDto,
   ManufacturerSubmitDto,
+  ManufacturerVerificationPatchDto,
   resolveManufacturerCategory,
 } from './dto/manufacturer-registration.dto';
 import {
@@ -345,6 +346,7 @@ export class ManufacturerRegistrationService {
     issueDate: string | undefined,
     expiryDate: string | undefined,
     caller?: AuthUser,
+    documentNumber?: string,
   ) {
     if (!registrationCode) throw new BadRequestException('registrationCode is required.');
     const category = resolveManufacturerCategory(categoryRaw);
@@ -362,10 +364,13 @@ export class ManufacturerRegistrationService {
     if (!matchesSignature(buffer, mime)) {
       throw new BadRequestException('File content does not match its declared type.');
     }
-    if (!issueDate || !expiryDate) {
-      throw new BadRequestException('issueDate and expiryDate are required for every certification.');
+    let issue: Date | null = null;
+    let expiry: Date | null = null;
+    if (issueDate && expiryDate) {
+      const parsed = assertDateRules(issueDate, expiryDate, category.name);
+      issue = parsed.issue;
+      expiry = parsed.expiry;
     }
-    const { issue, expiry } = assertDateRules(issueDate, expiryDate, category.name);
 
     const reg = await this.findByCode(registrationCode);
     this.assertAccess(reg, caller);
@@ -384,6 +389,42 @@ export class ManufacturerRegistrationService {
             where: { registrationId: reg.id, category: category.key },
             orderBy: { version: 'desc' },
           });
+      if (reg.status === 'DRAFT' && previous.length > 0) {
+        const existing = previous[0];
+        if (existing.storageKey && existing.storageKey !== stored.storageKey) {
+          this.storage.deleteFile(existing.storageKey).catch((e) => {
+            this.logger.warn(`Failed to delete replaced storage object: ${e?.message}`);
+          });
+        }
+        const updated = await tx.manufacturerDocument.update({
+          where: { id: existing.id },
+          data: {
+            categoryDisplayName: category.name,
+            documentNumber: documentNumber?.trim() || existing.documentNumber || null,
+            fileName: safeName,
+            fileSize: BigInt(stored.fileSize),
+            mimeType: stored.mimeType,
+            storageKey: stored.storageKey,
+            storageBucket: stored.storageBucket,
+            issueDate: issue !== null ? issue : existing.issueDate,
+            expiryDate: expiry !== null ? expiry : existing.expiryDate,
+            status: 'PENDING',
+            rejectionReason: null,
+            adminRemarks: null,
+            reviewedBy: null,
+            reviewedAt: null,
+            reviewDecision: null,
+            version: existing.version + 1,
+            updatedAt: new Date(),
+          },
+        });
+        await tx.manufacturerRegistration.update({
+          where: { id: reg.id },
+          data: { currentStep: Math.max(reg.currentStep, 2) },
+        });
+        return updated;
+      }
+
       const nextVersion = previous.length ? previous[0].version + 1 : 1;
       if (previous.length) {
         await tx.manufacturerDocument.updateMany({
@@ -396,6 +437,7 @@ export class ManufacturerRegistrationService {
           registrationId: reg.id,
           category: category.key,
           categoryDisplayName: category.name,
+          documentNumber: documentNumber?.trim() || null,
           fileName: safeName,
           fileSize: BigInt(stored.fileSize),
           mimeType: stored.mimeType,
@@ -438,6 +480,11 @@ export class ManufacturerRegistrationService {
     if (doc.registration.status !== 'DRAFT') {
       throw new ConflictException('Documents of a submitted registration can only be replaced, not removed.');
     }
+    if (doc.storageKey) {
+      this.storage.deleteFile(doc.storageKey).catch((e) => {
+        this.logger.warn(`Failed to delete removed storage object: ${e?.message}`);
+      });
+    }
     await this.prisma.manufacturerDocument.delete({ where: { id } });
     return { success: true, message: 'Document removed' };
   }
@@ -445,26 +492,45 @@ export class ManufacturerRegistrationService {
   async saveStep2(dto: ManufacturerStep2Dto, code: string): Promise<ManufacturerStepResponseDto> {
     const reg = await this.getEditableDraft(code);
     const seen = new Set<string>();
-    const updates: { id: bigint; issue: Date; expiry: Date }[] = [];
-    for (const item of dto.documents) {
-      const category = resolveManufacturerCategory(item.category);
-      if (!category) throw new BadRequestException(`Invalid document category "${item.category}".`);
-      if (seen.has(category.key)) throw new BadRequestException(`Duplicate entry for ${category.name}.`);
-      seen.add(category.key);
-      const { issue, expiry } = assertDateRules(item.issueDate, item.expiryDate, category.name);
-      const doc = await this.prisma.manufacturerDocument.findFirst({
-        where: { registrationId: reg.id, category: category.key, status: { not: 'SUPERSEDED' } },
-      });
-      if (!doc) throw new BadRequestException(`${category.name} has not been uploaded yet.`);
-      updates.push({ id: doc.id, issue, expiry });
+    const updates: { id: bigint; issue?: Date; expiry?: Date; documentNumber?: string }[] = [];
+    if (dto.documents && dto.documents.length) {
+      for (const item of dto.documents) {
+        const category = resolveManufacturerCategory(item.category);
+        if (!category) throw new BadRequestException(`Invalid document category "${item.category}".`);
+        if (seen.has(category.key)) throw new BadRequestException(`Duplicate entry for ${category.name}.`);
+        seen.add(category.key);
+        let issue: Date | undefined;
+        let expiry: Date | undefined;
+        if (item.issueDate && item.expiryDate) {
+          const parsed = assertDateRules(item.issueDate, item.expiryDate, category.name);
+          issue = parsed.issue;
+          expiry = parsed.expiry;
+        }
+        const doc = await this.prisma.manufacturerDocument.findFirst({
+          where: { registrationId: reg.id, category: category.key, status: { not: 'SUPERSEDED' } },
+        });
+        if (doc) {
+          updates.push({ id: doc.id, issue, expiry, documentNumber: item.documentNumber });
+        }
+      }
     }
     await this.prisma.$transaction([
       ...updates.map((u) =>
-        this.prisma.manufacturerDocument.update({ where: { id: u.id }, data: { issueDate: u.issue, expiryDate: u.expiry } }),
+        this.prisma.manufacturerDocument.update({
+          where: { id: u.id },
+          data: {
+            ...(u.issue !== undefined ? { issueDate: u.issue } : {}),
+            ...(u.expiry !== undefined ? { expiryDate: u.expiry } : {}),
+            ...(u.documentNumber !== undefined ? { documentNumber: u.documentNumber.trim() || null } : {}),
+          },
+        }),
       ),
       this.prisma.manufacturerRegistration.update({
         where: { id: reg.id },
-        data: { currentStep: Math.max(reg.currentStep, 2) },
+        data: {
+          currentStep: Math.max(reg.currentStep, 2),
+          ...(dto.whoGmpApplicable !== undefined ? { whoGmpApplicable: dto.whoGmpApplicable } : {}),
+        },
       }),
     ]);
     return { success: true, message: 'Certifications saved successfully', registrationCode: code, currentStep: 2 };
@@ -559,23 +625,55 @@ export class ManufacturerRegistrationService {
   }
 
   private toDocumentDto(d: any) {
+    const remarks = d.adminRemarks ?? d.rejectionReason ?? null;
+    const reviewer = d.reviewedBy ?? null;
+    const reviewedTime = d.reviewedAt ? (d.reviewedAt instanceof Date ? d.reviewedAt.toISOString() : String(d.reviewedAt)) : null;
     return {
       id: d.id.toString(),
+      documentId: d.id.toString(),
+      document_id: d.id.toString(),
+      manufacturerId: d.registrationId.toString(),
+      manufacturer_id: d.registrationId.toString(),
       documentCode: `DOC-${d.id}`,
+      documentNumber: d.documentNumber ?? null,
       category: d.category,
+      documentType: d.category,
+      document_type: d.category,
       categoryDisplayName: d.categoryDisplayName,
+      documentName: d.categoryDisplayName,
       fileName: d.fileName,
+      file_name: d.fileName,
+      originalFileName: d.fileName,
+      original_file_name: d.fileName,
       fileSize: Number(d.fileSize),
+      file_size: Number(d.fileSize),
       mimeType: d.mimeType,
-      issueDate: d.issueDate.toISOString().slice(0, 10),
-      expiryDate: d.expiryDate.toISOString().slice(0, 10),
+      mime_type: d.mimeType,
+      contentType: d.mimeType,
+      content_type: d.mimeType,
+      storageKey: d.storageKey,
+      storage_key: d.storageKey,
+      fileReference: d.storageKey,
+      file_reference: d.storageKey,
+      issueDate: d.issueDate ? (d.issueDate instanceof Date ? d.issueDate.toISOString().slice(0, 10) : String(d.issueDate).slice(0, 10)) : '',
+      expiryDate: d.expiryDate ? (d.expiryDate instanceof Date ? d.expiryDate.toISOString().slice(0, 10) : String(d.expiryDate).slice(0, 10)) : '',
       status: d.status,
-      rejectionReason: d.rejectionReason ?? null,
-      reviewedBy: d.reviewedBy ?? null,
-      reviewedAt: d.reviewedAt ? d.reviewedAt.toISOString() : null,
+      verificationStatus: d.status,
+      verification_status: d.status,
+      rejectionReason: remarks,
+      adminRemarks: remarks,
+      admin_remarks: remarks,
+      reviewedBy: reviewer,
+      verifiedBy: reviewer,
+      verified_by: reviewer,
+      reviewedAt: reviewedTime,
+      verifiedAt: reviewedTime,
+      verified_at: reviewedTime,
       reviewDecision: d.reviewDecision ?? null,
       version: d.version,
-      uploadedAt: d.createdAt.toISOString(),
+      uploadedAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : String(d.createdAt),
+      uploaded_at: d.createdAt instanceof Date ? d.createdAt.toISOString() : String(d.createdAt),
+      downloadUrl: `/api/v1/manufacturer/documents/${d.id}/download`,
     };
   }
 
@@ -646,6 +744,7 @@ export class ManufacturerRegistrationService {
       reviewedBy: reg.reviewedBy ?? null,
       rejectionReason: reg.rejectionReason ?? null,
       manufacturerCode: reg.manufacturerCode ?? null,
+      whoGmpApplicable: (reg as any).whoGmpApplicable !== false,
       company: {
         companyName: reg.companyName,
         facilityAddress: reg.facilityAddress,
@@ -711,17 +810,20 @@ export class ManufacturerRegistrationService {
     return (await this.getRegistration(code, caller)).documents;
   }
 
-  async getDocumentForDownload(documentId: string, caller?: AuthUser) {
+  async getDocumentForDownload(documentId: string, caller?: AuthUser, registrationCode?: string) {
     const doc = await this.prisma.manufacturerDocument.findUnique({
       where: { id: this.parseId(documentId) },
       include: { registration: true },
     });
     if (!doc) throw new NotFoundException(`Document ${documentId} not found.`);
-    // Downloads are never public: even for drafts the caller must be the owner or staff.
-    if (doc.registration.userId === null) {
-      if (!this.isStaff(caller)) throw new ForbiddenException('Documents are private until the registration is submitted.');
-    } else {
-      this.assertAccess(doc.registration, caller);
+    // If explicit registrationCode is provided matching the document's registration, allow access
+    const isMatchingDraftCode = registrationCode && doc.registration.registrationCode === registrationCode;
+    if (!isMatchingDraftCode) {
+      if (doc.registration.userId === null) {
+        if (!this.isStaff(caller)) throw new ForbiddenException('Documents are private until the registration is submitted.');
+      } else {
+        this.assertAccess(doc.registration, caller);
+      }
     }
     const file = await this.storage.getFile(doc.storageKey);
     return {
@@ -747,16 +849,32 @@ export class ManufacturerRegistrationService {
       this.prisma.manufacturerProduct.findMany({ where: { registrationId: reg.id } }),
     ]);
     const errors: Record<string, string> = {};
-    const mandatoryCategories = MANUFACTURER_DOCUMENT_CATEGORIES.filter((c) => (c as any).isMandatory);
+    const mandatoryCategories = MANUFACTURER_DOCUMENT_CATEGORIES.filter((c) => (c as any).isMandatory && c.key !== 'whoGmpCert');
     for (const c of mandatoryCategories) {
       const doc = docs.find((d) => d.category === c.key);
       if (!doc) errors[`documents.${c.key}`] = `${c.name} has not been uploaded.`;
-      else if (doc.expiryDate.toISOString().slice(0, 10) < todayIso()) errors[`documents.${c.key}`] = `${c.name} has expired.`;
+      else if (doc.expiryDate && doc.expiryDate.toISOString().slice(0, 10) < todayIso()) errors[`documents.${c.key}`] = `${c.name} has expired.`;
     }
+
+    // Dynamic WHO-GMP compliance validation:
+    const isWhoGmpApplicable = dto.whoGmpApplicable !== undefined ? dto.whoGmpApplicable : ((reg as any).whoGmpApplicable !== false);
+    const whoGmpDoc = docs.find((d) => d.category === 'whoGmpCert');
+    if (isWhoGmpApplicable) {
+      if (!whoGmpDoc) {
+        errors['documents.whoGmpCert'] = 'WHO-GMP Certificate has not been uploaded.';
+      } else if (whoGmpDoc.expiryDate && whoGmpDoc.expiryDate.toISOString().slice(0, 10) < todayIso()) {
+        errors['documents.whoGmpCert'] = 'WHO-GMP Certificate has expired.';
+      }
+    } else if (whoGmpDoc && whoGmpDoc.expiryDate && whoGmpDoc.expiryDate.toISOString().slice(0, 10) < todayIso()) {
+      errors['documents.whoGmpCert'] = 'WHO-GMP Certificate has expired.';
+    }
+
     // Also validate expiry date on any uploaded optional documents
     for (const d of docs) {
-      if (d.expiryDate.toISOString().slice(0, 10) < todayIso()) {
-        errors[`documents.${d.category}`] = `${d.categoryDisplayName || d.category} has expired.`;
+      if (d.category !== 'whoGmpCert' && !mandatoryCategories.some(c => c.key === d.category)) {
+        if (d.expiryDate && d.expiryDate.toISOString().slice(0, 10) < todayIso()) {
+          errors[`documents.${d.category}`] = `${d.categoryDisplayName || d.category} has expired.`;
+        }
       }
     }
     if (!products.length) errors.products = 'Select at least one manufacturing category capability.';
@@ -807,7 +925,12 @@ export class ManufacturerRegistrationService {
         });
         await tx.manufacturerRegistration.update({
           where: { id: reg.id },
-          data: { userId: user.id, currentStep: 5, submittedAt: new Date() },
+          data: {
+            userId: user.id,
+            currentStep: 5,
+            submittedAt: new Date(),
+            whoGmpApplicable: isWhoGmpApplicable,
+          },
         });
       });
     } catch (err: any) {
@@ -879,6 +1002,7 @@ export class ManufacturerRegistrationService {
           status,
           reviewDecision: dto.decision,
           rejectionReason: dto.decision === 'APPROVED' ? null : dto.reason!.trim(),
+          adminRemarks: dto.decision === 'APPROVED' ? null : dto.reason!.trim(),
           reviewedBy: reviewer,
           reviewedAt: new Date(),
         },
@@ -910,6 +1034,12 @@ export class ManufacturerRegistrationService {
     ).map((c) => c.name);
     if (notApproved.length) {
       throw new BadRequestException(`All mandatory certifications must be approved first. Pending: ${notApproved.join(', ')}.`);
+    }
+    if (reg.whoGmpApplicable) {
+      const whoGmp = docs.find((d) => d.category === 'whoGmpCert');
+      if (!whoGmp || (whoGmp.status !== 'VALID' && whoGmp.status !== 'APPROVED')) {
+        throw new BadRequestException('WHO-GMP Certificate is required and must be approved for WHO-GMP applicable facility.');
+      }
     }
     const unapprovedUploaded = docs.filter((d) => d.status !== 'VALID' && d.status !== 'APPROVED');
     if (unapprovedUploaded.length) {
@@ -1404,5 +1534,203 @@ export class ManufacturerRegistrationService {
     });
 
     return this.toAchievementDto(updated, reg.registrationCode);
+  }
+
+  // ------------------------------------------------------------- Authenticated Manufacturer Documents (/me/documents)
+
+  async getMyDocuments(userId: number) {
+    const regView = await this.getMyRegistration(userId);
+    return regView.documents;
+  }
+
+  async uploadMyDocument(
+    userId: number,
+    buffer: Buffer,
+    fileName: string,
+    mimeType: string,
+    categoryRaw: string,
+    documentNumber?: string,
+    issueDate?: string,
+    expiryDate?: string,
+    caller?: AuthUser,
+  ) {
+    const reg = await this.prisma.manufacturerRegistration.findFirst({
+      where: { userId: BigInt(userId) },
+      orderBy: { id: 'desc' },
+    });
+    if (!reg) throw new NotFoundException('No manufacturer registration found for this account.');
+    return this.uploadDocument(
+      buffer,
+      fileName,
+      mimeType,
+      categoryRaw,
+      reg.registrationCode,
+      issueDate,
+      expiryDate,
+      caller,
+      documentNumber,
+    );
+  }
+
+  async replaceMyDocument(
+    userId: number,
+    documentId: string,
+    buffer: Buffer,
+    fileName: string,
+    mimeType: string,
+    documentNumber?: string,
+    issueDate?: string,
+    expiryDate?: string,
+    caller?: AuthUser,
+  ) {
+    const reg = await this.prisma.manufacturerRegistration.findFirst({
+      where: { userId: BigInt(userId) },
+      orderBy: { id: 'desc' },
+    });
+    if (!reg) throw new NotFoundException('No manufacturer registration found for this account.');
+    const id = this.parseId(documentId);
+    const existingDoc = await this.prisma.manufacturerDocument.findFirst({
+      where: { id, registrationId: reg.id },
+    });
+    if (!existingDoc) throw new NotFoundException(`Document ${documentId} not found for this manufacturer.`);
+    return this.uploadDocument(
+      buffer,
+      fileName,
+      mimeType,
+      existingDoc.category,
+      reg.registrationCode,
+      issueDate || (existingDoc.issueDate ? existingDoc.issueDate.toISOString().slice(0, 10) : undefined),
+      expiryDate || (existingDoc.expiryDate ? existingDoc.expiryDate.toISOString().slice(0, 10) : undefined),
+      caller,
+      documentNumber || existingDoc.documentNumber || undefined,
+    );
+  }
+
+  async downloadMyDocument(userId: number, documentId: string, caller?: AuthUser) {
+    const reg = await this.prisma.manufacturerRegistration.findFirst({
+      where: { userId: BigInt(userId) },
+      orderBy: { id: 'desc' },
+    });
+    if (!reg) throw new NotFoundException('No manufacturer registration found for this account.');
+    const id = this.parseId(documentId);
+    const doc = await this.prisma.manufacturerDocument.findFirst({
+      where: { id, registrationId: reg.id },
+    });
+    if (!doc) throw new NotFoundException(`Document ${documentId} not found for this manufacturer.`);
+    return this.getDocumentForDownload(documentId, caller, reg.registrationCode);
+  }
+
+  // ------------------------------------------------------------- Admin Manufacturer Documents (/admin/manufacturers/...)
+
+  async findManufacturerByIdentifier(identifier: string) {
+    const raw = identifier.trim();
+    let reg = null;
+    if (/^\d+$/.test(raw)) {
+      reg = await this.prisma.manufacturerRegistration.findUnique({
+        where: { id: BigInt(raw) },
+      });
+    }
+    if (!reg) {
+      reg = await this.prisma.manufacturerRegistration.findUnique({
+        where: { registrationCode: raw },
+      });
+    }
+    if (!reg) {
+      reg = await this.prisma.manufacturerRegistration.findFirst({
+        where: { manufacturerCode: raw },
+      });
+    }
+    if (!reg) {
+      throw new NotFoundException(`Manufacturer "${identifier}" not found.`);
+    }
+    return reg;
+  }
+
+  async getAdminManufacturerDocuments(identifier: string) {
+    const reg = await this.findManufacturerByIdentifier(identifier);
+    const docs = await this.prisma.manufacturerDocument.findMany({
+      where: { registrationId: reg.id, status: { not: 'SUPERSEDED' } },
+      orderBy: { id: 'asc' },
+    });
+    return docs.map((d) => this.toDocumentDto(d));
+  }
+
+  async getAdminManufacturerDocumentDownload(identifier: string, documentId: string, caller?: AuthUser) {
+    const reg = await this.findManufacturerByIdentifier(identifier);
+    const id = this.parseId(documentId);
+    const doc = await this.prisma.manufacturerDocument.findFirst({
+      where: { id, registrationId: reg.id },
+      include: { registration: true },
+    });
+    if (!doc) {
+      throw new NotFoundException(`Document ${documentId} not found for manufacturer ${identifier}.`);
+    }
+    return this.getDocumentForDownload(documentId, caller, reg.registrationCode);
+  }
+
+  async patchAdminManufacturerDocumentVerification(
+    identifier: string,
+    documentId: string,
+    dto: ManufacturerVerificationPatchDto,
+    reviewer: string,
+  ) {
+    const reg = await this.findManufacturerByIdentifier(identifier);
+    const id = this.parseId(documentId);
+    const doc = await this.prisma.manufacturerDocument.findFirst({
+      where: { id, registrationId: reg.id },
+    });
+    if (!doc) {
+      throw new NotFoundException(`Document ${documentId} not found for manufacturer ${identifier}.`);
+    }
+
+    const decisionRaw = (dto.decision || dto.status || '').toUpperCase();
+    let decision: 'APPROVED' | 'REJECTED' | 'NEEDS_REPLACEMENT' = 'APPROVED';
+    let status = 'VALID';
+
+    if (decisionRaw === 'REJECTED') {
+      decision = 'REJECTED';
+      status = 'REJECTED';
+    } else if (decisionRaw === 'NEEDS_REPLACEMENT' || decisionRaw === 'REQUEST_MORE_DOCUMENTS') {
+      decision = 'NEEDS_REPLACEMENT';
+      status = 'NEEDS_REPLACEMENT';
+    } else if (decisionRaw === 'APPROVED' || decisionRaw === 'VALID') {
+      decision = 'APPROVED';
+      status = 'VALID';
+    } else {
+      throw new BadRequestException(`Invalid verification status/decision "${decisionRaw}". Must be APPROVED, REJECTED, or NEEDS_REPLACEMENT.`);
+    }
+
+    const remarks = (dto.remarks || dto.reason || dto.adminRemarks || '').trim();
+    if ((decision === 'REJECTED' || decision === 'NEEDS_REPLACEMENT') && !remarks) {
+      throw new BadRequestException('Remarks/reason are required when rejecting or requesting replacement.');
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const d = await tx.manufacturerDocument.update({
+        where: { id: doc.id },
+        data: {
+          status,
+          reviewDecision: decision,
+          rejectionReason: decision === 'APPROVED' ? null : remarks,
+          adminRemarks: decision === 'APPROVED' ? (remarks || 'Approved by compliance verifier') : remarks,
+          reviewedBy: reviewer,
+          reviewedAt: new Date(),
+        },
+      });
+
+      if (decision !== 'APPROVED' && reg.status !== 'APPROVED') {
+        await tx.manufacturerRegistration.update({
+          where: { id: reg.id },
+          data: { status: 'ACTION_REQUIRED', rejectionReason: remarks },
+        });
+      }
+      return d;
+    });
+
+    return {
+      success: true,
+      document: this.toDocumentDto(updated),
+      verificationStatus: updated.status,
+    };
   }
 }

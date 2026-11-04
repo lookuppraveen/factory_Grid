@@ -24,7 +24,15 @@ const REASONS: Record<number, string> = {
 
 /** Unparseable request bodies get one stable message instead of parser internals. */
 function normalizeBadBody(status: number, message: string): string {
-  return status === HttpStatus.BAD_REQUEST && /json/i.test(message) ? 'Malformed JSON request payload' : message;
+  if (status === HttpStatus.BAD_REQUEST) {
+    if (/body cannot be empty/i.test(message)) {
+      return 'Request body cannot be empty when Content-Type is application/json';
+    }
+    if (/json/i.test(message) && !/validation/i.test(message)) {
+      return 'Malformed JSON request payload';
+    }
+  }
+  return message;
 }
 
 interface ReplyLike {

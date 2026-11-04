@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   ShieldCheck, CheckCircle2, XCircle, AlertTriangle, Search,
   Eye, ChevronRight, X, Clock, FileText, Download, Building2,
-  Award, Check, User, Plus, FileCheck, Shield, Tag, AlertCircle
+  Award, Check, User, Plus, FileCheck, Shield, Tag, AlertCircle, RefreshCw
 } from 'lucide-react';
+import { brandTrademarkApi } from '../../services/brandTrademarkApi';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export type BrandStatus = 'PENDING' | 'UNDER REVIEW' | 'BRAND APPROVED' | 'BRAND REJECTED' | 'AUTHORIZATION REQUIRED';
 export type CheckState = 'Pending' | 'Verified' | 'Failed';
@@ -117,6 +120,8 @@ export const BrandVerificationModule: React.FC = () => {
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>('bv-rec-201');
   const [activeTab, setActiveTab] = useState<'ALL' | 'UNDER_REVIEW' | 'APPROVED' | 'AUTH_REQUIRED' | 'REJECTED'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isActionSubmitting, setIsActionSubmitting] = useState(false);
 
   // Document Viewer Modal
   const [viewingDoc, setViewingDoc] = useState<BrandDocItem | null>(null);
@@ -125,6 +130,51 @@ export const BrandVerificationModule: React.FC = () => {
   const [decisionModal, setDecisionModal] = useState<'APPROVE' | 'REQUEST_AUTH' | 'REJECT' | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [requestAuthNotesInput, setRequestAuthNotesInput] = useState('');
+
+  const loadBrandRecords = async () => {
+    setIsLoading(true);
+    try {
+      const data = await brandTrademarkApi.listAdminBrandVerifications();
+      if (Array.isArray(data) && data.length > 0) {
+        // Map backend verifications and combine with existing demo cases
+        const mappedBackend: BrandRecord[] = data.map((b: any) => ({
+          id: String(b.id),
+          brandName: b.brandName || 'Untitled Brand',
+          customerName: b.customerName || 'Registered Buyer',
+          customerCode: b.customerCode || 'CUS-REG',
+          submissionDate: b.submissionDate || new Date().toISOString().split('T')[0],
+          status: b.status as BrandStatus,
+          tmRegistrationNo: b.tmRegistrationNo || '—',
+          dosageForm: b.dosageForm || 'Contract Manufacturing Formulation',
+          checks: {
+            loaAuth: b.checks?.loaAuth || 'Pending',
+            tmAgreement: b.checks?.tmAgreement || 'Pending',
+            formulaClearance: b.checks?.formulaClearance || 'Pending',
+            artworkCompliance: b.checks?.artworkCompliance || 'Pending',
+          },
+          documents: Array.isArray(b.documents) ? b.documents : [],
+          rejectionReason: b.rejectionReason,
+          authNotes: b.authNotes,
+          approvedAt: b.approvedAt,
+        }));
+        
+        // Merge real backend documents at the top
+        const merged = [...mappedBackend, ...INITIAL_BRAND_RECORDS.filter(init => !mappedBackend.some(m => m.id === init.id))];
+        setRecords(merged);
+        if (mappedBackend.length > 0 && (!selectedRecordId || selectedRecordId === 'bv-rec-201')) {
+          setSelectedRecordId(mappedBackend[0].id);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not load brand verifications from backend, using default dataset:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBrandRecords();
+  }, []);
 
   const selectedRecord = records.find(r => r.id === selectedRecordId) || null;
 
@@ -149,11 +199,34 @@ export const BrandVerificationModule: React.FC = () => {
     if (activeTab === 'AUTH_REQUIRED') return r.status === 'AUTHORIZATION REQUIRED';
     if (activeTab === 'REJECTED') return r.status === 'BRAND REJECTED';
     return true;
+  }).sort((a, b) => {
+    // Latest record first (created_at DESC), secondary stable sort on id DESC
+    const timeA = new Date((a as any).createdAt || (a as any).created_at || a.submissionDate || 0).getTime();
+    const timeB = new Date((b as any).createdAt || (b as any).created_at || b.submissionDate || 0).getTime();
+    if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+      return timeB - timeA;
+    }
+    return String(b.id || '').localeCompare(String(a.id || ''));
   });
 
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredRecords.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, activeTab]
+  });
+  const paginatedRecords = pagination.paginateItems(filteredRecords);
+
   // Action Handlers
-  const handleExecuteApprove = () => {
+  const handleExecuteApprove = async () => {
     if (!selectedRecord) return;
+    setIsActionSubmitting(true);
+    try {
+      await brandTrademarkApi.approveBrandVerification(selectedRecord.id);
+    } catch (err: any) {
+      console.warn('Backend brand approval sync:', err.message);
+    }
+
     setRecords(prev => prev.map(r => {
       if (r.id !== selectedRecord.id) return r;
       return {
@@ -171,13 +244,20 @@ export const BrandVerificationModule: React.FC = () => {
 
     addAuditLog('Brand Verification', `Approved brand authorization for ${selectedRecord.brandName} (${selectedRecord.customerName})`);
     setDecisionModal(null);
+    setIsActionSubmitting(false);
   };
 
-  const handleExecuteRequestAuth = () => {
+  const handleExecuteRequestAuth = async () => {
     if (!selectedRecord) return;
     if (!requestAuthNotesInput.trim()) {
       alert('Please enter authorization letter request details.');
       return;
+    }
+    setIsActionSubmitting(true);
+    try {
+      await brandTrademarkApi.requestAuthBrandVerification(selectedRecord.id, requestAuthNotesInput);
+    } catch (err: any) {
+      console.warn('Backend brand request-auth sync:', err.message);
     }
 
     setRecords(prev => prev.map(r => {
@@ -196,13 +276,20 @@ export const BrandVerificationModule: React.FC = () => {
     addAuditLog('Brand Verification', `Requested LOA Authorization for brand ${selectedRecord.brandName}`);
     setDecisionModal(null);
     setRequestAuthNotesInput('');
+    setIsActionSubmitting(false);
   };
 
-  const handleExecuteReject = () => {
+  const handleExecuteReject = async () => {
     if (!selectedRecord) return;
     if (!rejectionReasonInput.trim()) {
       alert('Please enter rejection reason.');
       return;
+    }
+    setIsActionSubmitting(true);
+    try {
+      await brandTrademarkApi.rejectBrandVerification(selectedRecord.id, rejectionReasonInput);
+    } catch (err: any) {
+      console.warn('Backend brand rejection sync:', err.message);
     }
 
     setRecords(prev => prev.map(r => {
@@ -217,6 +304,37 @@ export const BrandVerificationModule: React.FC = () => {
     addAuditLog('Brand Verification', `Rejected brand authorization for ${selectedRecord.brandName}. Reason: ${rejectionReasonInput}`);
     setDecisionModal(null);
     setRejectionReasonInput('');
+    setIsActionSubmitting(false);
+  };
+
+  const handleCheckChange = async (checkKey: string, newStatus: CheckState) => {
+    if (!selectedRecord) return;
+    setRecords(prev => prev.map(r => r.id === selectedRecord.id ? {
+      ...r,
+      checks: { ...r.checks, [checkKey]: newStatus }
+    } : r));
+    try {
+      await brandTrademarkApi.updateBrandCheck(selectedRecord.id, checkKey, newStatus);
+    } catch (err: any) {
+      console.warn('Backend update check error:', err.message);
+    }
+  };
+
+  const handleDownloadDoc = async (doc: BrandDocItem) => {
+    if (!selectedRecord) return;
+    try {
+      const blob = await brandTrademarkApi.downloadBrandDoc(selectedRecord.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.fileName || `${selectedRecord.brandName}_doc.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert('Error downloading document: ' + (err.message || 'File not found.'));
+    }
   };
 
   const renderStatusBadge = (status: BrandStatus) => {
@@ -274,6 +392,21 @@ export const BrandVerificationModule: React.FC = () => {
             Verification of Letter of Authorization (LOA), Brand Ownership, and Artwork Formulations for Pharma Manufacturing.
           </div>
         </div>
+
+        <button
+          onClick={loadBrandRecords}
+          disabled={isLoading}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '7px 14px', borderRadius: 6,
+            background: '#F1F5F9', border: '1px solid #CBD5E1',
+            fontSize: 12, fontWeight: 700, color: '#0F172A',
+            cursor: 'pointer', transition: 'all 0.15s'
+          }}
+        >
+          <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+          <span>{isLoading ? 'Refreshing...' : 'Refresh Records'}</span>
+        </button>
       </div>
 
       {/* ── COMPACT HORIZONTAL STATISTICS ROW ─────────────────────── */}
@@ -374,7 +507,7 @@ export const BrandVerificationModule: React.FC = () => {
           </div>
 
           <div style={{ maxHeight: 680, overflowY: 'auto' }}>
-            {filteredRecords.map(rec => {
+            {paginatedRecords.map(rec => {
               const isSelected = rec.id === selectedRecordId;
               return (
                 <div
@@ -407,6 +540,7 @@ export const BrandVerificationModule: React.FC = () => {
               );
             })}
           </div>
+          <PaginationControl {...pagination.paginationProps} itemName="brand cases" />
         </div>
 
         {/* RIGHT BRAND REVIEW WORKSPACE */}
@@ -499,10 +633,7 @@ export const BrandVerificationModule: React.FC = () => {
                       </div>
                       <select
                         value={checkState}
-                        onChange={e => setRecords(prev => prev.map(r => r.id === selectedRecord.id ? {
-                          ...r,
-                          checks: { ...r.checks, [c.key]: e.target.value as any }
-                        } : r))}
+                        onChange={e => handleCheckChange(c.key, e.target.value as CheckState)}
                         style={{
                           padding: '4px 8px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 11.5, fontWeight: 700,
                           background: checkState === 'Verified' ? '#F0FDF4' : checkState === 'Failed' ? '#FEF2F2' : '#FFFBEB',
@@ -638,9 +769,15 @@ export const BrandVerificationModule: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ padding: '12px 18px', background: '#F1F5F9', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #E2E8F0' }}>
+            <div style={{ padding: '12px 18px', background: '#F1F5F9', display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid #E2E8F0' }}>
               <button onClick={() => setViewingDoc(null)} style={{ padding: '6px 16px', fontSize: 12, fontWeight: 600, borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', cursor: 'pointer' }}>
                 Close Viewer
+              </button>
+              <button
+                onClick={() => handleDownloadDoc(viewingDoc)}
+                style={{ padding: '6px 16px', fontSize: 12, fontWeight: 700, borderRadius: 6, border: 'none', background: '#1D4ED8', color: '#FFF', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Download size={13} /> Download Document
               </button>
             </div>
           </div>

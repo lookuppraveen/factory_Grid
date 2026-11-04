@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 
 /** Starts a throwaway PostgreSQL 17, applies the Prisma migrations and points the app at it. */
@@ -12,5 +13,9 @@ export default async function globalSetup(): Promise<void> {
   process.env.JWT_REFRESH_EXPIRATION_MS = '86400000';
   process.env.THROTTLE_DISABLED = 'true';
 
-  execSync('pnpm exec prisma migrate deploy', { stdio: 'ignore', env: process.env });
+  execSync('pnpm exec prisma migrate deploy', {
+    stdio: 'inherit',
+    cwd: resolve(__dirname, '..'),
+    env: { ...process.env, DATABASE_URL: container.getConnectionUri() },
+  });
 }

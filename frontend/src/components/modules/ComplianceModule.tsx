@@ -13,6 +13,8 @@ import { BrandVerificationModule } from './BrandVerificationModule';
 import { ComplianceCase } from '../../types';
 import { analyzeComplianceDocument, AIComplianceFinding } from '../../services/aiComplianceService';
 import { Sparkles } from 'lucide-react';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export interface VerificationRecord {
   id: string;
@@ -213,7 +215,23 @@ export const ComplianceModule: React.FC = () => {
     if (queueTab === 'REJECTED') return r.status === 'REJECTED';
     if (queueTab === 'EXPIRING') return r.daysRemaining <= 90 && r.daysRemaining > 0;
     return true;
+  }).sort((a, b) => {
+    // Latest record first (created_at DESC), secondary stable sort on id DESC
+    const timeA = new Date((a as any).createdAt || (a as any).created_at || a.submittedDate || 0).getTime();
+    const timeB = new Date((b as any).createdAt || (b as any).created_at || b.submittedDate || 0).getTime();
+    if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+      return timeB - timeA;
+    }
+    return String(b.id || '').localeCompare(String(a.id || ''));
   });
+
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredRecords.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, typeFilter, queueTab]
+  });
+  const paginatedRecords = pagination.paginateItems(filteredRecords);
 
   // Action Handlers
     const handleApproveRecord = (rec: VerificationRecord) => {
@@ -577,7 +595,7 @@ export const ComplianceModule: React.FC = () => {
           <tbody>
             {filteredRecords.length === 0 ? (
               <tr><td colSpan={7} style={{ padding: '40px 20px', textAlign: 'center', color: '#94A3B8' }}>No compliance verification records match your filters.</td></tr>
-            ) : filteredRecords.map(rec => (
+            ) : paginatedRecords.map(rec => (
               <tr
                 key={rec.id}
                 onClick={() => setDrawerRecordId(rec.id)}
@@ -638,6 +656,7 @@ export const ComplianceModule: React.FC = () => {
           </tbody>
         </table>
       </div>
+      <PaginationControl {...pagination.paginationProps} itemName="compliance records" />
 
       {/* ── RIGHT SIDE SLIDE-OVER DRAWER ─────────────────────── */}
       {selectedDrawerRecord && (

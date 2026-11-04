@@ -9,15 +9,34 @@ import {
   IsIn,
   IsObject,
 } from 'class-validator';
+import { PageableQueryDto } from '../../../common/pagination/pageable.dto';
 
 export const VALID_LIFECYCLE_STATUSES = ['DRAFT', 'ACTIVE', 'INACTIVE', 'DISCONTINUED', 'EOL'] as const;
 
 export class CreateCatalogProductDto {
-  @ApiProperty({ example: 'PRD001099', description: 'Unique central catalog product code' })
+  @ApiPropertyOptional({ example: 'prd_01', description: 'Product database ID' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
+  @MaxLength(100)
+  id?: string;
+
+  @ApiPropertyOptional({ example: 'prd_01', description: 'Alias for product database ID' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  productId?: string;
+
+  @ApiPropertyOptional({ example: 'PRD001099', description: 'Unique central catalog product code' })
+  @IsOptional()
+  @IsString()
   @MaxLength(50)
-  productCode!: string;
+  productCode?: string;
+
+  @ApiPropertyOptional({ example: 'PRD001099', description: 'Snake-case alias for product code' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  product_code?: string;
 
   @ApiProperty({ example: 'Amoxicillin 500mg Capsules', description: 'Official product brand/trade name' })
   @IsString()
@@ -140,6 +159,71 @@ export class CreateCatalogProductDto {
   @IsOptional()
   @IsObject()
   attributes?: Record<string, any>;
+
+  // Snake-case aliases for API compatibility
+  @IsOptional()
+  @IsString()
+  product_type_id?: string;
+
+  @IsOptional()
+  @IsString()
+  category_id?: string;
+
+  @IsOptional()
+  @IsString()
+  sub_category?: string;
+
+  @IsOptional()
+  @IsString()
+  sub_sub_category?: string;
+
+  @IsOptional()
+  @IsString()
+  generic_name?: string;
+
+  @IsOptional()
+  @IsString()
+  short_name?: string;
+
+  @IsOptional()
+  @IsString()
+  dosage_form?: string;
+
+  @IsOptional()
+  @IsString()
+  brand_id?: string;
+
+  @IsOptional()
+  @IsString()
+  base_uom?: string;
+
+  @IsOptional()
+  @IsString()
+  pack_size?: string;
+
+  @IsOptional()
+  @IsString()
+  pack_uom?: string;
+
+  @IsOptional()
+  @IsString()
+  lifecycle_status?: string;
+
+  @IsOptional()
+  @IsString()
+  available_from?: string;
+
+  @IsOptional()
+  @IsString()
+  discontinued_on?: string;
+
+  @IsOptional()
+  @IsString()
+  replacement_product_id?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_sellable?: boolean;
 }
 
 export class UpdateCatalogProductDto {
@@ -277,12 +361,7 @@ export class UpdateCatalogProductDto {
   attributes?: Record<string, any>;
 }
 
-export class ProductQueryDto {
-  @ApiPropertyOptional({ description: 'Full-text query across code, name, generic name, category' })
-  @IsOptional()
-  @IsString()
-  search?: string;
-
+export class ProductQueryDto extends PageableQueryDto {
   @ApiPropertyOptional({ description: 'Filter by category name or ID' })
   @IsOptional()
   @IsString()
@@ -313,4 +392,9 @@ export class ProductQueryDto {
   @IsBoolean()
   @Type(() => Boolean)
   activeOnly?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by dosage formulation form' })
+  @IsOptional()
+  @IsString()
+  dosageForm?: string;
 }

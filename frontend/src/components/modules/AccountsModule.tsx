@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 import {
   Receipt, DollarSign, Send, CheckCircle2, AlertCircle,
   FileText, Download, Plus, Search, BarChart3, Clock, AlertTriangle
@@ -54,6 +56,52 @@ export const AccountsModule: React.FC = () => {
   }, {} as Record<string, { count: number; amount: number }>);
 
   const totalAgingAmount = Object.values(agingBuckets).reduce((a, b) => a + b.amount, 0) || 1;
+
+  // Sorted collections & pagination
+  const sortedInvoices = useMemo(() => {
+    return [...invoices].sort((a, b) => {
+      const timeA = new Date((a as any).createdAt || (a as any).created_at || a.invoiceDate || 0).getTime();
+      const timeB = new Date((b as any).createdAt || (b as any).created_at || b.invoiceDate || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) return timeB - timeA;
+      return String(b.invoiceNumber || b.id || '').localeCompare(String(a.invoiceNumber || a.id || ''));
+    });
+  }, [invoices]);
+
+  const receivablesPagination = usePagination({
+    totalItems: sortedInvoices.length,
+    initialPageSize: 10
+  });
+  const paginatedInvoices = receivablesPagination.paginateItems(sortedInvoices);
+
+  const sortedTransactions = useMemo(() => {
+    return [...paymentTransactions].sort((a, b) => {
+      const timeA = new Date((a as any).createdAt || (a as any).timestamp || (a as any).date || 0).getTime();
+      const timeB = new Date((b as any).createdAt || (b as any).timestamp || (b as any).date || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) return timeB - timeA;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }, [paymentTransactions]);
+
+  const transactionsPagination = usePagination({
+    totalItems: sortedTransactions.length,
+    initialPageSize: 10
+  });
+  const paginatedTransactions = transactionsPagination.paginateItems(sortedTransactions);
+
+  const sortedCustomers = useMemo(() => {
+    return [...customers].sort((a, b) => {
+      const timeA = new Date((a as any).createdAt || (a as any).created_at || 0).getTime();
+      const timeB = new Date((b as any).createdAt || (b as any).created_at || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) return timeB - timeA;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }, [customers]);
+
+  const customersPagination = usePagination({
+    totalItems: sortedCustomers.length,
+    initialPageSize: 10
+  });
+  const paginatedCustomers = customersPagination.paginateItems(sortedCustomers);
 
   const statusDot = (status: string) => {
     const colors: Record<string, string> = {
@@ -163,7 +211,7 @@ export const AccountsModule: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {invoices.map(inv => (
+                {paginatedInvoices.map(inv => (
                   <tr key={inv.id}>
                     <td className="ent-mono" style={{ fontWeight: 700 }}>{inv.invoiceNumber}</td>
                     <td>
@@ -214,6 +262,7 @@ export const AccountsModule: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            <PaginationControl {...receivablesPagination.paginationProps} itemName="receivables" />
           </div>
         </div>
       )}
@@ -241,7 +290,7 @@ export const AccountsModule: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {paymentTransactions.map(tx => (
+                {paginatedTransactions.map(tx => (
                   <tr key={tx.id}>
                     <td className="ent-mono" style={{ fontWeight: 700, color: 'var(--c-secondary)' }}>{tx.transactionRef}</td>
                     <td className="ent-mono">{tx.invoiceNumber}</td>
@@ -263,6 +312,7 @@ export const AccountsModule: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            <PaginationControl {...transactionsPagination.paginationProps} itemName="transactions" />
           </div>
         </div>
       )}
@@ -289,7 +339,7 @@ export const AccountsModule: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {customers.map(c => {
+                {paginatedCustomers.map(c => {
                   const used = c.creditLimit - c.availableCredit;
                   const utilPct = c.creditLimit > 0 ? Math.round((used / c.creditLimit) * 100) : 0;
                   const riskColor = c.riskScore === 'LOW' ? '#047857' : c.riskScore === 'HIGH' ? '#B91C1C' : '#B45309';
@@ -332,6 +382,7 @@ export const AccountsModule: React.FC = () => {
                 })}
               </tbody>
             </table>
+            <PaginationControl {...customersPagination.paginationProps} itemName="customer accounts" />
           </div>
         </div>
       )}

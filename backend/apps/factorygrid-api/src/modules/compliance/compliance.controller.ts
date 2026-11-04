@@ -15,6 +15,7 @@ import {
   RejectVerificationDto,
   RequestMoreDocsDto,
   ReviewDocumentDto,
+  UpdateClassificationDto,
 } from '../buyer/dto/verification.dto';
 import { ComplianceService } from './compliance.service';
 
@@ -62,8 +63,9 @@ export class ComplianceController {
   approveVerification(
     @Param('id') id: string,
     @Body() dto?: ApproveVerificationDto,
+    @CurrentUser() user?: AuthUser,
   ) {
-    return this.complianceService.approveVerification(id, dto?.customerCode);
+    return this.complianceService.approveVerification(id, dto, user);
   }
 
   @Post(':id/reject')
@@ -123,10 +125,15 @@ export class ComplianceController {
   @ApiParam({ name: 'id', description: 'Request Code or database ID' })
   updateClassification(
     @Param('id') id: string,
-    @Body('classification') classification: string,
+    @Body() dto: UpdateClassificationDto,
     @CurrentUser() user?: AuthUser,
   ) {
-    return this.complianceService.updateClassification(id, classification, user?.username || 'Platform Admin');
+    return this.complianceService.updateClassification(
+      id,
+      dto?.classification || 'REGULAR',
+      dto?.remarks,
+      user?.username || 'Platform Admin',
+    );
   }
 }
 

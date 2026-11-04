@@ -3,8 +3,9 @@ import {
   Users, Search, Plus, Filter, Edit2, Trash2, X, AlertTriangle,
   CheckCircle2, Clock
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 import { CustomerSegment, LifecycleStatus } from '../../types';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export const CustomerSegmentMasterModule: React.FC = () => {
   const {
@@ -47,8 +48,22 @@ export const CustomerSegmentMasterModule: React.FC = () => {
       const matchesStatus = statusFilter === 'ALL' || segStatus === statusFilter;
 
       return matchesSearch && matchesStatus;
+    }).sort((a, b) => {
+      const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
+      const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return (b.customer_segment_id || b.id || '').localeCompare(a.customer_segment_id || a.id || '');
     });
   }, [customerSegments, searchTerm, statusFilter]);
+
+  const {
+    paginatedItems: paginatedSegments,
+    paginationProps,
+    resetPage
+  } = usePagination(filteredSegments, {
+    initialPageSize: 10,
+    resetDeps: [searchTerm, statusFilter]
+  });
 
   // KPIs
   const totalCount = customerSegments.length;
@@ -133,6 +148,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
       };
       addCustomerSegment(newSeg);
       addAuditLog('ADD_CUSTOMER_SEGMENT', `Created customer segment ${codeClean}`);
+      resetPage();
     }
 
     setIsModalOpen(false);
@@ -250,7 +266,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredSegments.length === 0 ? (
+              {paginatedSegments.length === 0 ? (
                 <tr>
                   <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>
                     <Users size={32} style={{ color: '#94A3B8', display: 'block', margin: '0 auto 10px' }} />
@@ -259,7 +275,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredSegments.map(seg => {
+                paginatedSegments.map(seg => {
                   const status = seg.lifecycle_status || (seg.is_active ? 'ACTIVE' : 'INACTIVE');
                   const isActive = status === 'ACTIVE';
 
@@ -320,6 +336,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <PaginationControl {...paginationProps} />
       </div>
 
       {/* Add / Edit Modal */}

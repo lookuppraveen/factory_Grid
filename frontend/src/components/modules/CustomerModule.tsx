@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Customer } from '../../types';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 import {
   Users, Plus, Search, Building2,
   PhoneCall, Mail, DollarSign, Clock, ArrowRight, Target,
@@ -60,15 +62,32 @@ export const CustomerModule: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [drawerTab, setDrawerTab] = useState<'OVERVIEW' | 'MEETINGS' | 'RFQS' | 'ORDERS' | 'HISTORY'>('OVERVIEW');
 
-  const totalPipelineValue = pipelineDeals.reduce((acc, d) => acc + d.expectedRevenue, 0);
-  const wonValue = pipelineDeals.filter(d => d.stage === 'LIVE_CUSTOMER' || d.stage === 'APPROVED_CUSTOMER').reduce((a, d) => a + d.expectedRevenue, 0);
+  // Filtered & Sorted Customer Directory
+  const filteredCustomers = useMemo(() => {
+    return (customers || [])
+      .filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) || (c.code || '').toLowerCase().includes(searchTerm.toLowerCase()))
+      .sort((a, b) => {
+        const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
+        const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
+        if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+          return timeB - timeA;
+        }
+        return (b.id || '').localeCompare(a.id || '');
+      });
+  }, [customers, searchTerm]);
 
-  // Conversion funnel counts per stage
-  const funnelCounts = crmStages.map(s => ({
-    ...s,
-    count: pipelineDeals.filter(d => d.stage === s.id).length,
-    value: pipelineDeals.filter(d => d.stage === s.id).reduce((a, d) => a + d.expectedRevenue, 0),
-  }));
+  const customerPagination = usePagination({
+    totalItems: filteredCustomers.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm]
+  });
+  const paginatedCustomers = customerPagination.paginateItems(filteredCustomers);
+
+  const pipelinePagination = usePagination({
+    totalItems: pipelineDeals.length,
+    initialPageSize: 10
+  });
+  const paginatedDeals = pipelinePagination.paginateItems(pipelineDeals);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 48 }}>
@@ -203,7 +222,7 @@ export const CustomerModule: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {pipelineDeals.map(deal => {
+                {paginatedDeals.map(deal => {
                   const stageConfig = getStageConfig(deal.stage);
                   return (
                     <tr key={deal.company}>
@@ -232,6 +251,7 @@ export const CustomerModule: React.FC = () => {
                 })}
               </tbody>
             </table>
+            <PaginationControl {...pipelinePagination.paginationProps} itemName="deals" />
           </div>
         </div>
       )}
@@ -258,7 +278,7 @@ export const CustomerModule: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {customers.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(cust => (
+                {paginatedCustomers.map(cust => (
                   <tr key={cust.id} onClick={() => setSelectedCustomer(cust)} className={selectedCustomer?.id === cust.id ? 'selected' : ''}>
                     <td>
                       <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{cust.name}</div>
@@ -285,6 +305,7 @@ export const CustomerModule: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            <PaginationControl {...customerPagination.paginationProps} itemName="customers" />
           </div>
 
           {/* Customer Profile Drawer */}

@@ -25,21 +25,34 @@ export interface CatalogProductItem {
 
 export interface UploadedManufacturerDocument {
   id: string;
+  documentId?: string;
+  manufacturerId?: string;
   documentCode: string;
   category: string;
+  documentType?: string;
   categoryDisplayName: string;
+  documentName?: string;
   fileName: string;
+  originalFileName?: string;
   fileSize: number;
   mimeType: string;
+  contentType?: string;
+  storageKey?: string;
+  fileReference?: string;
   issueDate: string;
   expiryDate: string;
   status: string;
+  verificationStatus?: string;
   rejectionReason?: string | null;
+  adminRemarks?: string | null;
   reviewedBy?: string | null;
+  verifiedBy?: string | null;
   reviewedAt?: string | null;
+  verifiedAt?: string | null;
   reviewDecision?: string | null;
   version: number;
   uploadedAt: string;
+  downloadUrl?: string;
 }
 
 export interface FactoryGalleryItem {
@@ -220,16 +233,20 @@ export const manufacturerRegistrationApi = {
     file: File,
     category: string,
     registrationCode: string,
-    issueDate: string,
-    expiryDate: string,
+    issueDate?: string,
+    expiryDate?: string,
+    documentNumber?: string,
     token?: string,
   ): Promise<UploadedManufacturerDocument> {
     const form = new FormData();
     form.append('file', file);
     form.append('category', category);
     form.append('registrationCode', registrationCode);
-    form.append('issueDate', issueDate);
-    form.append('expiryDate', expiryDate);
+    if (issueDate) form.append('issueDate', issueDate);
+    if (expiryDate) form.append('expiryDate', expiryDate);
+    if (documentNumber) {
+      form.append('documentNumber', documentNumber);
+    }
     const headers: Record<string, string> = {};
     const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
     if (authToken) {
@@ -238,8 +255,9 @@ export const manufacturerRegistrationApi = {
     const params = new URLSearchParams({
       category,
       registrationCode,
-      issueDate,
-      expiryDate,
+      ...(issueDate ? { issueDate } : {}),
+      ...(expiryDate ? { expiryDate } : {}),
+      ...(documentNumber ? { documentNumber } : {}),
     });
     return request<UploadedManufacturerDocument>(`${BASE}/documents/upload?${params.toString()}`, {
       method: 'POST',
@@ -260,7 +278,13 @@ export const manufacturerRegistrationApi = {
     });
   },
 
-  saveStep2(payload: { documents: Array<{ category: string; issueDate: string; expiryDate: string }> }, registrationCode: string): Promise<ManufacturerStepResponse> {
+  saveStep2(
+    payload: {
+      documents?: Array<{ category: string; issueDate?: string; expiryDate?: string; documentNumber?: string }>;
+      whoGmpApplicable?: boolean;
+    },
+    registrationCode: string,
+  ): Promise<ManufacturerStepResponse> {
     return request<ManufacturerStepResponse>(
       `${BASE}/registration/step-2?registrationCode=${encodeURIComponent(registrationCode)}`,
       json(payload),
@@ -291,7 +315,7 @@ export const manufacturerRegistrationApi = {
     );
   },
 
-  submitRegistration(payload: { registrationCode: string; password?: string; confirmAccurate: boolean }): Promise<any> {
+  submitRegistration(payload: { registrationCode: string; password?: string; confirmAccurate: boolean; whoGmpApplicable?: boolean }): Promise<any> {
     return request<any>(`${BASE}/registration/submit`, json(payload));
   },
 
@@ -321,6 +345,79 @@ export const manufacturerRegistrationApi = {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
     return request<UploadedManufacturerDocument[]>(`${BASE}/documents${qs}`, { method: 'GET', headers });
+  },
+
+  getMyDocuments(token?: string): Promise<UploadedManufacturerDocument[]> {
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return request<UploadedManufacturerDocument[]>(`${BASE}/me/documents`, { method: 'GET', headers });
+  },
+
+  uploadMyDocument(
+    file: File,
+    category: string,
+    documentNumber?: string,
+    issueDate?: string,
+    expiryDate?: string,
+    token?: string,
+  ): Promise<UploadedManufacturerDocument> {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('category', category);
+    if (documentNumber) form.append('documentNumber', documentNumber);
+    if (issueDate) form.append('issueDate', issueDate);
+    if (expiryDate) form.append('expiryDate', expiryDate);
+
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    const params = new URLSearchParams({
+      category,
+      ...(documentNumber ? { documentNumber } : {}),
+      ...(issueDate ? { issueDate } : {}),
+      ...(expiryDate ? { expiryDate } : {}),
+    });
+    return request<UploadedManufacturerDocument>(`${BASE}/me/documents?${params.toString()}`, {
+      method: 'POST',
+      body: form,
+      headers,
+    });
+  },
+
+  replaceMyDocument(
+    documentId: string,
+    file: File,
+    documentNumber?: string,
+    issueDate?: string,
+    expiryDate?: string,
+    token?: string,
+  ): Promise<UploadedManufacturerDocument> {
+    const form = new FormData();
+    form.append('file', file);
+    if (documentNumber) form.append('documentNumber', documentNumber);
+    if (issueDate) form.append('issueDate', issueDate);
+    if (expiryDate) form.append('expiryDate', expiryDate);
+
+    const headers: Record<string, string> = {};
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null);
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    const params = new URLSearchParams({
+      ...(documentNumber ? { documentNumber } : {}),
+      ...(issueDate ? { issueDate } : {}),
+      ...(expiryDate ? { expiryDate } : {}),
+    });
+    return request<UploadedManufacturerDocument>(`${BASE}/me/documents/${encodeURIComponent(documentId)}?${params.toString()}`, {
+      method: 'PUT',
+      body: form,
+      headers,
+    });
   },
 
   // --- Factory Gallery ---

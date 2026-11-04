@@ -725,4 +725,98 @@ export class BuyerRegistrationService {
       })),
     };
   }
+
+  /**
+   * Retrieves consolidated authenticated buyer profile, registration, and verification status
+   */
+  async getBuyerProfile(userId: number, user: AuthUser) {
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+    });
+
+    const email = dbUser?.email || '';
+    const accountStatus = dbUser?.accountStatus || 'ACTIVE';
+
+    let reg: any = null;
+    try {
+      reg = await this.getMyRegistration(userId);
+    } catch {
+      if (email) {
+        const fallbackReg = await this.prisma.buyerRegistration.findFirst({
+          where: { email: { equals: email.trim(), mode: 'insensitive' as const } },
+          include: {
+            documents: { where: { status: { not: 'SUPERSEDED' } }, orderBy: { createdAt: 'desc' } },
+            verificationRequests: true,
+          },
+        });
+        if (fallbackReg) {
+          reg = {
+            ...fallbackReg,
+            id: fallbackReg.id.toString(),
+            userId: fallbackReg.userId ? fallbackReg.userId.toString() : null,
+            documents: fallbackReg.documents.map((d) => this.toDocumentDto(d, fallbackReg.id)),
+            verificationRequests: fallbackReg.verificationRequests.map((v) => ({
+              ...v,
+              id: v.id.toString(),
+              registrationId: v.registrationId ? v.registrationId.toString() : null,
+              userId: v.userId ? v.userId.toString() : null,
+            })),
+          };
+        }
+      }
+    }
+
+    const verification = reg?.verificationRequests?.[0] || await this.prisma.customerVerificationRequest.findFirst({
+      where: {
+        OR: [
+          { userId: BigInt(userId) },
+          ...(email ? [{ email: { equals: email.trim(), mode: 'insensitive' as const } }] : []),
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const verificationStatus = verification?.verificationStatus || (accountStatus === 'ACTIVE' ? 'Active' : 'Under Review');
+    const isApproved = accountStatus === 'ACTIVE' && (verificationStatus === 'Active' || verificationStatus === 'Approved');
+    const rawClassification = verification?.customerClassification || 'REGULAR';
+    const effectiveClassification = (isApproved && rawClassification === 'SPECIAL_PARTY') ? 'SPECIAL_PARTY' : 'REGULAR';
+    const isSpecialBuyer = effectiveClassification === 'SPECIAL_PARTY';
+
+    return {
+      userId: user.id,
+      userCode: user.userCode,
+      username: user.username,
+      email: dbUser?.email || '',
+      fullName: dbUser?.fullName || user.username,
+      phone: dbUser?.phone || reg?.mobileNumber || '',
+      companyName: dbUser?.companyName || reg?.companyName || 'My Organization',
+      companyCode: dbUser?.companyCode || verification?.customerCode || reg?.registrationCode || '',
+      accountStatus,
+      roles: user.roles,
+      registration: reg,
+      verificationStatus,
+      customerCode: verification?.customerCode || null,
+      customerClassification: effectiveClassification,
+      rawCustomerClassification: rawClassification,
+      isSpecialBuyer,
+      workflowClassification: isSpecialBuyer ? 'SPECIAL_PARTY' : 'NORMAL',
+      workflowType: isSpecialBuyer ? 'SPECIAL_PARTY' : 'NORMAL',
+      isApproved,
+      capabilities: {
+        canCreateSpecialRfq: isSpecialBuyer,
+        canUsePreAgreedPricing: isSpecialBuyer,
+        canCreateRegularRfq: isApproved,
+      },
+      verificationDetails: verification ? {
+        id: verification.id.toString(),
+        requestCode: verification.requestCode,
+        verificationStatus: verification.verificationStatus,
+        customerClassification: verification.customerClassification,
+        customerCode: verification.customerCode,
+        approvedAt: verification.approvedAt,
+        assignedComplianceOfficer: verification.assignedComplianceOfficer,
+      } : null,
+    };
+  }
 }
+

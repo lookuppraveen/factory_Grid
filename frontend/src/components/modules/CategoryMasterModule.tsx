@@ -1,10 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ProductType, Category, LifecycleStatus } from '../../types';
+import { ProductType, Category, LifecycleStatus, ProductTypeAttributeDraft } from '../../types';
+import { catalogApi } from '../../services/catalogApi';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 import {
   FolderTree, Layers, Search, Plus, Edit3, Trash2, CheckCircle2,
-  AlertTriangle, X, Power, ArrowLeft, ChevronRight, ChevronDown,
-  Sparkles, Check, Info, FileText, Table, ListTree, Filter, Tag, Eye
+  AlertTriangle, X, Power, ChevronRight, ChevronDown,
+  Sparkles, Table, ListTree, Eye, Sliders, Tag, Check, RefreshCw
 } from 'lucide-react';
 
 export const CategoryMasterModule: React.FC = () => {
@@ -20,12 +23,14 @@ export const CategoryMasterModule: React.FC = () => {
     deleteUnifiedCategory,
     toggleUnifiedCategoryStatus,
     attributeMasters,
-    categoryAttributes,
-    addCategoryAttribute,
-    removeCategoryAttribute,
-    setCategoryAttributesForCategory,
-    getCategoryAttributes,
-    getCategoryConfiguredAttributes,
+    productTypeAttributes,
+    getProductTypeAttributes,
+    getProductTypeConfiguredAttributes,
+    addProductTypeAttribute,
+    updateProductTypeAttribute,
+    removeProductTypeAttribute,
+    bulkSaveProductTypeAttributes,
+    refreshProductTypeAttributes,
     setActiveTab
   } = useApp();
 
@@ -47,12 +52,12 @@ export const CategoryMasterModule: React.FC = () => {
 
   // Expanded nodes for Hierarchy View
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set([
-    'cat:Drugs',
-    'sub:Drugs:Tablets',
-    'sub:Drugs:Capsules',
-    'cat:Dietary Supplements',
-    'cat:Clinical Skincare',
-    'cat:Classical Ayurvedic'
+    'cat:pt_med:Drugs',
+    'sub:pt_med:Drugs:Tablets',
+    'sub:pt_med:Drugs:Capsules',
+    'cat:pt_nut:Dietary Supplements',
+    'cat:pt_cos:Clinical Skincare',
+    'cat:pt_ayr:Classical Ayurvedic'
   ]));
 
   const toggleExpand = (nodeKey: string) => {
@@ -123,76 +128,33 @@ export const CategoryMasterModule: React.FC = () => {
   });
   const [catFormError, setCatFormError] = useState<string | null>(null);
 
-  // ── CATEGORY -> ATTRIBUTE ASSOCIATION STATE ──
-  const [catAttrDrafts, setCatAttrDrafts] = useState<{ attribute_id: string; remark: string }[]>([]);
+  // ── INTEGRATED PRODUCT TYPE MASTER (SELECT EXISTING ATTRIBUTES ONLY) ──
+  const [selectedAttributeIds, setSelectedAttributeIds] = useState<string[]>([]);
+  const [selectedAttrDropdownValue, setSelectedAttrDropdownValue] = useState<string>('');
+  const [isSavingPt, setIsSavingPt] = useState(false);
+
+  // Available active attributes for assignment selector (only active, and not already selected)
+  const availableActiveAttributes = useMemo(() => {
+    return (attributeMasters || [])
+      .filter(a => {
+        const isActive = (a.is_active !== false) && (a.isActive !== false) && (a.lifecycle_status !== 'INACTIVE') && (a.status !== 'Inactive');
+        const id = a.attribute_id || a.id;
+        return Boolean(isActive && id && !selectedAttributeIds.includes(id));
+      })
+      .sort((a, b) => (a.attribute_name || a.name || '').localeCompare(b.attribute_name || b.name || ''));
+  }, [attributeMasters, selectedAttributeIds]);
+
+  // ── VIEW PRODUCT TYPE MODAL ──
+  const [isViewPtModalOpen, setIsViewPtModalOpen] = useState(false);
+  const [viewingPt, setViewingPt] = useState<ProductType | null>(null);
+  const [viewPtDetails, setViewPtDetails] = useState<{ attributes: any[]; categories: any[] } | null>(null);
+  const [viewPtLoading, setViewPtLoading] = useState(false);
+  const [viewPtTab, setViewPtTab] = useState<'ATTRIBUTES' | 'CATEGORIES'>('ATTRIBUTES');
+
 
   // ── VIEW CATEGORY MODAL STATE ──
   const [viewingCat, setViewingCat] = useState<Category | null>(null);
   const [isViewCatModalOpen, setIsViewCatModalOpen] = useState(false);
-
-  // ── ADD ATTRIBUTE ASSIGNMENT MODAL STATE (Section 4) ──
-  const [isAddAttrModalOpen, setIsAddAttrModalOpen] = useState(false);
-  const [selectedAttrId, setSelectedAttrId] = useState<string>('');
-  const [addAttrModalContext, setAddAttrModalContext] = useState<'VIEW_MODAL' | 'DRAFT_MODAL'>('VIEW_MODAL');
-  const [addAttrError, setAddAttrError] = useState<string | null>(null);
-
-  // Active ATTRIBUTE_MASTER records available to assign (not already in catAttrDrafts)
-  const availableAttributesForModal = useMemo(() => {
-    const assignedIds = catAttrDrafts.map(d => d.attribute_id);
-    return (attributeMasters || []).filter(attr => {
-      if (!attr.is_active) return false;
-      const aId = attr.attribute_id || attr.id || '';
-      return !assignedIds.includes(aId);
-    });
-  }, [attributeMasters, catAttrDrafts]);
-
-  // Active ATTRIBUTE_MASTER records available to assign in View Category modal
-  const availableAttributesForViewModal = useMemo(() => {
-    if (!viewingCat) return [];
-    const catId = viewingCat.category_id || viewingCat.id || '';
-    const assignedIds = getCategoryAttributes(catId).map(ca => ca.attribute_id || ca.attributeId);
-    return (attributeMasters || []).filter(attr => {
-      if (!attr.is_active) return false;
-      const aId = attr.attribute_id || attr.id || '';
-      return !assignedIds.includes(aId);
-    });
-  }, [attributeMasters, viewingCat, categoryAttributes]);
-
-  const handleConfirmAddAttribute = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedAttrId) {
-      setAddAttrError('Please select an Attribute.');
-      return;
-    }
-
-    const master = (attributeMasters || []).find(m => (m.attribute_id || m.id) === selectedAttrId);
-    const attrName = master?.attribute_name || master?.name || selectedAttrId;
-
-    if (addAttrModalContext === 'VIEW_MODAL') {
-      if (!viewingCat) return;
-      const catId = viewingCat.category_id || viewingCat.id || '';
-      const res = addCategoryAttribute({
-        category_id: catId,
-        attribute_id: selectedAttrId,
-        remark: ''
-      });
-      if (res.success) {
-        showToast(`Assigned "${attrName}" to ${viewingCat.category}`);
-        setIsAddAttrModalOpen(false);
-      } else {
-        setAddAttrError(res.error || 'Failed to assign attribute');
-      }
-    } else {
-      // DRAFT_MODAL
-      if (catAttrDrafts.length >= 10) {
-        setAddAttrError('Maximum 10 attributes allowed for this category.');
-        return;
-      }
-      setCatAttrDrafts(prev => [...prev, { attribute_id: selectedAttrId, remark: '' }]);
-      showToast(`Added "${attrName}" to category attributes`);
-      setIsAddAttrModalOpen(false);
-    }
-  };
 
   // 3. Delete Confirmation Modal
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
@@ -243,14 +205,15 @@ export const CategoryMasterModule: React.FC = () => {
       }
       return true;
     }).sort((a, b) => {
-      // Sort primarily by Product Type, then Category, then display_order
-      if (a.product_type_id !== b.product_type_id) {
-        return a.product_type_id.localeCompare(b.product_type_id);
+      // Latest record first (created_at DESC), secondary sort on id/categoryId DESC
+      const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
+      const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+        return timeB - timeA;
       }
-      if (a.category !== b.category) {
-        return a.category.localeCompare(b.category);
-      }
-      return (Number(a.display_order) || 1) - (Number(b.display_order) || 1);
+      const idA = String(a.category_id || a.categoryId || a.id || '');
+      const idB = String(b.category_id || b.categoryId || b.id || '');
+      return idB.localeCompare(idA);
     });
   }, [unifiedCategories, categoryPtFilter, categoryStatusFilter, categorySearchTerm, productTypes]);
 
@@ -268,8 +231,31 @@ export const CategoryMasterModule: React.FC = () => {
         const matchesStatus = ptStatusFilter === 'ALL' || ptStatus === ptStatusFilter;
         return matchesSearch && matchesStatus;
       })
-      .sort((a, b) => (Number(a.display_order) || 1) - (Number(b.display_order) || 1));
+      .sort((a, b) => {
+        // Latest record first (created_at DESC), secondary sort on id/product_type_id DESC
+        const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
+        const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
+        if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+          return timeB - timeA;
+        }
+        const idA = String(a.product_type_id || a.productTypeId || a.id || '');
+        const idB = String(b.product_type_id || b.productTypeId || b.id || '');
+        return idB.localeCompare(idA);
+      });
   }, [productTypes, productTypeSearch, ptStatusFilter]);
+
+  // ── PAGINATION CONTROLS ──
+  const categoryPagination = usePagination(filteredCategoryList, {
+    initialPageSize: 10,
+    resetDeps: [categoryPtFilter, categoryStatusFilter, categorySearchTerm]
+  });
+  const paginatedCategories = categoryPagination.paginatedItems;
+
+  const ptPagination = usePagination(filteredProductTypes, {
+    initialPageSize: 10,
+    resetDeps: [productTypeSearch, ptStatusFilter]
+  });
+  const paginatedProductTypes = ptPagination.paginatedItems;
 
   // ── METRICS SUMMARY ──
   const categoryStats = useMemo(() => {
@@ -497,13 +483,6 @@ export const CategoryMasterModule: React.FC = () => {
       lifecycle_status: 'ACTIVE',
       display_order: nextOrder
     });
-    setCatAttrDrafts([
-      { attribute_id: 'attr_generic_name', remark: '' },
-      { attribute_id: 'attr_strength', remark: '' },
-      { attribute_id: 'attr_dosage_form', remark: '' },
-      { attribute_id: 'attr_pack_size', remark: '' }
-    ]);
-    setIsAddAttrModalOpen(false);
     setCatFormError(null);
     setIsCatModalOpen(true);
   };
@@ -535,13 +514,6 @@ export const CategoryMasterModule: React.FC = () => {
       lifecycle_status: (cat.lifecycle_status || (cat.status === 'Active' ? 'ACTIVE' : 'INACTIVE')) as LifecycleStatus,
       display_order: Number(cat.display_order) || 1
     });
-    const catId = cat.category_id || cat.id || '';
-    const existing = getCategoryAttributes(catId);
-    setCatAttrDrafts(existing.map(ca => ({
-      attribute_id: ca.attribute_id || ca.attributeId || '',
-      remark: ca.remark || ''
-    })));
-    setIsAddAttrModalOpen(false);
     setCatFormError(null);
     setIsCatModalOpen(true);
   };
@@ -553,7 +525,7 @@ export const CategoryMasterModule: React.FC = () => {
     setIsAddAttrModalOpen(false);
   };
 
-  const executeSaveCategory = (options: { closeAfterSave: boolean }): boolean => {
+  const executeSaveCategory = async (options: { closeAfterSave: boolean }): Promise<boolean> => {
     if (!catFormData.product_type_id) {
       setCatFormError('Please select a Product Type.');
       return false;
@@ -566,10 +538,6 @@ export const CategoryMasterModule: React.FC = () => {
     const cleanCode = catFormData.category_code.trim().toUpperCase();
     if (!cleanCode) {
       setCatFormError('Category Code is required.');
-      return false;
-    }
-    if (catAttrDrafts.length > 10) {
-      setCatFormError('Maximum 10 attributes allowed for this category.');
       return false;
     }
 
@@ -610,63 +578,68 @@ export const CategoryMasterModule: React.FC = () => {
       targetSubSubCategory = cleanName;
     }
 
-    if (editingCat) {
-      const catId = editingCat.category_id || editingCat.id!;
-      updateUnifiedCategory(catId, {
-        product_type_id: catFormData.product_type_id,
-        category: targetCategory,
-        sub_category: targetSubCategory,
-        sub_sub_category: targetSubSubCategory,
-        category_code: cleanCode,
-        description: catFormData.description.trim() || undefined,
-        lifecycle_status: catFormData.lifecycle_status,
-        display_order: Number(catFormData.display_order) || 1,
-        name: cleanName,
-        code: cleanCode,
-        status: catFormData.lifecycle_status === 'ACTIVE' ? 'Active' : 'Inactive',
-        subCategory: targetSubCategory,
-        subSubCategory: targetSubSubCategory,
-        updated_at: today
-      });
-      setCategoryAttributesForCategory(catId, catAttrDrafts);
-      showToast(`Updated ${levelLabel} record "${cleanCode}" (${cleanName})`);
-    } else {
-      // Auto-generate canonical category_id e.g. CAT033
-      const existingMaxNum = (unifiedCategories || []).reduce((max, c) => {
-        const match = (c.category_id || '').match(/^CAT(\d+)$/i);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          return num > max ? num : max;
-        }
-        return max;
-      }, 0);
-      const newCatId = `CAT${String(existingMaxNum + 1).padStart(3, '0')}`;
+    try {
+      if (editingCat) {
+        const catId = editingCat.category_id || editingCat.id!;
+        await updateUnifiedCategory(catId, {
+          product_type_id: catFormData.product_type_id,
+          category: targetCategory,
+          sub_category: targetSubCategory,
+          sub_sub_category: targetSubSubCategory,
+          category_code: cleanCode,
+          description: catFormData.description.trim() || undefined,
+          lifecycle_status: catFormData.lifecycle_status,
+          display_order: Number(catFormData.display_order) || 1,
+          name: cleanName,
+          code: cleanCode,
+          status: catFormData.lifecycle_status === 'ACTIVE' ? 'Active' : 'Inactive',
+          subCategory: targetSubCategory,
+          subSubCategory: targetSubSubCategory,
+          updated_at: today
+        });
+        showToast(`Updated ${levelLabel} record "${cleanCode}" (${cleanName})`);
+      } else {
+        // Auto-generate canonical category_id e.g. CAT033
+        const existingMaxNum = (unifiedCategories || []).reduce((max, c) => {
+          const match = (c.category_id || '').match(/^CAT(\d+)$/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            return num > max ? num : max;
+          }
+          return max;
+        }, 0);
+        const newCatId = `CAT${String(existingMaxNum + 1).padStart(3, '0')}`;
 
-      const newRecord: Category = {
-        category_id: newCatId,
-        product_type_id: catFormData.product_type_id,
-        category: targetCategory,
-        sub_category: targetSubCategory,
-        sub_sub_category: targetSubSubCategory,
-        category_code: cleanCode,
-        description: catFormData.description.trim() || undefined,
-        lifecycle_status: catFormData.lifecycle_status,
-        display_order: Number(catFormData.display_order) || 1,
-        created_at: today,
-        updated_at: today,
-        id: newCatId,
-        code: cleanCode,
-        name: cleanName,
-        status: catFormData.lifecycle_status === 'ACTIVE' ? 'Active' : 'Inactive',
-        subCategory: targetSubCategory,
-        subSubCategory: targetSubSubCategory
-      };
+        const newRecord: Category = {
+          category_id: newCatId,
+          product_type_id: catFormData.product_type_id,
+          category: targetCategory,
+          sub_category: targetSubCategory,
+          sub_sub_category: targetSubSubCategory,
+          category_code: cleanCode,
+          description: catFormData.description.trim() || undefined,
+          lifecycle_status: catFormData.lifecycle_status,
+          display_order: Number(catFormData.display_order) || 1,
+          created_at: today,
+          updated_at: today,
+          id: newCatId,
+          code: cleanCode,
+          name: cleanName,
+          status: catFormData.lifecycle_status === 'ACTIVE' ? 'Active' : 'Inactive',
+          subCategory: targetSubCategory,
+          subSubCategory: targetSubSubCategory
+        };
 
-      addUnifiedCategory(newRecord);
-      setCategoryAttributesForCategory(newCatId, catAttrDrafts);
-      showToast(`Created ${levelLabel} record ${newCatId} — ${cleanCode}`);
+        const saved = await addUnifiedCategory(newRecord);
+        const savedCatId = saved?.category_id || saved?.id || newCatId;
+        showToast(`Created ${levelLabel} record ${savedCatId} — ${cleanCode}`);
+      }
+    } catch (err: any) {
+      setCatFormError(err.message || 'Failed to save category to database.');
+      return false;
     }
 
+    categoryPagination.resetPage();
     if (options.closeAfterSave) {
       setIsCatModalOpen(false);
     } else {
@@ -683,26 +656,20 @@ export const CategoryMasterModule: React.FC = () => {
         lifecycle_status: 'ACTIVE',
         display_order: nextOrder
       });
-      setCatAttrDrafts([
-        { attribute_id: 'attr_generic_name', remark: '' },
-        { attribute_id: 'attr_strength', remark: '' },
-        { attribute_id: 'attr_dosage_form', remark: '' },
-        { attribute_id: 'attr_pack_size', remark: '' }
-      ]);
       setCatFormError(null);
     }
 
     return true;
   };
 
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    executeSaveCategory({ closeAfterSave: true });
+    await executeSaveCategory({ closeAfterSave: true });
   };
 
-  const handleSaveAndAddAnother = (e: React.MouseEvent) => {
+  const handleSaveAndAddAnother = async (e: React.MouseEvent) => {
     e.preventDefault();
-    executeSaveCategory({ closeAfterSave: false });
+    await executeSaveCategory({ closeAfterSave: false });
   };
 
   // ── ACTION HANDLERS: PRODUCT TYPE ──
@@ -719,11 +686,13 @@ export const CategoryMasterModule: React.FC = () => {
       lifecycle_status: 'ACTIVE',
       display_order: nextOrder
     });
+    setSelectedAttributeIds([]);
+    setSelectedAttrDropdownValue('');
     setPtFormError(null);
     setIsPtModalOpen(true);
   };
 
-  const handleOpenEditPtModal = (pt: ProductType, e?: React.MouseEvent) => {
+  const handleOpenEditPtModal = async (pt: ProductType, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setEditingPt(pt);
     setPtFormData({
@@ -733,11 +702,77 @@ export const CategoryMasterModule: React.FC = () => {
       lifecycle_status: (pt.lifecycle_status || pt.status || 'ACTIVE') as LifecycleStatus,
       display_order: Number(pt.display_order) || 1
     });
+    setSelectedAttrDropdownValue('');
     setPtFormError(null);
+
+    const ptId = pt.product_type_id || pt.id!;
+    const localConfigured = getProductTypeConfiguredAttributes(ptId);
+    const initialIds = localConfigured
+      .map(item => item.attribute.attribute_id || item.attribute.id)
+      .filter((id): id is string => Boolean(id));
+    setSelectedAttributeIds(initialIds);
     setIsPtModalOpen(true);
+
+    // Fetch fresh attributes from backend
+    try {
+      const full = await catalogApi.getProductType(ptId);
+      if (full && Array.isArray(full.attributes)) {
+        const freshIds = full.attributes
+          .map((a: any) => a.attribute_id || a.attributeId || a.id)
+          .filter((id): id is string => Boolean(id));
+        setSelectedAttributeIds(freshIds);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch fresh attributes from API, using cached:', err);
+    }
   };
 
-  const handleSaveProductType = (e: React.FormEvent) => {
+  const handleOpenViewPtModal = async (pt: ProductType, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setViewingPt(pt);
+    setIsViewPtModalOpen(true);
+    setViewPtLoading(true);
+    setViewPtTab('ATTRIBUTES');
+
+    const ptId = pt.product_type_id || pt.id!;
+    const localAttrs = getProductTypeConfiguredAttributes(ptId).map(item => ({
+      attribute_id: item.attribute.attribute_id || item.attribute.id,
+      attribute_code: item.attribute.attribute_code || item.attribute.code,
+      attribute_name: item.attribute.attribute_name || item.attribute.name,
+      data_type: item.attribute.data_type || 'TEXT',
+      unitOfMeasure: item.attribute.unit_of_measure || '',
+      unit_of_measure: item.attribute.unit_of_measure || '',
+      allowed_values: item.attribute.allowed_values || [],
+      is_required: item.is_required,
+      is_filterable: item.attribute.is_filterable ?? true,
+      is_searchable: item.attribute.is_searchable ?? true,
+      is_active: item.attribute.is_active ?? true,
+      display_order: item.display_order,
+      remark: item.remark
+    }));
+    const localCats = unifiedCategories.filter(c => c.product_type_id === ptId);
+    setViewPtDetails({ attributes: localAttrs, categories: localCats });
+
+    try {
+      const full = await catalogApi.getProductType(ptId);
+      if (full) {
+        setViewPtDetails({
+          attributes: Array.isArray(full.attributes) ? full.attributes : localAttrs,
+          categories: Array.isArray(full.categories) ? full.categories : localCats
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to fetch full PT details for view modal:', err);
+    } finally {
+      setViewPtLoading(false);
+    }
+  };
+
+  const handleRemoveSelectedAttribute = (attrId: string) => {
+    setSelectedAttributeIds(prev => prev.filter(id => id !== attrId));
+  };
+
+  const handleSaveProductType = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ptFormData.name.trim()) { setPtFormError('Product Type Name is required.'); return; }
     if (!ptFormData.code.trim()) { setPtFormError('Product Type Code is required.'); return; }
@@ -747,65 +782,79 @@ export const CategoryMasterModule: React.FC = () => {
 
     const duplicate = productTypes.find(t =>
       (t.product_type_id !== editingPt?.product_type_id && t.id !== editingPt?.id) &&
-      ((t.product_type_code || t.code || '').toUpperCase() === cleanCode ||
-       (t.product_type_name || t.name || '').toLowerCase() === cleanName.toLowerCase())
+      ((t.product_type_code || t.code || '').toUpperCase() === cleanCode)
     );
 
     if (duplicate) {
-      setPtFormError(`A Product Type with code "${cleanCode}" or name "${cleanName}" already exists.`);
+      setPtFormError(`A Product Type with code "${cleanCode}" already exists.`);
       return;
     }
 
     const today = new Date().toISOString().split('T')[0];
+    setIsSavingPt(true);
+    setPtFormError(null);
 
-    if (editingPt) {
-      const ptId = editingPt.product_type_id || editingPt.id!;
-      updateProductType(ptId, {
-        product_type_name: cleanName,
-        name: cleanName,
-        product_type_code: cleanCode,
-        code: cleanCode,
-        description: ptFormData.description.trim(),
-        lifecycle_status: ptFormData.lifecycle_status,
-        status: ptFormData.lifecycle_status,
-        display_order: Number(ptFormData.display_order) || 1,
-        updated_at: today
-      });
-      showToast(`Updated Product Type "${cleanName}"`);
-    } else {
-      const nextOrder = Number(ptFormData.display_order) || (productTypes.length + 1);
-      const newPtId = `PT${String(nextOrder).padStart(3, '0')}`;
-      const newPt: ProductType = {
-        product_type_id: newPtId,
-        product_type_code: cleanCode,
-        product_type_name: cleanName,
-        description: ptFormData.description.trim(),
-        lifecycle_status: ptFormData.lifecycle_status,
-        display_order: nextOrder,
-        created_at: today,
-        updated_at: today,
-        id: newPtId,
-        code: cleanCode,
-        name: cleanName,
-        status: ptFormData.lifecycle_status
-      };
-      addProductType(newPt);
-      showToast(`Created Product Type "${cleanName}" (${cleanCode})`);
+    try {
+      if (editingPt) {
+        const ptId = editingPt.product_type_id || editingPt.id!;
+        await updateProductType(ptId, {
+          product_type_name: cleanName,
+          name: cleanName,
+          product_type_code: cleanCode,
+          code: cleanCode,
+          description: ptFormData.description.trim(),
+          lifecycle_status: ptFormData.lifecycle_status,
+          status: ptFormData.lifecycle_status,
+          display_order: Number(ptFormData.display_order) || 1,
+          updated_at: today,
+          attributeIds: selectedAttributeIds,
+        });
+        showToast(`Updated Product Type "${cleanName}" with ${selectedAttributeIds.length} attributes.`);
+      } else {
+        const nextOrder = Number(ptFormData.display_order) || (productTypes.length + 1);
+        const newPtId = `pt_${cleanCode.toLowerCase().slice(0, 10)}`;
+        const newPt: ProductType = {
+          product_type_id: newPtId,
+          product_type_code: cleanCode,
+          product_type_name: cleanName,
+          description: ptFormData.description.trim(),
+          lifecycle_status: ptFormData.lifecycle_status,
+          display_order: nextOrder,
+          created_at: today,
+          updated_at: today,
+          id: newPtId,
+          code: cleanCode,
+          name: cleanName,
+          status: ptFormData.lifecycle_status,
+          attributeIds: selectedAttributeIds,
+        };
+        await addProductType(newPt);
+        showToast(`Created Product Type "${cleanName}" with ${selectedAttributeIds.length} attributes.`);
+      }
+
+      ptPagination.resetPage();
+      setIsPtModalOpen(false);
+    } catch (err: any) {
+      setPtFormError(err.message || 'Failed to save Product Type to database.');
+    } finally {
+      setIsSavingPt(false);
     }
-
-    setIsPtModalOpen(false);
   };
 
   // ── DELETE EXECUTION ──
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteConfirmTarget) return;
 
-    if (deleteConfirmTarget.type === 'PRODUCT_TYPE') {
-      deleteProductType(deleteConfirmTarget.id);
-      showToast(`Deleted Product Type "${deleteConfirmTarget.name}"`);
-    } else {
-      deleteUnifiedCategory(deleteConfirmTarget.id);
-      showToast(`Deleted Category record "${deleteConfirmTarget.name}"`);
+    try {
+      if (deleteConfirmTarget.type === 'PRODUCT_TYPE') {
+        await deleteProductType(deleteConfirmTarget.id);
+        showToast(`Deleted Product Type "${deleteConfirmTarget.name}"`);
+      } else {
+        await deleteUnifiedCategory(deleteConfirmTarget.id);
+        showToast(`Deleted Category record "${deleteConfirmTarget.name}"`);
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Delete operation failed');
     }
 
     setDeleteConfirmTarget(null);
@@ -904,255 +953,243 @@ export const CategoryMasterModule: React.FC = () => {
               onClick={handleOpenAddPtModal}
               style={{ padding: '9px 18px', borderRadius: 8, background: '#0F766E', color: '#FFFFFF', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(15,118,110,0.2)' }}
             >
-              <Plus size={16} /> + Add Product Type
+              <Plus size={16} /> Add Product Type
             </button>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('attribute-master');
-                  if (typeof window !== 'undefined' && window.location.pathname !== '/admin/attribute-master') {
-                    window.history.pushState({}, '', '/admin/attribute-master');
-                  }
-                }}
-                style={{
-                  padding: '9px 16px',
-                  borderRadius: 8,
-                  background: '#F0FDFA',
-                  color: '#0F766E',
-                  border: '1px solid #99F6E4',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}
-                title="View & Manage Attributes in Attribute Master"
-              >
-                <Sparkles size={15} /> Attributes
-              </button>
-              <button
-                onClick={() => handleOpenAddCatModal()}
-                style={{ padding: '9px 18px', borderRadius: 8, background: '#0F766E', color: '#FFFFFF', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(15,118,110,0.2)' }}
-              >
-                <Plus size={16} /> + Add Category
-              </button>
-            </div>
+            <button
+              onClick={() => handleOpenAddCatModal()}
+              style={{ padding: '9px 18px', borderRadius: 8, background: '#0F766E', color: '#FFFFFF', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(15,118,110,0.2)' }}
+            >
+              <Plus size={16} /> Add Category
+            </button>
           )}
         </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════ */}
-      {/* 1. PRODUCT TYPE MASTER TAB */}
+      {/* 1. PRODUCT TYPE MASTER TAB (SIMPLIFIED CANONICAL VIEW)                 */}
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {activeMasterTab === 'PRODUCT_TYPE' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Quick Metrics Bar */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>PRODUCT TYPES</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#0F172A', fontFamily: 'monospace', marginTop: 4 }}>{productTypes.length} Types</div>
-              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Top-level classification master</div>
-            </div>
+              {/* Quick Metrics Bar */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>PRODUCT TYPES</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#0F172A', fontFamily: 'monospace', marginTop: 4 }}>{productTypes.length} Types</div>
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Top-level classification master</div>
+                </div>
 
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>TOTAL CATEGORY RECORDS</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', marginTop: 4 }}>{categoryStats.totalRecords} Records</div>
-              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>In canonical CATEGORY table</div>
-            </div>
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>TOTAL CATEGORY RECORDS</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', marginTop: 4 }}>{categoryStats.totalRecords} Records</div>
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>In canonical CATEGORY table</div>
+                </div>
 
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>ACTIVE RECORDS</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#15803D', fontFamily: 'monospace', marginTop: 4 }}>{categoryStats.activeRecords} Active</div>
-              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Available for product catalog</div>
-            </div>
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>ACTIVE RECORDS</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#15803D', fontFamily: 'monospace', marginTop: 4 }}>{categoryStats.activeRecords} Active</div>
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Available for product catalog</div>
+                </div>
 
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>UNIQUE CATEGORY HEADS</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#2563EB', fontFamily: 'monospace', marginTop: 4 }}>{categoryStats.distinctCategories} Categories</div>
-              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Distinct category groups</div>
-            </div>
-          </div>
-
-          {/* Search & Filter Toolbar */}
-          <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, padding: '8px 12px', minWidth: 280, flex: '1 1 280px' }}>
-              <Search size={15} style={{ color: '#64748B' }} />
-              <input
-                type="text"
-                placeholder="Search Product Type name, code, description, or ID..."
-                value={productTypeSearch}
-                onChange={e => setProductTypeSearch(e.target.value)}
-                style={{ border: 'none', background: 'transparent', width: '100%', fontSize: 13, outline: 'none', color: '#0F172A' }}
-              />
-              {productTypeSearch && (
-                <button onClick={() => setProductTypeSearch('')} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 0 }}>
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Status:</span>
-              <select
-                value={ptStatusFilter}
-                onChange={e => setPtStatusFilter(e.target.value as any)}
-                style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, fontWeight: 600, background: '#FFF', color: '#0F172A', cursor: 'pointer' }}
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="ACTIVE">Active Only</option>
-                <option value="INACTIVE">Inactive Only</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Product Types Master Table */}
-          <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-            <div style={{ padding: '14px 20px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>Registered Product Types (PRODUCT_TYPE)</div>
-                <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Click "Manage Categories" on any Product Type to view and filter its Category records</div>
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>TOTAL ATTRIBUTE MAPPINGS</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#2563EB', fontFamily: 'monospace', marginTop: 4 }}>{productTypeAttributes.length} Assigned</div>
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Across all Product Types</div>
+                </div>
               </div>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0F766E', background: '#F0FDFA', padding: '4px 10px', borderRadius: 6, border: '1px solid #CCFBF1' }}>
-                {filteredProductTypes.length} Available
-              </span>
-            </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>PRODUCT TYPE ID</th>
-                    <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 200 }}>PRODUCT TYPE NAME</th>
-                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>CODE</th>
-                    <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 220 }}>DESCRIPTION</th>
-                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 100 }}>STATUS</th>
-                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110, textAlign: 'center' }}>DISPLAY ORDER</th>
-                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 115 }}>CREATED AT</th>
-                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 115 }}>UPDATED AT</th>
-                    <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', textAlign: 'right', width: 230 }}>ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProductTypes.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
-                        <Layers size={36} style={{ color: '#94A3B8', margin: '0 auto 10px', display: 'block' }} />
-                        <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No Product Types found.</div>
-                        <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 16 }}>Create a Product Type to start categorizing products.</div>
-                        <button
-                          onClick={handleOpenAddPtModal}
-                          style={{ padding: '8px 16px', borderRadius: 6, background: '#0F766E', color: '#FFF', border: 'none', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}
-                        >
-                          + Add Product Type
-                        </button>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredProductTypes.map(pt => {
-                      const ptId = pt.product_type_id || pt.id!;
-                      const ptCode = pt.product_type_code || pt.code || 'CODE';
-                      const ptName = pt.product_type_name || pt.name || 'Unnamed';
-                      const ptStatus = pt.lifecycle_status || pt.status || 'ACTIVE';
-                      const isActive = ptStatus === 'ACTIVE';
-                      const catCount = unifiedCategories.filter(c => c.product_type_id === ptId).length;
+              {/* Search & Filter Toolbar */}
+              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, padding: '8px 12px', minWidth: 280, flex: '1 1 280px' }}>
+                  <Search size={15} style={{ color: '#64748B' }} />
+                  <input
+                    type="text"
+                    placeholder="Search Product Type name, code, description, or ID..."
+                    value={productTypeSearch}
+                    onChange={e => setProductTypeSearch(e.target.value)}
+                    style={{ border: 'none', background: 'transparent', width: '100%', fontSize: 13, outline: 'none', color: '#0F172A' }}
+                  />
+                  {productTypeSearch && (
+                    <button onClick={() => setProductTypeSearch('')} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 0 }}>
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
 
-                      return (
-                        <tr
-                          key={ptId}
-                          style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s ease' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                          onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
-                        >
-                          <td style={{ padding: '14px 14px' }}>
-                            <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', background: '#F0FDFA', padding: '3px 8px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
-                              {ptId}
-                            </span>
-                          </td>
-                          <td style={{ padding: '14px 16px' }}>
-                            <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <Layers size={15} style={{ color: '#0F766E', flexShrink: 0 }} />
-                              <span>{ptName}</span>
-                            </div>
-                          </td>
-                          <td style={{ padding: '14px 14px' }}>
-                            <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontFamily: 'monospace' }}>
-                              {ptCode}
-                            </span>
-                          </td>
-                          <td style={{ padding: '14px 16px', color: '#475569', fontSize: 12.5, maxWidth: 260 }}>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pt.description}>
-                              {pt.description || <span style={{ color: '#94A3B8', fontStyle: 'italic' }}>No description</span>}
-                            </div>
-                          </td>
-                          <td style={{ padding: '14px 14px' }}>
-                            <span style={{
-                              fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 4,
-                              background: isActive ? '#DCFCE7' : '#FEE2E2',
-                              color: isActive ? '#15803D' : '#B91C1C',
-                              border: isActive ? '1px solid #86EFAC' : '1px solid #FCA5A5'
-                            }}>
-                              {isActive ? 'ACTIVE' : 'INACTIVE'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '14px 14px', textAlign: 'center', fontFamily: 'monospace', fontWeight: 700, color: '#475569', fontSize: 12.5 }}>
-                            #{pt.display_order ?? 1}
-                          </td>
-                          <td style={{ padding: '14px 14px', fontSize: 12, color: '#64748B', whiteSpace: 'nowrap' }}>
-                            {formatMasterDate(pt.created_at || (pt as any).createdAt)}
-                          </td>
-                          <td style={{ padding: '14px 14px', fontSize: 12, color: '#64748B', whiteSpace: 'nowrap' }}>
-                            {formatMasterDate(pt.updated_at || (pt as any).updatedAt || pt.created_at)}
-                          </td>
-                          <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                            <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                              <button
-                                onClick={() => {
-                                  setCategoryPtFilter(ptId);
-                                  setActiveMasterTab('CATEGORY');
-                                }}
-                                style={{ padding: '6px 12px', borderRadius: 6, background: '#0F766E', color: '#FFFFFF', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, boxShadow: '0 1px 2px rgba(15,118,110,0.2)' }}
-                                title="View Categories under this Product Type"
-                              >
-                                <span>Categories ({catCount})</span>
-                                <ChevronRight size={13} />
-                              </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Status:</span>
+                  <select
+                    value={ptStatusFilter}
+                    onChange={e => setPtStatusFilter(e.target.value as any)}
+                    style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, fontWeight: 600, background: '#FFF', color: '#0F172A', cursor: 'pointer' }}
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="ACTIVE">Active Only</option>
+                    <option value="INACTIVE">Inactive Only</option>
+                  </select>
+                </div>
+              </div>
 
-                              <button
-                                onClick={(e) => handleOpenEditPtModal(pt, e)}
-                                style={{ padding: '6px 9px', borderRadius: 6, background: '#FFFFFF', color: '#475569', border: '1px solid #CBD5E1', cursor: 'pointer' }}
-                                title="Edit Product Type"
-                              >
-                                <Edit3 size={13} />
-                              </button>
+              {/* Product Types Master Table */}
+              <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+                <div style={{ padding: '14px 20px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>Registered Product Types (PRODUCT_TYPE)</div>
+                    <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Manage attributes and view categories applicable to each Product Type</div>
+                  </div>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0F766E', background: '#F0FDFA', padding: '4px 10px', borderRadius: 6, border: '1px solid #CCFBF1' }}>
+                    {filteredProductTypes.length} Available
+                  </span>
+                </div>
 
-                              <button
-                                onClick={() => toggleProductTypeStatus(ptId)}
-                                style={{ padding: '6px 9px', borderRadius: 6, background: isActive ? '#FEF2F2' : '#F0FDF4', color: isActive ? '#DC2626' : '#16A34A', border: isActive ? '1px solid #FCA5A5' : '1px solid #86EFAC', cursor: 'pointer' }}
-                                title={isActive ? 'Deactivate Product Type' : 'Activate Product Type'}
-                              >
-                                <Power size={13} />
-                              </button>
-
-                              <button
-                                onClick={() => setDeleteConfirmTarget({ type: 'PRODUCT_TYPE', id: ptId, name: ptName })}
-                                style={{ padding: '6px 9px', borderRadius: 6, background: '#FFFFFF', color: '#94A3B8', border: '1px solid #E2E8F0', cursor: 'pointer' }}
-                                title="Delete Product Type"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                        <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>PRODUCT TYPE ID</th>
+                        <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 180 }}>PRODUCT TYPE NAME</th>
+                        <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>PRODUCT TYPE CODE</th>
+                        <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>DESCRIPTION</th>
+                        <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 150, textAlign: 'center' }}>NUMBER OF CATEGORIES</th>
+                        <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 150, textAlign: 'center' }}>NUMBER OF ATTRIBUTES</th>
+                        <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 100, textAlign: 'center' }}>STATUS</th>
+                        <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 160, textAlign: 'right' }}>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProductTypes.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                            <Layers size={36} style={{ color: '#94A3B8', margin: '0 auto 10px', display: 'block' }} />
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No Product Types found.</div>
+                            <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 16 }}>Create a Product Type with integrated attributes to classify products.</div>
+                            <button
+                              onClick={handleOpenAddPtModal}
+                              style={{ padding: '8px 16px', borderRadius: 6, background: '#0F766E', color: '#FFF', border: 'none', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                            >
+                              <Plus size={14} /> Add Product Type
+                            </button>
                           </td>
                         </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      ) : (
+                        paginatedProductTypes.map(pt => {
+                          const ptId = pt.product_type_id || pt.id!;
+                          const ptCode = pt.product_type_code || pt.code || 'CODE';
+                          const ptName = pt.product_type_name || pt.name || 'Unnamed';
+                          const ptStatus = pt.lifecycle_status || pt.status || 'ACTIVE';
+                          const isActive = ptStatus === 'ACTIVE';
+                          const catCount = pt.categoriesCount ?? pt.category_count ?? unifiedCategories.filter(c => c.product_type_id === ptId).length;
+                          const attrCount = pt.attributesCount ?? pt.attribute_count ?? getProductTypeAttributes(ptId).length;
+
+                          return (
+                            <tr
+                              key={ptId}
+                              style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s ease' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                              onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
+                            >
+                              <td style={{ padding: '14px 14px' }}>
+                                <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', background: '#F0FDFA', padding: '3px 8px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
+                                  {ptId}
+                                </span>
+                              </td>
+                              <td style={{ padding: '14px 16px' }}>
+                                <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <Layers size={15} style={{ color: '#0F766E', flexShrink: 0 }} />
+                                  <span>{ptName}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '14px 14px' }}>
+                                <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontFamily: 'monospace' }}>
+                                  {ptCode}
+                                </span>
+                              </td>
+                              <td style={{ padding: '14px 16px', color: '#475569', fontSize: 12.5, maxWidth: 220 }}>
+                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pt.description}>
+                                  {pt.description || <span style={{ color: '#94A3B8', fontStyle: 'italic' }}>No description</span>}
+                                </div>
+                              </td>
+                              <td style={{ padding: '14px 14px', textAlign: 'center' }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', background: '#F0FDFA', padding: '3px 10px', borderRadius: 6, border: '1px solid #CCFBF1', fontFamily: 'monospace' }}>
+                                  {catCount}
+                                </span>
+                              </td>
+                              <td style={{ padding: '14px 14px', textAlign: 'center' }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '3px 10px', borderRadius: 6, border: '1px solid #BFDBFE', fontFamily: 'monospace' }}>
+                                  {attrCount}
+                                </span>
+                              </td>
+                              <td style={{ padding: '14px 14px', textAlign: 'center' }}>
+                                <span style={{
+                                  fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 4,
+                                  background: isActive ? '#DCFCE7' : '#FEE2E2',
+                                  color: isActive ? '#15803D' : '#B91C1C',
+                                  border: isActive ? '1px solid #86EFAC' : '1px solid #FCA5A5'
+                                }}>
+                                  {isActive ? 'ACTIVE' : 'INACTIVE'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                                  {/* View Action Button */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleOpenViewPtModal(pt, e)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderRadius: 6,
+                                      background: '#F0FDFA',
+                                      color: '#0F766E',
+                                      border: '1px solid #99F6E4',
+                                      fontWeight: 700,
+                                      fontSize: 12,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 5,
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    title="View Product Type details, configured attributes, and categories"
+                                  >
+                                    <Eye size={13} />
+                                    <span>View</span>
+                                  </button>
+
+                                  {/* Edit Action Button */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleOpenEditPtModal(pt, e)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderRadius: 6,
+                                      background: '#FFFFFF',
+                                      color: '#0F766E',
+                                      border: '1px solid #CBD5E1',
+                                      fontWeight: 700,
+                                      fontSize: 12,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 5,
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    title="Edit Product Type and configured attributes"
+                                  >
+                                    <Edit3 size={13} />
+                                    <span>Edit</span>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <PaginationControl {...ptPagination.paginationProps} itemName="product types" />
+              </div>
+
         </div>
       )}
 
@@ -1338,7 +1375,7 @@ export const CategoryMasterModule: React.FC = () => {
                         </td>
                       </tr>
                     ) : (
-                      filteredCategoryList.map(cat => {
+                      paginatedCategories.map(cat => {
                         const catId = cat.category_id || cat.id!;
                         const pt = getPt(cat.product_type_id);
                         const ptName = pt?.product_type_name || pt?.name || cat.product_type_id;
@@ -1431,31 +1468,9 @@ export const CategoryMasterModule: React.FC = () => {
                             <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                               <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
                                 <button
-                                  type="button"
-                                  onClick={() => handleOpenViewCategory(cat)}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                    padding: '5px 9px',
-                                    borderRadius: 5,
-                                    background: '#F0FDFA',
-                                    color: '#0F766E',
-                                    border: '1px solid #99F6E4',
-                                    fontSize: 11.5,
-                                    fontWeight: 600,
-                                    cursor: 'pointer'
-                                  }}
-                                  title="View Category & Assigned Attributes"
-                                >
-                                  <Sparkles size={12} />
-                                  <span>Attributes ({getCategoryAttributes(catId).length}/10)</span>
-                                </button>
-
-                                <button
                                   onClick={() => handleOpenViewCategory(cat)}
                                   style={{ padding: '5px 8px', borderRadius: 5, background: '#FFFFFF', color: '#0F766E', border: '1px solid #99F6E4', cursor: 'pointer' }}
-                                  title="View Category Record & Attributes"
+                                  title="View Category Record"
                                 >
                                   <Eye size={13} />
                                 </button>
@@ -1498,6 +1513,7 @@ export const CategoryMasterModule: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+              <PaginationControl {...categoryPagination.paginationProps} itemName="categories" />
             </div>
           )}
 
@@ -1514,8 +1530,8 @@ export const CategoryMasterModule: React.FC = () => {
                     onClick={() => {
                       const allKeys: string[] = [];
                       groupedHierarchy.forEach(cat => {
-                        allKeys.push(`cat:${cat.categoryName}`);
-                        cat.subCategoriesList.forEach(sub => allKeys.push(`sub:${cat.categoryName}:${sub.subCategoryName}`));
+                        allKeys.push(`cat:${cat.productTypeId}:${cat.categoryName}`);
+                        cat.subCategoriesList.forEach(sub => allKeys.push(`sub:${cat.productTypeId}:${cat.categoryName}:${sub.subCategoryName}`));
                       });
                       expandAll(allKeys);
                     }}
@@ -1545,7 +1561,7 @@ export const CategoryMasterModule: React.FC = () => {
                 </div>
               ) : (
                 groupedHierarchy.map(cat => {
-                  const catKey = `cat:${cat.categoryName}`;
+                  const catKey = `cat:${cat.productTypeId}:${cat.categoryName}`;
                   const isCatExpanded = expandedNodes.has(catKey);
                   const pt = getPt(cat.productTypeId);
 
@@ -1618,9 +1634,9 @@ export const CategoryMasterModule: React.FC = () => {
                         <div style={{ padding: '10px 16px 14px 34px', display: 'flex', flexDirection: 'column', gap: 10, background: '#FFFFFF' }}>
                           
                           {/* Direct records without sub-category (if any) */}
-                          {cat.recordsWithoutSub.map(rec => (
+                          {cat.recordsWithoutSub.map((rec, recIdx) => (
                             <div
-                              key={rec.category_id}
+                              key={rec.category_id || rec.id || `dir_${cat.productTypeId}_${rec.category}_${recIdx}`}
                               style={{
                                 padding: '8px 12px', borderRadius: 6, background: '#F8FAFC',
                                 border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between',
@@ -1636,18 +1652,9 @@ export const CategoryMasterModule: React.FC = () => {
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <button
-                                  type="button"
-                                  onClick={() => handleOpenViewCategory(rec)}
-                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 6px', borderRadius: 4, background: '#F0FDFA', color: '#0F766E', border: '1px solid #99F6E4', fontSize: 10.5, fontWeight: 600, cursor: 'pointer' }}
-                                  title="View Category Details & Configured Attributes"
-                                >
-                                  <Sparkles size={11} />
-                                  <span>Attributes ({getCategoryAttributes(rec.category_id).length}/10)</span>
-                                </button>
-                                <button
                                   onClick={() => handleOpenViewCategory(rec)}
                                   style={{ padding: '3px 6px', borderRadius: 4, background: '#FFF', color: '#0F766E', border: '1px solid #99F6E4', cursor: 'pointer' }}
-                                  title="View Category Record & Attributes"
+                                  title="View Category Record"
                                 >
                                   <Eye size={11} />
                                 </button>
@@ -1669,7 +1676,7 @@ export const CategoryMasterModule: React.FC = () => {
 
                           {/* Sub-categories */}
                           {cat.subCategoriesList.map(sub => {
-                            const subKey = `sub:${cat.categoryName}:${sub.subCategoryName}`;
+                            const subKey = `sub:${cat.productTypeId}:${cat.categoryName}:${sub.subCategoryName}`;
                             const isSubExpanded = expandedNodes.has(subKey);
 
                             return (
@@ -1727,13 +1734,13 @@ export const CategoryMasterModule: React.FC = () => {
                                 {/* CATEGORY RECORD LEAF NODES */}
                                 {isSubExpanded && (
                                   <div style={{ borderLeft: '2px solid #94A3B8', paddingLeft: 12, marginLeft: 14, display: 'flex', flexDirection: 'column', gap: 5, marginTop: 2 }}>
-                                    {sub.records.map(leaf => {
+                                    {sub.records.map((leaf, leafIdx) => {
                                       const isActive = (leaf.lifecycle_status || leaf.status) === 'ACTIVE' || leaf.status === 'Active';
                                       const label = leaf.sub_sub_category || leaf.sub_category || leaf.category;
 
                                       return (
                                         <div
-                                          key={leaf.category_id}
+                                          key={leaf.category_id || leaf.id || `leaf_${cat.productTypeId}_${leafIdx}`}
                                           style={{
                                             padding: '8px 12px',
                                             borderRadius: 6,
@@ -1772,18 +1779,9 @@ export const CategoryMasterModule: React.FC = () => {
 
                                           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                             <button
-                                              type="button"
-                                              onClick={() => handleOpenViewCategory(leaf)}
-                                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 6px', borderRadius: 4, background: '#F0FDFA', color: '#0F766E', border: '1px solid #99F6E4', fontSize: 10.5, fontWeight: 600, cursor: 'pointer' }}
-                                              title="View Category Details & Configured Attributes"
-                                            >
-                                              <Sparkles size={11} />
-                                              <span>Attributes ({getCategoryAttributes(leaf.category_id).length}/10)</span>
-                                            </button>
-                                            <button
                                               onClick={() => handleOpenViewCategory(leaf)}
                                               style={{ padding: '3px 6px', borderRadius: 4, background: '#FFF', color: '#0F766E', border: '1px solid #99F6E4', cursor: 'pointer' }}
-                                              title="View Category Record & Attributes"
+                                              title="View Category Record"
                                             >
                                               <Eye size={11} />
                                             </button>
@@ -2342,149 +2340,6 @@ export const CategoryMasterModule: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* ── 4. CATEGORY ATTRIBUTES (PRESERVED) ── */}
-                    <div style={{
-                      background: '#F8FAFC',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: 10,
-                      padding: '16px 18px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 12
-                    }}>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: 8
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <label style={{ fontSize: 12, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
-                            Category Attributes
-                          </label>
-                          <span style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: 12,
-                            background: catAttrDrafts.length >= 10 ? '#FEF2F2' : (catAttrDrafts.length > 0 ? '#E0F2FE' : '#F1F5F9'),
-                            color: catAttrDrafts.length >= 10 ? '#DC2626' : (catAttrDrafts.length > 0 ? '#0369A1' : '#64748B'),
-                            border: `1px solid ${catAttrDrafts.length >= 10 ? '#FECACA' : (catAttrDrafts.length > 0 ? '#BAE6FD' : '#E2E8F0')}`
-                          }}>
-                            Assigned Attributes {catAttrDrafts.length} / 10
-                          </span>
-                        </div>
-
-                        {catAttrDrafts.length >= 10 ? (
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: '#DC2626', background: '#FEF2F2', padding: '3px 8px', borderRadius: 4, border: '1px solid #FECACA' }}>
-                            Maximum 10 attributes allowed for this category.
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAddAttrModalContext('DRAFT_MODAL');
-                              setSelectedAttrId('');
-                              setAddAttrError(null);
-                              setIsAddAttrModalOpen(true);
-                            }}
-                            style={{
-                              padding: '5px 12px',
-                              borderRadius: 6,
-                              background: '#0F766E',
-                              color: '#FFFFFF',
-                              border: 'none',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 5,
-                              boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
-                            }}
-                          >
-                            <Plus size={14} /> Add Attribute
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Assigned Attributes List */}
-                      {catAttrDrafts.length === 0 ? (
-                        <div style={{ fontSize: 12, color: '#94A3B8', fontStyle: 'italic', padding: '8px 2px' }}>
-                          No attributes assigned yet. Click "+ Add Attribute" to select from Attribute Master (max 10 attributes).
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 200, overflowY: 'auto' }}>
-                          {catAttrDrafts.map((draft, idx) => {
-                            const attr = (attributeMasters || []).find(a => (a.attribute_id || a.id) === draft.attribute_id);
-                            if (!attr) return null;
-                            const code = attr.attribute_code || attr.code || '';
-                            const name = attr.attribute_name || attr.name || '';
-                            const uom = attr.unit_of_measure;
-
-                            return (
-                              <div
-                                key={`${draft.attribute_id}_${idx}`}
-                                style={{
-                                  padding: '8px 12px',
-                                  background: '#FFFFFF',
-                                  border: '1px solid #E2E8F0',
-                                  borderRadius: 6,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  flexWrap: 'wrap',
-                                  gap: 6
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                  <span style={{ fontWeight: 700, color: '#0F172A', fontSize: 12.5 }}>{name}</span>
-                                  <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#0F766E', background: '#F0FDFA', padding: '1px 5px', borderRadius: 3, border: '1px solid #CCFBF1' }}>
-                                    {code}
-                                  </span>
-                                  <span style={{
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                    padding: '1px 6px',
-                                    borderRadius: 4,
-                                    background: '#F1F5F9',
-                                    color: '#334155',
-                                    border: '1px solid #E2E8F0'
-                                  }}>
-                                    {attr.data_type}
-                                  </span>
-                                  {uom && (
-                                    <span style={{ fontSize: 11, color: '#64748B' }}>({uom})</span>
-                                  )}
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() => setCatAttrDrafts(prev => prev.filter((_, i) => i !== idx))}
-                                  style={{
-                                    padding: '3px 8px',
-                                    borderRadius: 4,
-                                    background: '#FEF2F2',
-                                    border: '1px solid #FECACA',
-                                    color: '#DC2626',
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 3
-                                  }}
-                                  title="Remove attribute from this category"
-                                >
-                                  <X size={12} /> Remove
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
                   </div>
 
                   {/* ────────────────────────────────────────────────────────── */}
@@ -2787,8 +2642,6 @@ export const CategoryMasterModule: React.FC = () => {
         const viewCatId = viewingCat.category_id || viewingCat.id || '';
         const viewCatCode = viewingCat.category_code || viewingCat.code || '';
         const viewPt = getPt(viewingCat.product_type_id);
-        const assignedList = getCategoryAttributes(viewCatId);
-        const isAtCapacity = assignedList.length >= 10;
 
         return (
           <div
@@ -2924,190 +2777,144 @@ export const CategoryMasterModule: React.FC = () => {
                 </div>
               </div>
 
-              {/* Category Attributes Section */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ fontSize: 12.5, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Category Attributes
-                    </span>
-                    <span style={{ fontSize: 11.5, color: '#64748B', marginLeft: 8 }}>
-                      (Category-specific dynamic attributes)
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      fontSize: 11.5,
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: 12,
-                      background: isAtCapacity ? '#FEE2E2' : '#F0FDFA',
-                      color: isAtCapacity ? '#B91C1C' : '#0F766E',
-                      border: isAtCapacity ? '1px solid #FCA5A5' : '1px solid #99F6E4'
-                    }}>
-                      Assigned: {assignedList.length} / 10
-                    </span>
-                    {!isAtCapacity && (
+              {/* Inherited Product Type Attributes Section (Read-only view) */}
+              {(() => {
+                const ptAttrs = getProductTypeConfiguredAttributes(viewingCat.product_type_id);
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <span style={{ fontSize: 12.5, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Applicable Product Type Attributes
+                        </span>
+                        <span style={{ fontSize: 11.5, color: '#64748B', marginLeft: 8 }}>
+                          (Inherited from Product Type: {viewPt?.product_type_name || viewingCat.product_type_id})
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
-                          setAddAttrModalContext('VIEW_MODAL');
-                          setSelectedAttrId('');
-                          setAddAttrError(null);
-                          setIsAddAttrModalOpen(true);
+                          setIsViewCatModalOpen(false);
+                          const ptObj = getPt(viewingCat.product_type_id);
+                          if (ptObj) {
+                            handleOpenEditPtModal(ptObj);
+                          }
+                          setActiveMasterTab('PRODUCT_TYPE');
                         }}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 4,
+                          gap: 5,
                           padding: '4px 10px',
                           borderRadius: 5,
-                          background: '#0F766E',
-                          color: '#FFFFFF',
-                          border: 'none',
+                          background: '#F0FDFA',
+                          color: '#0F766E',
+                          border: '1px solid #99F6E4',
                           fontSize: 11.5,
                           fontWeight: 700,
                           cursor: 'pointer'
                         }}
+                        title="Manage attributes under Product Type Master"
                       >
-                        <Plus size={13} /> Add Attribute
+                        <Sparkles size={12} /> Manage in Product Type Master
                       </button>
+                    </div>
+
+                    {ptAttrs.length === 0 ? (
+                      <div style={{
+                        padding: 16,
+                        textAlign: 'center',
+                        background: '#F8FAFC',
+                        border: '1px dashed #CBD5E1',
+                        borderRadius: 6,
+                        color: '#64748B',
+                        fontSize: 12
+                      }}>
+                        No attributes configured for Product Type "{viewPt?.product_type_name || viewingCat.product_type_id}" yet.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                        {ptAttrs.map((item, idx) => {
+                          const master = item.attribute;
+                          const attrCode = master?.attribute_code || master?.code || '—';
+                          const attrName = master?.attribute_name || master?.name || '';
+                          const attrType = master?.data_type || 'TEXT';
+                          const attrUom = master?.unit_of_measure;
+                          const isRequired = item.is_required;
+
+                          return (
+                            <div
+                              key={item.product_type_attribute_id || `${viewCatId}_${idx}`}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '8px 12px',
+                                background: '#FFFFFF',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: 6
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: '50%',
+                                  background: '#F1F5F9',
+                                  color: '#475569',
+                                  fontSize: 10.5,
+                                  fontWeight: 700,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}>
+                                  {idx + 1}
+                                </span>
+                                <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
+                                  {attrCode}
+                                </span>
+                                <strong style={{ fontSize: 12.5, color: '#0F172A' }}>
+                                  {attrName}
+                                </strong>
+                                {attrUom && (
+                                  <span style={{ fontSize: 11, color: '#64748B' }}>
+                                    ({attrUom})
+                                  </span>
+                                )}
+                                <span style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                  background: '#E0F2FE',
+                                  color: '#0369A1'
+                                }}>
+                                  {attrType}
+                                </span>
+                                {isRequired && (
+                                  <span style={{
+                                    fontSize: 9.5,
+                                    fontWeight: 800,
+                                    padding: '1px 5px',
+                                    borderRadius: 4,
+                                    background: '#FEF3C7',
+                                    color: '#92400E'
+                                  }}>
+                                    MANDATORY
+                                  </span>
+                                )}
+                              </div>
+                              <span style={{ fontSize: 11, color: '#64748B' }}>
+                                Product Type Level
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
-                </div>
-
-                {/* Capacity alert if max 10 reached */}
-                {isAtCapacity && (
-                  <div style={{
-                    background: '#FEF2F2',
-                    border: '1px solid #FCA5A5',
-                    borderRadius: 6,
-                    padding: '8px 12px',
-                    fontSize: 12,
-                    color: '#B91C1C',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontWeight: 600
-                  }}>
-                    <AlertTriangle size={14} />
-                    <span>Maximum 10 attributes allowed for this category.</span>
-                  </div>
-                )}
-
-                {/* Assigned Attributes List */}
-                {assignedList.length === 0 ? (
-                  <div style={{
-                    padding: 20,
-                    textAlign: 'center',
-                    background: '#F8FAFC',
-                    border: '1px dashed #CBD5E1',
-                    borderRadius: 6,
-                    color: '#64748B',
-                    fontSize: 12.5
-                  }}>
-                    No attributes assigned to this category yet.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto' }}>
-                    {assignedList.map((ca, idx) => {
-                      const attrId = ca.attribute_id || ca.attributeId || '';
-                      const master = (attributeMasters || []).find(m => (m.attribute_id === attrId || m.id === attrId));
-                      const attrName = master?.attribute_name || master?.name || attrId;
-                      const attrCode = master?.attribute_code || master?.code || '—';
-                      const attrType = master?.data_type || 'TEXT';
-                      const attrUom = master?.unit_of_measure;
-                      const isRequired = !!master?.is_required;
-
-                      return (
-                        <div
-                          key={ca.category_attribute_id || `${viewCatId}_${attrId}_${idx}`}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '8px 12px',
-                            background: '#FFFFFF',
-                            border: '1px solid #E2E8F0',
-                            borderRadius: 6
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{
-                              width: 20,
-                              height: 20,
-                              borderRadius: '50%',
-                              background: '#F1F5F9',
-                              color: '#475569',
-                              fontSize: 10.5,
-                              fontWeight: 700,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              {idx + 1}
-                            </span>
-                            <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
-                              {attrCode}
-                            </span>
-                            <strong style={{ fontSize: 12.5, color: '#0F172A' }}>
-                              {attrName}
-                            </strong>
-                            {attrUom && (
-                              <span style={{ fontSize: 11, color: '#64748B' }}>
-                                ({attrUom})
-                              </span>
-                            )}
-                            <span style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              padding: '1px 6px',
-                              borderRadius: 4,
-                              background: '#E0F2FE',
-                              color: '#0369A1'
-                            }}>
-                              {attrType}
-                            </span>
-                            {isRequired && (
-                              <span style={{
-                                fontSize: 9.5,
-                                fontWeight: 800,
-                                padding: '1px 5px',
-                                borderRadius: 4,
-                                background: '#FEF3C7',
-                                color: '#92400E'
-                              }}>
-                                REQUIRED
-                              </span>
-                            )}
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              removeCategoryAttribute(viewCatId, attrId);
-                              showToast(`Removed "${attrName}" from category`);
-                            }}
-                            style={{
-                              padding: '3px 8px',
-                              borderRadius: 4,
-                              border: '1px solid #FECACA',
-                              background: '#FFF',
-                              color: '#DC2626',
-                              fontSize: 11,
-                              fontWeight: 600,
-                              cursor: 'pointer'
-                            }}
-                            title="Remove attribute from this category"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* Modal Footer */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid #E2E8F0' }}>
@@ -3159,118 +2966,310 @@ export const CategoryMasterModule: React.FC = () => {
 
 
 
-      {/* ══════════════════════════════════════════════════════════════════════ */}
-      {/* MODAL: ADD / EDIT PRODUCT TYPE */}
+            {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: ADD / EDIT PRODUCT TYPE (INTEGRATED SINGLE FORM)              */}
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {isPtModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 10005, background: 'rgba(15, 23, 42, 0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setIsPtModalOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 12, padding: 22, boxShadow: '0 20px 48px rgba(15,23,42,0.2)', display: 'flex', flexDirection: 'column' }}>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: '1px solid #E2E8F0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 6, background: '#F0FDFA', color: '#0F766E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Layers size={18} />
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10005,
+            background: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20
+          }}
+          onClick={() => !isSavingPt && setIsPtModalOpen(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 860,
+              maxHeight: '90vh',
+              background: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: 14,
+              boxShadow: '0 25px 50px -12px rgba(15,23,42,0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{
+              padding: '18px 24px',
+              borderBottom: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: '#F8FAFC'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: '#F0FDFA', color: '#0F766E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Layers size={20} />
                 </div>
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  {editingPt ? 'Edit Product Type' : 'Add Product Type'}
-                </h3>
+                <div>
+                  <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    {editingPt ? `Edit Product Type: ${editingPt.product_type_name || editingPt.name}` : 'Add Product Type'}
+                  </h3>
+                  <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                    Configure product type classification and dynamic applicable attributes in a single form
+                  </div>
+                </div>
               </div>
-              <button onClick={() => setIsPtModalOpen(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}>
+              <button
+                type="button"
+                onClick={() => !isSavingPt && setIsPtModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 6, borderRadius: 6 }}
+                disabled={isSavingPt}
+              >
                 <X size={18} />
               </button>
             </div>
 
-            {ptFormError && (
-              <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 6, padding: '8px 12px', marginBottom: 14, color: '#B91C1C', fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <AlertTriangle size={15} />
-                <span>{ptFormError}</span>
-              </div>
-            )}
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSaveProductType} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+              <div style={{ padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                {ptFormError && (
+                  <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '10px 14px', color: '#B91C1C', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AlertTriangle size={16} />
+                    <span>{ptFormError}</span>
+                  </div>
+                )}
 
-            <form onSubmit={handleSaveProductType} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Product Type Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Pharmaceutical, Cosmetics, Veterinary"
-                  value={ptFormData.name}
-                  onChange={e => setPtFormData({ ...ptFormData, name: e.target.value })}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
-                />
-              </div>
+                {/* ── SECTION A: PRODUCT TYPE INFORMATION ── */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, paddingBottom: 10, borderBottom: '1px solid #F1F5F9' }}>
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#0F766E', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>
+                      A
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Product Type Information
+                    </span>
+                  </div>
 
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Product Type Code *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. PHARMA, NUTRA, COSM, VET"
-                  value={ptFormData.code}
-                  onChange={e => setPtFormData({ ...ptFormData, code: e.target.value.toUpperCase() })}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', fontWeight: 700, outline: 'none' }}
-                />
-              </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                    <div>
+                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
+                        Product Type Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Pharmaceutical, Cosmetics, Medical Devices"
+                        value={ptFormData.name}
+                        onChange={e => setPtFormData({ ...ptFormData, name: e.target.value })}
+                        style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', color: '#0F172A' }}
+                      />
+                    </div>
 
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Description
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Describe the scope and nature of products in this type..."
-                  value={ptFormData.description}
-                  onChange={e => setPtFormData({ ...ptFormData, description: e.target.value })}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, outline: 'none', resize: 'vertical' }}
-                />
-              </div>
+                    <div>
+                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
+                        Product Type Code * (Unique)
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. PHARMA, NUTRA, COSM, MED_DEV"
+                        value={ptFormData.code}
+                        onChange={e => setPtFormData({ ...ptFormData, code: e.target.value.toUpperCase() })}
+                        style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', fontWeight: 700, outline: 'none', color: '#0F172A' }}
+                      />
+                    </div>
+                  </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                    Lifecycle Status
-                  </label>
-                  <select
-                    value={ptFormData.lifecycle_status}
-                    onChange={e => setPtFormData({ ...ptFormData, lifecycle_status: e.target.value as LifecycleStatus })}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: '#FFF' }}
-                  >
-                    <option value="ACTIVE">ACTIVE</option>
-                    <option value="INACTIVE">INACTIVE</option>
-                  </select>
+                  <div style={{ marginTop: 14 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
+                      Description
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Scope, regulatory classification, and nature of products under this type..."
+                      value={ptFormData.description}
+                      onChange={e => setPtFormData({ ...ptFormData, description: e.target.value })}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', color: '#0F172A', resize: 'vertical' }}
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                    Display Order
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={ptFormData.display_order}
-                    onChange={e => setPtFormData({ ...ptFormData, display_order: parseInt(e.target.value) || 1 })}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
-                  />
+                {/* ── SECTION B: ASSIGNED ATTRIBUTES ── */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: '1px solid #F1F5F9', flexWrap: 'wrap', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#2563EB', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>
+                        B
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Assigned Attributes
+                          </span>
+                          <span style={{ fontSize: 11.5, fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '2px 8px', borderRadius: 4, border: '1px solid #BFDBFE' }}>
+                            {selectedAttributeIds.length} Selected
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 1 }}>
+                          Select attributes that apply to this Product Type. Attribute specifications and rules are maintained in Attribute Master.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dropdown Selector */}
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                      Select Attributes
+                    </label>
+                    <select
+                      value={selectedAttrDropdownValue}
+                      onChange={e => {
+                        const attrId = e.target.value;
+                        if (!attrId) return;
+                        if (!selectedAttributeIds.includes(attrId)) {
+                          setSelectedAttributeIds(prev => [...prev, attrId]);
+                          const master = (attributeMasters || []).find(m => (m.attribute_id || m.id) === attrId);
+                          showToast(`Assigned attribute "${master?.attribute_name || master?.name || attrId}"`);
+                        }
+                        setSelectedAttrDropdownValue('');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: 6,
+                        border: '1px solid #CBD5E1',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background: '#F8FAFC',
+                        color: '#0F172A',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="">-- Select Attributes --</option>
+                      {availableActiveAttributes.map(m => (
+                        <option key={m.attribute_id || m.id} value={m.attribute_id || m.id}>
+                          {m.attribute_name || m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Clean List of Assigned Attributes */}
+                  {selectedAttributeIds.length === 0 ? (
+                    <div style={{ padding: '28px 20px', textAlign: 'center', background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: 8, color: '#64748B' }}>
+                      <Sliders size={28} style={{ color: '#94A3B8', margin: '0 auto 8px', display: 'block' }} />
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>No attributes assigned yet</div>
+                      <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
+                        Select attributes from the dropdown above to assign them to this Product Type.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {selectedAttributeIds.map((attrId, idx) => {
+                        const master = (attributeMasters || []).find(m => (m.attribute_id || m.id) === attrId);
+                        const attrName = master?.attribute_name || master?.name || attrId;
+
+                        return (
+                          <div
+                            key={attrId}
+                            style={{
+                              background: '#F8FAFC',
+                              border: '1px solid #E2E8F0',
+                              borderRadius: 6,
+                              padding: '10px 14px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: '#E2E8F0', color: '#475569', fontFamily: 'monospace' }}>
+                                #{idx + 1}
+                              </span>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
+                                {attrName}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSelectedAttribute(attrId)}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: 5,
+                                background: '#FFFFFF',
+                                color: '#DC2626',
+                                border: '1px solid #FCA5A5',
+                                cursor: 'pointer',
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                              title="Remove attribute"
+                            >
+                              <Trash2 size={12} />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10, paddingTop: 12, borderTop: '1px solid #E2E8F0' }}>
+              {/* Modal Footer */}
+              <div style={{
+                padding: '16px 24px',
+                borderTop: '1px solid #E2E8F0',
+                background: '#F8FAFC',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                gap: 12
+              }}>
                 <button
                   type="button"
                   onClick={() => setIsPtModalOpen(false)}
-                  style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#475569', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+                  disabled={isSavingPt}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 6,
+                    border: '1px solid #CBD5E1',
+                    background: '#FFFFFF',
+                    color: '#475569',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: isSavingPt ? 'not-allowed' : 'pointer'
+                  }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFF', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                  disabled={isSavingPt}
+                  style={{
+                    padding: '8px 22px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: isSavingPt ? '#94A3B8' : '#0F766E',
+                    color: '#FFFFFF',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: isSavingPt ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 2px 4px rgba(15,118,110,0.2)'
+                  }}
                 >
-                  Save Product Type
+                  {isSavingPt ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+                  <span>{isSavingPt ? 'Saving to Database...' : (editingPt ? 'Update Product Type' : 'Save Product Type')}</span>
                 </button>
               </div>
             </form>
@@ -3279,22 +3278,24 @@ export const CategoryMasterModule: React.FC = () => {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════ */}
-      {/* MODAL: ADD ATTRIBUTE ASSIGNMENT (Client Requirement Section 4) */}
+      {/* MODAL: VIEW PRODUCT TYPE (COMPLETE DETAILS, ATTRIBUTES & CATEGORIES)  */}
       {/* ══════════════════════════════════════════════════════════════════════ */}
-      {isAddAttrModalOpen && (() => {
-        const availableList = addAttrModalContext === 'VIEW_MODAL'
-          ? availableAttributesForViewModal
-          : availableAttributesForModal;
-        const targetCategoryName = addAttrModalContext === 'VIEW_MODAL'
-          ? (viewingCat?.category || 'Selected Category')
-          : (catFormData.name.trim() || targetCategoryPreview || 'Category');
+      {isViewPtModalOpen && viewingPt && (() => {
+        const ptId = viewingPt.product_type_id || viewingPt.id!;
+        const ptName = viewingPt.product_type_name || viewingPt.name || 'Product Type';
+        const ptCode = viewingPt.product_type_code || viewingPt.code || 'CODE';
+        const ptStatus = viewingPt.lifecycle_status || viewingPt.status || 'ACTIVE';
+        const isActive = ptStatus === 'ACTIVE';
+
+        const attrs = viewPtDetails?.attributes || [];
+        const cats = viewPtDetails?.categories || [];
 
         return (
           <div
             style={{
               position: 'fixed',
               inset: 0,
-              zIndex: 10020,
+              zIndex: 10008,
               background: 'rgba(15, 23, 42, 0.6)',
               backdropFilter: 'blur(4px)',
               display: 'flex',
@@ -3302,154 +3303,351 @@ export const CategoryMasterModule: React.FC = () => {
               justifyContent: 'center',
               padding: 20
             }}
-            onClick={() => setIsAddAttrModalOpen(false)}
+            onClick={() => setIsViewPtModalOpen(false)}
           >
             <div
               onClick={e => e.stopPropagation()}
               style={{
                 width: '100%',
-                maxWidth: 480,
+                maxWidth: 860,
+                maxHeight: '90vh',
                 background: '#FFFFFF',
                 border: '1px solid #CBD5E1',
-                borderRadius: 12,
-                padding: 22,
-                boxShadow: '0 20px 48px rgba(15,23,42,0.2)',
+                borderRadius: 14,
+                boxShadow: '0 25px 50px -12px rgba(15,23,42,0.25)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 16
+                overflow: 'hidden'
               }}
             >
-              {/* Modal Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottom: '1px solid #E2E8F0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 6, background: '#F0FDFA', color: '#0F766E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Plus size={18} />
+              {/* Header */}
+              <div style={{
+                padding: '18px 24px',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#F8FAFC'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 8, background: '#F0FDFA', color: '#0F766E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Layers size={22} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                      Add Attribute Assignment
-                    </h3>
-                    <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
-                      Category: <strong style={{ color: '#0F766E' }}>{targetCategoryName}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                        {ptName}
+                      </h3>
+                      <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontFamily: 'monospace' }}>
+                        {ptCode}
+                      </span>
+                      <span style={{
+                        fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4,
+                        background: isActive ? '#DCFCE7' : '#FEE2E2',
+                        color: isActive ? '#15803D' : '#B91C1C',
+                        border: isActive ? '1px solid #86EFAC' : '1px solid #FCA5A5'
+                      }}>
+                        {isActive ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>
+                      Product Type ID: <strong style={{ color: '#0F766E', fontFamily: 'monospace' }}>{ptId}</strong> • Display Order: #{viewingPt.display_order ?? 1}
                     </div>
                   </div>
                 </div>
+
                 <button
                   type="button"
-                  onClick={() => setIsAddAttrModalOpen(false)}
-                  style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}
+                  onClick={() => setIsViewPtModalOpen(false)}
+                  style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 6, borderRadius: 6 }}
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              {/* Error Message */}
-              {addAttrError && (
-                <div style={{
-                  background: '#FEE2E2',
-                  border: '1px solid #FCA5A5',
-                  borderRadius: 6,
-                  padding: '8px 12px',
-                  color: '#B91C1C',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}>
-                  <AlertTriangle size={15} />
-                  <span>{addAttrError}</span>
+              {/* Scrollable Content */}
+              <div style={{ padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* Description & Summary Cards */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>
+                    DESCRIPTION
+                  </div>
+                  <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.5 }}>
+                    {viewingPt.description || <span style={{ color: '#94A3B8', fontStyle: 'italic' }}>No description provided for this Product Type.</span>}
+                  </div>
                 </div>
-              )}
 
-              {/* Assignment Form */}
-              <form onSubmit={handleConfirmAddAttribute} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {/* Field 1: ATTRIBUTE * */}
-                <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4, letterSpacing: '0.03em' }}>
-                    ATTRIBUTE *
-                  </label>
-                  <select
-                    required
-                    value={selectedAttrId}
-                    onChange={e => {
-                      setSelectedAttrId(e.target.value);
-                      setAddAttrError(null);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '9px 12px',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: 6,
-                      fontSize: 13,
-                      background: '#FFF',
-                      outline: 'none',
-                      color: selectedAttrId ? '#0F172A' : '#64748B'
-                    }}
-                  >
-                    <option value="">[ Select Attribute ▼ ]</option>
-                    {availableList.map(attr => {
-                      const attrId = attr.attribute_id || attr.id!;
-                      const code = attr.attribute_code || attr.code;
-                      const name = attr.attribute_name || attr.name;
-                      const uom = attr.unit_of_measure ? ` (${attr.unit_of_measure})` : '';
-                      return (
-                        <option key={attrId} value={attrId}>
-                          {code} — {name} [{attr.data_type}]{uom}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {availableList.length === 0 && (
-                    <div style={{ fontSize: 11.5, color: '#94A3B8', marginTop: 4, fontStyle: 'italic' }}>
-                      All active attributes from Attribute Master are already assigned to this category.
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B' }}>CONFIGURED ATTRIBUTES</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#2563EB', fontFamily: 'monospace', marginTop: 2 }}>{attrs.length} Attributes</div>
+                  </div>
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B' }}>ASSOCIATED CATEGORIES</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', marginTop: 2 }}>{cats.length} Records</div>
+                  </div>
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B' }}>LAST UPDATED</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginTop: 4 }}>
+                      {formatMasterDate(viewingPt.updated_at || (viewingPt as any).updatedAt || viewingPt.created_at)}
                     </div>
-                  )}
+                  </div>
                 </div>
 
-                {/* Modal Footer / Buttons */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 6, paddingTop: 12, borderTop: '1px solid #E2E8F0' }}>
+                {/* Sub-tab Switcher for View Details */}
+                <div style={{ display: 'flex', background: '#F1F5F9', padding: 3, borderRadius: 8, border: '1px solid #E2E8F0', width: 'fit-content' }}>
                   <button
                     type="button"
-                    onClick={() => setIsAddAttrModalOpen(false)}
+                    onClick={() => setViewPtTab('ATTRIBUTES')}
                     style={{
-                      padding: '8px 16px',
-                      borderRadius: 6,
-                      border: '1px solid #CBD5E1',
-                      background: '#FFF',
-                      color: '#475569',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      cursor: 'pointer'
+                      padding: '7px 16px', borderRadius: 6, fontSize: 12.5, fontWeight: 700,
+                      border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                      background: viewPtTab === 'ATTRIBUTES' ? '#FFFFFF' : 'transparent',
+                      color: viewPtTab === 'ATTRIBUTES' ? '#0F766E' : '#64748B',
+                      boxShadow: viewPtTab === 'ATTRIBUTES' ? '0 1px 3px rgba(15,23,42,0.1)' : 'none'
                     }}
                   >
-                    Cancel
+                    <Sliders size={14} />
+                    <span>Assigned Attributes ({attrs.length})</span>
                   </button>
                   <button
-                    type="submit"
-                    disabled={availableList.length === 0}
+                    type="button"
+                    onClick={() => setViewPtTab('CATEGORIES')}
                     style={{
-                      padding: '8px 20px',
-                      borderRadius: 6,
-                      border: 'none',
-                      background: availableList.length === 0 ? '#94A3B8' : '#0F766E',
-                      color: '#FFF',
-                      fontSize: 12.5,
-                      fontWeight: 700,
-                      cursor: availableList.length === 0 ? 'not-allowed' : 'pointer'
+                      padding: '7px 16px', borderRadius: 6, fontSize: 12.5, fontWeight: 700,
+                      border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                      background: viewPtTab === 'CATEGORIES' ? '#FFFFFF' : 'transparent',
+                      color: viewPtTab === 'CATEGORIES' ? '#0F766E' : '#64748B',
+                      boxShadow: viewPtTab === 'CATEGORIES' ? '0 1px 3px rgba(15,23,42,0.1)' : 'none'
                     }}
                   >
-                    Add Attribute
+                    <FolderTree size={14} />
+                    <span>Associated Categories ({cats.length})</span>
                   </button>
                 </div>
-              </form>
+
+                {/* Tab 1: Assigned Attributes Table */}
+                {viewPtTab === 'ATTRIBUTES' && (
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
+                        <thead>
+                          <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 50, textAlign: 'center' }}>#</th>
+                            <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>ASSIGNED ATTRIBUTE NAME</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 130 }}>CODE</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 100 }}>DATA TYPE</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 70, textAlign: 'center' }}>UOM</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 90, textAlign: 'center' }}>REQUIRED</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 140 }}>FILTER / SEARCH</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 80, textAlign: 'center' }}>STATUS</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {viewPtLoading ? (
+                            <tr>
+                              <td colSpan={8} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
+                                Loading assigned attributes from database...
+                              </td>
+                            </tr>
+                          ) : attrs.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
+                                <Sliders size={28} style={{ color: '#94A3B8', margin: '0 auto 6px', display: 'block' }} />
+                                <div>No attributes assigned to this Product Type.</div>
+                              </td>
+                            </tr>
+                          ) : (
+                            attrs.map((a: any, idx: number) => {
+                              const aName = a.attribute_name || a.attributeName || a.name || 'Attribute';
+                              const aCode = a.attribute_code || a.attributeCode || a.code || 'CODE';
+                              const aType = a.data_type || a.dataType || 'TEXT';
+                              const aUom = a.unit_of_measure || a.unitOfMeasure || '—';
+                              const isReq = a.is_required !== undefined ? a.is_required : Boolean(a.isRequired);
+                              const isFilt = a.is_filterable !== undefined ? a.is_filterable : (a.isFilterable ?? true);
+                              const isSrch = a.is_searchable !== undefined ? a.is_searchable : (a.isSearchable ?? true);
+                              const isAct = a.is_active !== undefined ? a.is_active : (a.isActive ?? true);
+
+                              return (
+                                <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                  <td style={{ padding: '10px 12px', textAlign: 'center', fontFamily: 'monospace', color: '#64748B' }}>
+                                    #{a.display_order ?? (idx + 1)}
+                                  </td>
+                                  <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0F172A' }}>
+                                    <div>{aName}</div>
+                                    {a.allowed_values && a.allowed_values.length > 0 && (
+                                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                                        Options: {a.allowed_values.join(', ')}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '10px 12px' }}>
+                                    <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: '#F1F5F9', color: '#334155', border: '1px solid #E2E8F0', fontFamily: 'monospace' }}>
+                                      {aCode}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '10px 12px' }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
+                                      {aType}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '10px 12px', textAlign: 'center', color: '#475569' }}>
+                                    {aUom}
+                                  </td>
+                                  <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: isReq ? '#FEF2F2' : '#F1F5F9', color: isReq ? '#DC2626' : '#64748B', border: isReq ? '1px solid #FCA5A5' : '1px solid #CBD5E1' }}>
+                                      {isReq ? 'Required' : 'Optional'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '10px 12px' }}>
+                                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                      {isFilt && (
+                                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0' }}>
+                                          Filter
+                                        </span>
+                                      )}
+                                      {isSrch && (
+                                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }}>
+                                          Search
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: isAct ? '#DCFCE7' : '#FEE2E2', color: isAct ? '#15803D' : '#B91C1C' }}>
+                                      {isAct ? 'ACTIVE' : 'INACTIVE'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 2: Associated Categories Table */}
+                {viewPtTab === 'CATEGORIES' && (
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
+                        <thead>
+                          <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 50, textAlign: 'center' }}>#</th>
+                            <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>CATEGORY (L1)</th>
+                            <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>SUB-CATEGORY (L2)</th>
+                            <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>SUB-SUB-CATEGORY (L3)</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 120 }}>CODE</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 90, textAlign: 'center' }}>STATUS</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cats.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
+                                <FolderTree size={28} style={{ color: '#94A3B8', margin: '0 auto 6px', display: 'block' }} />
+                                <div>No categories currently linked to this Product Type.</div>
+                              </td>
+                            </tr>
+                          ) : (
+                            cats.map((c: any, idx: number) => {
+                              const cCode = c.category_code || c.code || '—';
+                              const cStatus = (c.lifecycle_status || c.status || 'ACTIVE').toUpperCase();
+                              const isCatActive = cStatus === 'ACTIVE';
+
+                              return (
+                                <tr key={c.category_id || c.id || idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                  <td style={{ padding: '10px 12px', textAlign: 'center', fontFamily: 'monospace', color: '#64748B' }}>
+                                    #{idx + 1}
+                                  </td>
+                                  <td style={{ padding: '10px 14px', fontWeight: 800, color: '#0F172A' }}>
+                                    {c.category}
+                                  </td>
+                                  <td style={{ padding: '10px 14px', color: '#475569' }}>
+                                    {c.sub_category || <span style={{ color: '#94A3B8' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '10px 14px', color: '#475569' }}>
+                                    {c.sub_sub_category || <span style={{ color: '#94A3B8' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '10px 12px' }}>
+                                    <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: '#F0FDFA', color: '#0F766E', border: '1px solid #CCFBF1', fontFamily: 'monospace' }}>
+                                      {cCode}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: isCatActive ? '#DCFCE7' : '#FEE2E2', color: isCatActive ? '#15803D' : '#B91C1C' }}>
+                                      {isCatActive ? 'ACTIVE' : 'INACTIVE'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* View Modal Footer */}
+              <div style={{
+                padding: '16px 24px',
+                borderTop: '1px solid #E2E8F0',
+                background: '#F8FAFC',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsViewPtModalOpen(false);
+                    handleOpenEditPtModal(viewingPt);
+                  }}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 6,
+                    border: '1px solid #0F766E',
+                    background: '#F0FDFA',
+                    color: '#0F766E',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <Edit3 size={14} />
+                  <span>Edit Product Type</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsViewPtModalOpen(false)}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 6,
+                    border: '1px solid #CBD5E1',
+                    background: '#FFFFFF',
+                    color: '#475569',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         );
       })()}
 
-      {/* ══════════════════════════════════════════════════════════════════════ */}
-      {/* MODAL: DELETE CONFIRMATION */}
+{/* MODAL: DELETE CONFIRMATION */}
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {deleteConfirmTarget && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10010, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setDeleteConfirmTarget(null)}>

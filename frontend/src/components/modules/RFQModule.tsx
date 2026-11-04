@@ -1,20 +1,24 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Badge } from '../common/Badge';
 import { EmptyRFQIllustration, FactoryAvatar } from '../common/Illustrations';
 import {
   RFQ, RFQLine, Manufacturer, Product, RFQStatus, DistributionStatus,
   ManufacturerRFQ, ManufacturerRFQLine, ManufacturerQuote, ManufacturerQuoteLine,
-  ManufacturerProductMapping
+  ManufacturerProductMapping, Category
 } from '../../types';
+import { rfqApi, BackendRfq, BackendRfqLine, RfqMatchResponse, ManufacturerMatch } from '../../services/rfqApi';
+import { catalogApi } from '../../services/catalogApi';
 import {
   FileText, Plus, Search, Filter, Download, ChevronDown, ChevronRight,
   MoreHorizontal, Calendar, Clock, Users, CheckCircle2, AlertCircle,
   X, Building2, Package, Layers, ArrowRight, Eye, Zap, RefreshCw,
   SlidersHorizontal, BookmarkPlus, Share2, Bell, Inbox, Trash2, Mail, MessageSquare,
   Send, Check, AlertTriangle, ArrowLeft, ShieldCheck, Award, ExternalLink, MapPin,
-  Star
+  Star, Info, CreditCard
 } from 'lucide-react';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 const supportedStatuses: RFQStatus[] = [
   'Draft',
@@ -29,8 +33,14 @@ const supportedStatuses: RFQStatus[] = [
 interface DraftProductLine {
   productId: string;
   productName: string;
+  productCode?: string;
+  productTypeId?: string;
+  category?: string;
+  subCategory?: string;
+  subSubCategory?: string;
   dosageForm: string;
   packSize: string;
+  uom: string;
   quantity: number | '';
   requiredDate: string;
   remarks: string;
@@ -40,6 +50,8 @@ interface DraftProductLine {
   productType?: 'BRANDED' | 'GENERIC';
   molecule?: string;
   strength?: string;
+  brand?: string;
+  isCustomMolecule?: boolean;
 }
 
 export const STANDARD_MOLECULES = [
@@ -64,6 +76,7 @@ interface SearchableProductSelectProps {
   selectedProductName: string;
   isOther?: boolean;
   customProductName?: string;
+  disabledProductIds?: string[];
   onSelectProduct: (product: Product) => void;
   onSelectOther: () => void;
   onCustomProductNameChange: (customName: string) => void;
@@ -75,6 +88,7 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
   selectedProductName,
   isOther,
   customProductName,
+  disabledProductIds = [],
   onSelectProduct,
   onSelectOther,
   onCustomProductNameChange
@@ -99,7 +113,10 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
     return products.filter(p =>
       p.name.toLowerCase().includes(term) ||
       (p.genericName && p.genericName.toLowerCase().includes(term)) ||
-      (p.code && p.code.toLowerCase().includes(term))
+      (p.code && p.code.toLowerCase().includes(term)) ||
+      ((p as any).productCode && (p as any).productCode.toLowerCase().includes(term)) ||
+      (p.category && p.category.toLowerCase().includes(term)) ||
+      (p.subCategory && p.subCategory.toLowerCase().includes(term))
     );
   }, [products, searchTerm]);
 
@@ -108,8 +125,11 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
       return customProductName ? `Other: ${customProductName}` : 'Other (Custom Product)';
     }
     if (selectedProductId) {
-      const found = products.find(p => p.id === selectedProductId);
-      if (found) return found.name;
+      const found = products.find(p => p.id === selectedProductId || (p as any).productCode === selectedProductId);
+      if (found) {
+        const pCode = found.code || (found as any).productCode || (found as any).product_code;
+        return pCode ? `[${pCode}] ${found.name}` : found.name;
+      }
       if (selectedProductName) return selectedProductName;
     }
     return 'Select Product ▼';
@@ -166,7 +186,7 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
             <input
               type="text"
               autoFocus
-              placeholder="Search product (e.g. Pan, Par, 500)..."
+              placeholder="Search product by name, code (e.g. PRD001001, Amox, Tablet)..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               onClick={e => e.stopPropagation()}
@@ -190,53 +210,76 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
           </div>
 
           {/* Product Options List */}
-          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 250, overflowY: 'auto' }}>
             {filteredProducts.length > 0 ? (
               filteredProducts.map(p => {
-                const isSelected = p.id === selectedProductId && !isOther;
+                const isSelected = (p.id === selectedProductId || (p as any).productCode === selectedProductId) && !isOther;
+                const isDisabled = disabledProductIds.includes(p.id) && !isSelected;
+                const pCode = p.code || (p as any).productCode || (p as any).product_code;
+                const categoryPath = [p.category, p.subCategory, (p as any).subSubCategory].filter(Boolean).join(' → ');
+
                 return (
                   <div
                     key={p.id}
                     onClick={() => {
+                      if (isDisabled) return;
                       onSelectProduct(p);
                       setIsOpen(false);
                       setSearchTerm('');
                     }}
                     style={{
-                      padding: '9px 12px',
+                      padding: '10px 12px',
                       fontSize: 12.5,
                       fontWeight: isSelected ? 700 : 500,
-                      color: isSelected ? '#0F766E' : '#1E293B',
-                      background: isSelected ? '#F0FDF4' : 'transparent',
-                      cursor: 'pointer',
+                      color: isDisabled ? '#94A3B8' : isSelected ? '#0F766E' : '#1E293B',
+                      background: isDisabled ? '#F8FAFC' : isSelected ? '#F0FDF4' : 'transparent',
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       borderBottom: '1px solid #F1F5F9',
+                      opacity: isDisabled ? 0.65 : 1,
                       transition: 'background 0.1s ease'
                     }}
                     onMouseEnter={e => {
-                      if (!isSelected) e.currentTarget.style.background = '#F8FAFC';
+                      if (!isSelected && !isDisabled) e.currentTarget.style.background = '#F8FAFC';
                     }}
                     onMouseLeave={e => {
-                      if (!isSelected) e.currentTarget.style.background = 'transparent';
+                      if (!isSelected && !isDisabled) e.currentTarget.style.background = 'transparent';
                     }}
                   >
-                    <div>
-                      <div>{p.name}</div>
-                      {p.dosageForm && p.packSize && (
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {pCode && (
+                          <span style={{ fontFamily: 'monospace', fontSize: 10.5, fontWeight: 700, color: '#0F766E', background: '#CCFBF1', padding: '1px 6px', borderRadius: 4 }}>
+                            {pCode}
+                          </span>
+                        )}
+                        <span style={{ fontWeight: 700, color: isDisabled ? '#94A3B8' : '#0F172A' }}>{p.name}</span>
+                        {isDisabled && (
+                          <span style={{ fontSize: 10.5, color: '#DC2626', background: '#FEE2E2', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
+                            Already Added
+                          </span>
+                        )}
+                      </div>
+                      {categoryPath && (
+                        <div style={{ fontSize: 11, color: '#0F766E', marginTop: 2, fontWeight: 500 }}>
+                          📁 {categoryPath}
+                        </div>
+                      )}
+                      {(p.dosageForm || p.packSize) && (
                         <div style={{ fontSize: 11, color: '#64748B', marginTop: 1 }}>
-                          {p.dosageForm} • {p.packSize}
+                          {[p.dosageForm, p.packSize, (p as any).packUom || (p as any).baseUom || p.uom].filter(Boolean).join(' • ')}
                         </div>
                       )}
                     </div>
-                    {isSelected && <Check size={14} style={{ color: '#0F766E', flexShrink: 0 }} />}
+                    {isSelected && <Check size={16} style={{ color: '#0F766E', flexShrink: 0 }} />}
                   </div>
                 );
               })
             ) : (
-              <div style={{ padding: '12px', fontSize: 12, color: '#94A3B8', textAlign: 'center' }}>
-                No matching catalog products found
+              <div style={{ padding: '14px', fontSize: 12, color: '#94A3B8', textAlign: 'center' }}>
+                No matching catalog products found under selected hierarchy
               </div>
             )}
 
@@ -309,10 +352,23 @@ export const RFQModule: React.FC = () => {
   const {
     rfqs, quotes, orders, addRFQ, submitQuote, currentRole, products, manufacturers,
     customers, mappings, declinedRfqs, setActiveTab, addAuditLog, isCreateRfqDrawerOpen, setIsCreateRfqDrawerOpen,
-    activeBuyerAccount, orgProfile
+    activeBuyerAccount, orgProfile, userProfile, productTypes,
+    buyerBackendProfile, isResolvingBuyerProfile, refreshBuyerProfile
   } = useApp();
 
-  const isSpecialPartyBuyer = activeBuyerAccount === 'SPECIAL_PARTY';
+  // PostgreSQL Database & Authenticated Buyer Profile State
+  const [realBuyerProfile, setRealBuyerProfile] = useState<any>(null);
+  const [dbProductTypes, setDbProductTypes] = useState<Array<{ id: string; code?: string; name: string }>>([]);
+  const [dbRfqs, setDbRfqs] = useState<RFQ[]>([]);
+  const [isLoadingDbRfqs, setIsLoadingDbRfqs] = useState<boolean>(false);
+  const [catalogCategories, setCatalogCategories] = useState<Category[]>([]);
+  const [catalogProductList, setCatalogProductList] = useState<Product[]>([]);
+  const [isSubmittingRfq, setIsSubmittingRfq] = useState<boolean>(false);
+  const [isMatchingLoading, setIsMatchingLoading] = useState<boolean>(false);
+  const [liveMatchingResult, setLiveMatchingResult] = useState<RfqMatchResponse | null>(null);
+
+  // Determine Special Party status directly from verified backend profile
+  const isSpecialPartyBuyer = (buyerBackendProfile?.customerClassification || realBuyerProfile?.customerClassification || activeBuyerAccount) === 'SPECIAL_PARTY';
 
   if (currentRole === 'SUPPLIER') {
     return <ManufacturerAssignedRFQsModule />;
@@ -323,7 +379,20 @@ export const RFQModule: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [expandedRfqId, setExpandedRfqId] = useState<string | null>(null);
 
-  // RFQ Creation Wizard State (Steps 1, 2, 3, 4)
+  const uniqueMatchedMfgs = useMemo(() => {
+    if (!liveMatchingResult?.matchedLines) return [];
+    const map = new Map<string, ManufacturerMatch>();
+    liveMatchingResult.matchedLines.forEach(l => {
+      (l.eligibleManufacturers || []).forEach(m => {
+        if (!map.has(m.manufacturerId)) {
+          map.set(m.manufacturerId, m);
+        }
+      });
+    });
+    return Array.from(map.values());
+  }, [liveMatchingResult]);
+
+  // RFQ Creation Wizard State (Steps 1, 2, 3)
   const [localShowCreateDrawer, setLocalShowCreateDrawer] = useState(false);
   const showCreateDrawer = localShowCreateDrawer || isCreateRfqDrawerOpen;
   
@@ -332,82 +401,44 @@ export const RFQModule: React.FC = () => {
   const [isEditingDraftId, setIsEditingDraftId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Auto-Generated RFQ Number
-  const autoRfqNumber = useMemo(() => {
-    if (isEditingDraftId) {
-      const existing = rfqs.find(r => r.id === isEditingDraftId);
-      if (existing) return existing.rfqNumber;
-    }
-    return `RFQ-2026-${String(rfqs.length + 1004).padStart(4, '0')}`;
-  }, [rfqs, isEditingDraftId]);
+  // Future-proof date defaults
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const defaultDeliveryStr = useMemo(() => new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0], []);
+  const defaultDeadlineStr = useMemo(() => new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0], []);
 
   // RFQ Header & General Terms Fields State
-  const [buyerName, setBuyerName] = useState<string>(isSpecialPartyBuyer ? 'MediPlus Healthcare (Special Party)' : 'Apex Pharma (Buyer)');
-  const [customerName, setCustomerName] = useState<string>(isSpecialPartyBuyer ? 'MediPlus Healthcare' : 'Apex Pharma PCD Franchise');
-  const [customerCode, setCustomerCode] = useState<string>(isSpecialPartyBuyer ? 'CUS000105' : 'CUS000101');
-  const [rfqDate, setRfqDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [requiredDate, setRequiredDate] = useState<string>('2026-09-15');
-  const [deadlineDate, setDeadlineDate] = useState<string>('2026-08-25');
+  const [buyerName, setBuyerName] = useState<string>('');
+  const [customerName, setCustomerName] = useState<string>('');
+  const [customerCode, setCustomerCode] = useState<string>('');
+  const [rfqDate, setRfqDate] = useState<string>(todayStr);
+  const [requiredDate, setRequiredDate] = useState<string>(defaultDeliveryStr);
+  const [deadlineDate, setDeadlineDate] = useState<string>(defaultDeadlineStr);
   const [priority, setPriority] = useState<'STANDARD' | 'HIGH' | 'URGENT'>('HIGH');
-  const [deliveryLocation, setDeliveryLocation] = useState<string>(isSpecialPartyBuyer ? 'Andheri East, Mumbai, Maharashtra' : 'Baddi Industrial Area, Himachal Pradesh');
-  const [headerRemarks, setHeaderRemarks] = useState<string>('Fast delivery required as per specification.');
-
-  React.useEffect(() => {
-    if (isSpecialPartyBuyer) {
-      setBuyerName('MediPlus Healthcare (Special Party)');
-      setCustomerName('MediPlus Healthcare');
-      setCustomerCode('CUS000105');
-      setDeliveryLocation('Andheri East, Mumbai, Maharashtra');
-    } else {
-      setBuyerName('Apex Pharma (Buyer)');
-      setCustomerName('Apex Pharma PCD Franchise');
-      setCustomerCode('CUS000101');
-      setDeliveryLocation('Baddi Industrial Area, Himachal Pradesh');
-    }
-  }, [isSpecialPartyBuyer]);
+  const [deliveryLocation, setDeliveryLocation] = useState<string>('');
+  const [headerRemarks, setHeaderRemarks] = useState<string>('Standard quality assurance & GMP compliance required.');
 
   // Credit Requirement State
   const [creditRequired, setCreditRequired] = useState<boolean>(true);
   const [creditTermsOption, setCreditTermsOption] = useState<string>('Net 30 Days');
   const [customCreditTerms, setCustomCreditTerms] = useState<string>('');
 
-  // RFQ Product Lines State — initial 4 product lines (Requirement #2)
+  // Initial clean single empty product line
   const [rfqLines, setRfqLines] = useState<DraftProductLine[]>([
     {
-      productId: 'p6',
-      productName: 'Paracetamol 500mg Tablets',
-      dosageForm: 'Tablet',
-      packSize: '10 x 10 Strip',
-      quantity: 10000,
-      requiredDate: '2026-09-15',
-      remarks: 'Fast delivery'
-    },
-    {
-      productId: 'p1',
-      productName: 'Amoxicillin 250mg Tablets',
-      dosageForm: 'Tablet',
-      packSize: '10 x 10 Strip',
-      quantity: 5000,
-      requiredDate: '2026-09-15',
-      remarks: 'Standard packaging'
-    },
-    {
-      productId: 'p3',
-      productName: 'Azithromycin 500mg Tablets',
-      dosageForm: 'Tablet',
-      packSize: '10 x 3 Strip',
-      quantity: 2000,
-      requiredDate: '2026-09-15',
-      remarks: 'Export quality'
-    },
-    {
-      productId: 'p4',
-      productName: 'Pantoprazole 40mg + Domperidone 30mg SR',
-      dosageForm: 'Capsule',
-      packSize: '10 x 10 Strip',
-      quantity: 3000,
-      requiredDate: '2026-09-15',
-      remarks: 'Alu-Alu blister packaging'
+      productId: '',
+      productCode: '',
+      productName: '',
+      productTypeId: '',
+      category: '',
+      subCategory: '',
+      subSubCategory: '',
+      dosageForm: '',
+      packSize: '',
+      uom: 'Unit',
+      quantity: '',
+      requiredDate: defaultDeliveryStr,
+      remarks: '',
+      productType: 'BRANDED'
     }
   ]);
 
@@ -423,27 +454,189 @@ export const RFQModule: React.FC = () => {
   // In-memory store for created Manufacturer RFQ distribution records
   const [manufacturerRfqsStore, setManufacturerRfqsStore] = useState<Record<string, ManufacturerRFQ[]>>({});
 
-  // Specific Clicked Manufacturer Profile Drawer State (Requirement #1)
+  // Specific Clicked Manufacturer Profile Drawer State
   const [clickedProfileMfgId, setClickedProfileMfgId] = useState<string | null>(null);
 
   // Supplier Quote Submission Drawer State
   const [supplierQuoteRfq, setSupplierQuoteRfq] = useState<RFQ | null>(null);
   const [quotePrices, setQuotePrices] = useState<Record<string, number>>({});
 
+  // ── FETCH DATA FROM BACKEND & POSTGRESQL ──
+  const fetchBuyerRfqs = async () => {
+    try {
+      setIsLoadingDbRfqs(true);
+      const serverRfqs = await rfqApi.listRfqs();
+      const mapped: RFQ[] = (serverRfqs || []).map((sr: any) => ({
+        id: sr.id,
+        rfqNumber: sr.rfqNumber,
+        customerId: String(sr.userId || '14'),
+        customerName: sr.companyName || sr.buyerName || 'Verified Organization',
+        customerCode: sr.customerCode || 'CUS000838',
+        customerClassification: sr.customerClassification || 'REGULAR',
+        createdDate: sr.rfqDate || (sr.createdAt ? sr.createdAt.split('T')[0] : todayStr),
+        deadlineDate: sr.deadlineDate || '',
+        status: sr.status as any,
+        priority: sr.priority || 'HIGH',
+        deliveryLocation: sr.deliveryLocation || '',
+        remarks: sr.remarks || '',
+        creditRequired: sr.creditRequired ?? true,
+        creditTerms: sr.creditTerms || 'Net 30 Days',
+        isGeneric: sr.isGeneric ?? false,
+        lines: (sr.lines || []).map((l: any, idx: number) => ({
+          id: l.id || `line_${idx}`,
+          productId: l.productId || l.productCode || 'p1',
+          productName: l.productName,
+          dosageForm: l.dosageForm || 'Tablet',
+          packSize: l.packSize || '10 x 10 Strip',
+          quantity: Number(l.quantity),
+          requiredDate: l.requiredDate || '',
+          remarks: l.remarks || '',
+          productType: l.productType || 'BRANDED',
+          molecule: l.molecule,
+          eligibleManufacturersCount: 0
+        }))
+      }));
+      setDbRfqs(mapped);
+    } catch (err) {
+      console.warn('Could not fetch DB RFQs from backend, using active store', err);
+    } finally {
+      setIsLoadingDbRfqs(false);
+    }
+  };
+
+  // Helper to resolve dynamic customer code
+  const resolveCustomerCode = (p: any) => {
+    if (!p) return 'CUS-PENDING';
+    return (
+      p.customerCode ||
+      p.companyCode ||
+      (p.registration?.registrationCode ? `REG-${p.registration.registrationCode}` : null) ||
+      (p.userId ? `CUS-${p.userId}` : 'CUS-VERIFIED')
+    );
+  };
+
+  // Load authenticated buyer profile and PostgreSQL master data on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    // 1. Authenticated Buyer Profile
+    rfqApi.getBuyerProfile()
+      .then(profile => {
+        if (!isMounted || !profile) return;
+        setRealBuyerProfile(profile);
+        setBuyerName(profile.fullName || userProfile?.fullName || profile.username || 'Verified Buyer');
+        setCustomerName(profile.companyName || orgProfile?.companyName || 'Verified Organization');
+        setCustomerCode(resolveCustomerCode(profile));
+        const addr = profile.registration?.shippingAddress
+          ? `${profile.registration.shippingAddress}, ${profile.registration.state || ''} ${profile.registration.pincode ? '- ' + profile.registration.pincode : ''}`.trim()
+          : (orgProfile?.registeredAddress ? `${orgProfile.registeredAddress}, ${orgProfile.city || ''}` : 'Primary Dispatch Facility');
+        setDeliveryLocation(addr);
+      })
+      .catch(err => {
+        console.warn('Could not fetch authenticated profile from backend, using session context', err);
+        if (isMounted) {
+          setBuyerName(userProfile?.fullName || 'Verified Buyer');
+          setCustomerName(orgProfile?.companyName || 'Verified Organization');
+          setCustomerCode(orgProfile?.companyCode || 'CUS-PENDING');
+          setDeliveryLocation(orgProfile?.registeredAddress || 'Primary Dispatch Facility');
+        }
+      });
+
+    // 2. Product Types from PostgreSQL
+    catalogApi.listProductTypes()
+      .then(types => {
+        if (isMounted && types && types.length > 0) {
+          setDbProductTypes(types);
+        }
+      })
+      .catch(err => console.warn('Could not fetch product types from backend', err));
+
+    // 3. Categories from PostgreSQL (single CATEGORY table)
+    catalogApi.listCategories()
+      .then(res => {
+        if (!isMounted) return;
+        const list = res.categories || (Array.isArray(res) ? res : []);
+        setCatalogCategories(list);
+      })
+      .catch(err => {
+        console.warn('Could not fetch categories from backend', err);
+      });
+
+    // 4. Active Products from PostgreSQL
+    catalogApi.listProducts({ activeOnly: true })
+      .then(prods => {
+        if (!isMounted) return;
+        setCatalogProductList(prods || []);
+      })
+      .catch(err => {
+        console.warn('Could not fetch catalog products from backend', err);
+      });
+
+    // 5. Existing buyer RFQs from PostgreSQL
+    fetchBuyerRfqs();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Sync buyer info from real authenticated buyer profile
+  useEffect(() => {
+    const prof = buyerBackendProfile || realBuyerProfile;
+    if (prof) {
+      setBuyerName(prof.fullName || userProfile?.fullName || prof.username || 'Verified Buyer');
+      setCustomerName(prof.companyName || orgProfile?.companyName || 'Verified Organization');
+      setCustomerCode(resolveCustomerCode(prof));
+      const addr = prof.registration?.shippingAddress
+        ? `${prof.registration.shippingAddress}, ${prof.registration.state || ''} ${prof.registration.pincode ? '- ' + prof.registration.pincode : ''}`.trim()
+        : (orgProfile?.registeredAddress ? `${orgProfile.registeredAddress}, ${orgProfile.city || ''}` : 'Primary Dispatch Facility');
+      setDeliveryLocation(addr);
+    }
+  }, [buyerBackendProfile, realBuyerProfile, userProfile, orgProfile]);
+
+  // Lock body scrolling when RFQ drawer is open to prevent background scrolling
+  useEffect(() => {
+    if (showCreateDrawer) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [showCreateDrawer]);
+
+  // Auto-Generated RFQ Number display
+  const autoRfqNumber = useMemo(() => {
+    if (isEditingDraftId) {
+      const existing = [...dbRfqs, ...rfqs].find(r => r.id === isEditingDraftId);
+      if (existing) return existing.rfqNumber;
+    }
+    return 'Auto-assigned on Save/Submit';
+  }, [dbRfqs, rfqs, isEditingDraftId]);
+
+  // Combined RFQs (PostgreSQL database RFQs prioritized)
+  const allDisplayRfqs = useMemo(() => {
+    const map = new Map<string, RFQ>();
+    dbRfqs.forEach(r => {
+      const key = r.rfqNumber || r.id;
+      map.set(key, r);
+    });
+    rfqs.forEach(r => {
+      const key = r.rfqNumber || r.id;
+      if (!map.has(key)) {
+        map.set(key, r);
+      }
+    });
+    return Array.from(map.values());
+  }, [dbRfqs, rfqs]);
+
   // Filtered RFQs for table view
   const filteredRfqs = useMemo(() => {
-    return rfqs.filter(rfq => {
-      // Data isolation between Normal Buyer and Special Party Buyer demo personas
-      if (isSpecialPartyBuyer) {
-        if (rfq.customerClassification !== 'SPECIAL_PARTY' && rfq.customerId !== 'c5' && !rfq.customerName?.toLowerCase().includes('mediplus')) return false;
-      } else {
-        if (rfq.customerClassification === 'SPECIAL_PARTY' || rfq.customerId === 'c5' || rfq.customerName?.toLowerCase().includes('mediplus')) return false;
-      }
-
+    return allDisplayRfqs.filter(rfq => {
       const matchSearch =
-        rfq.rfqNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        rfq.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        rfq.lines.some(l => l.productName.toLowerCase().includes(searchTerm.toLowerCase()));
+        (rfq.rfqNumber && rfq.rfqNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (rfq.customerName && rfq.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (rfq.lines && rfq.lines.some(l => l.productName && l.productName.toLowerCase().includes(searchTerm.toLowerCase())));
 
       const matchStatus = statusFilter === 'ALL' || (() => {
         if (!rfq || !rfq.status) return false;
@@ -460,61 +653,329 @@ export const RFQModule: React.FC = () => {
         return false;
       })();
       return matchSearch && matchStatus;
-    });
-  }, [rfqs, isSpecialPartyBuyer, searchTerm, statusFilter]);
-
-  // Derived Eligible Manufacturers for Step 3 & Step 4 Review (Only for Branded lines)
-  const eligibleManufacturersForDraft = useMemo(() => {
-    const validLines = rfqLines.filter(l => l.productId && l.quantity && l.productType !== 'GENERIC');
-    const mfgMap = new Map<string, { mfg: Manufacturer; matchedProducts: string[] }>();
-
-    validLines.forEach(line => {
-      const lineMappings = mappings.filter(m => m.productId === line.productId);
-      let matchedMfgIds = lineMappings.map(m => m.manufacturerId);
-
-      if (matchedMfgIds.length === 0) {
-        matchedMfgIds = manufacturers.slice(0, 2).map(m => m.id);
+    }).sort((a, b) => {
+      // Latest record first (created_at DESC), secondary stable sort on id DESC
+      const timeA = new Date((a as any).createdAt || (a as any).created_at || a.createdDate || 0).getTime();
+      const timeB = new Date((b as any).createdAt || (b as any).created_at || b.createdDate || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+        return timeB - timeA;
       }
+      return String(b.rfqNumber || b.id || '').localeCompare(String(a.rfqNumber || a.id || ''));
+    });
+  }, [allDisplayRfqs, searchTerm, statusFilter]);
 
-      matchedMfgIds.forEach(mfgId => {
-        const mfgObj = manufacturers.find(m => m.id === mfgId);
-        if (!mfgObj) return;
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredRfqs.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, statusFilter]
+  });
+  const paginatedRfqs = pagination.paginateItems(filteredRfqs);
 
-        if (!mfgMap.has(mfgId)) {
-          mfgMap.set(mfgId, { mfg: mfgObj, matchedProducts: [line.productName || 'Product'] });
-        } else {
-          const item = mfgMap.get(mfgId)!;
-          if (!item.matchedProducts.includes(line.productName)) {
-            item.matchedProducts.push(line.productName);
-          }
-        }
-      });
+  // ── CATEGORY HIERARCHY CASCADING HELPERS ──
+  const availableProductTypes = useMemo(() => {
+    if (dbProductTypes && dbProductTypes.length > 0) {
+      return dbProductTypes.map(pt => ({
+        id: pt.id,
+        name: pt.name
+      }));
+    }
+    if (productTypes && productTypes.length > 0) {
+      return productTypes.map(pt => ({
+        id: pt.product_type_id || (pt as any).id,
+        name: pt.product_type_name || (pt as any).name || pt.product_type_code
+      }));
+    }
+    return [
+      { id: 'pt_med', name: 'Pharmaceutical Formulations' },
+      { id: 'pt_nut', name: 'Nutraceuticals & Dietary Supplements' },
+      { id: 'pt_cos', name: 'Clinical Skincare & Cosmetics' },
+      { id: 'pt_ayr', name: 'Ayurvedic & Herbal Formulations' },
+      { id: 'pt_srg', name: 'Surgical Consumables & Devices' },
+      { id: 'pt_vet', name: 'Veterinary & Animal Health' }
+    ];
+  }, [dbProductTypes, productTypes]);
+
+  const getCategoriesForLine = (productTypeId?: string): string[] => {
+    let filtered = catalogCategories;
+    if (productTypeId && productTypeId !== 'ALL') {
+      filtered = filtered.filter(c => (c.productTypeId || (c as any).product_type_id) === productTypeId);
+    }
+    const set = new Set<string>();
+    filtered.forEach(c => {
+      if (c.category) set.add(c.category);
+    });
+    return Array.from(set).sort();
+  };
+
+  const getSubCategoriesForLine = (productTypeId?: string, category?: string): string[] => {
+    let filtered = catalogCategories;
+    if (productTypeId && productTypeId !== 'ALL') {
+      filtered = filtered.filter(c => (c.productTypeId || (c as any).product_type_id) === productTypeId);
+    }
+    if (category && category !== 'ALL') {
+      filtered = filtered.filter(c => c.category?.toLowerCase() === category.toLowerCase());
+    }
+    const set = new Set<string>();
+    filtered.forEach(c => {
+      const sc = c.subCategory || (c as any).sub_category;
+      if (sc) set.add(sc);
+    });
+    return Array.from(set).sort();
+  };
+
+  const getSubSubCategoriesForLine = (productTypeId?: string, category?: string, subCategory?: string): string[] => {
+    let filtered = catalogCategories;
+    if (productTypeId && productTypeId !== 'ALL') {
+      filtered = filtered.filter(c => (c.productTypeId || (c as any).product_type_id) === productTypeId);
+    }
+    if (category && category !== 'ALL') {
+      filtered = filtered.filter(c => c.category?.toLowerCase() === category.toLowerCase());
+    }
+    if (subCategory && subCategory !== 'ALL') {
+      filtered = filtered.filter(c => (c.subCategory || (c as any).sub_category)?.toLowerCase() === subCategory.toLowerCase());
+    }
+    const set = new Set<string>();
+    filtered.forEach(c => {
+      const ssc = c.subSubCategory || (c as any).sub_sub_category;
+      if (ssc) set.add(ssc);
+    });
+    return Array.from(set).sort();
+  };
+
+  const getEligibleProductsForLine = (line: DraftProductLine): Product[] => {
+    const allProds = catalogProductList.length > 0 ? catalogProductList : products;
+    return allProds.filter(p => {
+      if ((p as any).lifecycleStatus && (p as any).lifecycleStatus !== 'ACTIVE') return false;
+      if (p.status && p.status.toLowerCase() !== 'active') return false;
+
+      if (line.productTypeId && line.productTypeId !== 'ALL') {
+        const pTypeId = p.productTypeId || (p as any).product_type_id;
+        if (pTypeId && pTypeId !== line.productTypeId) return false;
+      }
+      if (line.category && line.category !== 'ALL') {
+        if (p.category && p.category.toLowerCase() !== line.category.toLowerCase()) return false;
+      }
+      if (line.subCategory && line.subCategory !== 'ALL') {
+        const pSub = p.subCategory || (p as any).sub_category;
+        if (pSub && pSub.toLowerCase() !== line.subCategory.toLowerCase()) return false;
+      }
+      if (line.subSubCategory && line.subSubCategory !== 'ALL') {
+        const pSubSub = p.subSubCategory || (p as any).sub_sub_category;
+        if (pSubSub && pSubSub.toLowerCase() !== line.subSubCategory.toLowerCase()) return false;
+      }
+      return true;
+    });
+  };
+
+  /**
+   * Retrieves active database formulations/generic molecules matching the line's category hierarchy from PostgreSQL.
+   */
+  const getDatabaseFormulationsForLine = (line: DraftProductLine) => {
+    const matchingProducts = getEligibleProductsForLine(line);
+    const map = new Map<string, {
+      id: string;
+      molecule: string;
+      name: string;
+      dosageForm: string;
+      packSize: string;
+      strength: string;
+    }>();
+
+    matchingProducts.forEach(p => {
+      const molName = (p.genericName || p.name || '').trim();
+      if (molName && !map.has(molName.toLowerCase())) {
+        map.set(molName.toLowerCase(), {
+          id: p.id,
+          molecule: molName,
+          name: p.name,
+          dosageForm: p.dosageForm || (p as any).dosage_form || 'Tablet',
+          packSize: p.packSize || (p as any).pack_size || '10 x 10 Strip',
+          strength: (p as any).strength || (p.attributes as any)?.strength || '',
+        });
+      }
     });
 
-    return Array.from(mfgMap.values());
-  }, [rfqLines, mappings, manufacturers]);
+    return Array.from(map.values());
+  };
 
-  // Handle Adding EXACTLY ONE EMPTY Product Row (Requirement #4)
+  // ── ROW CASCADE HANDLERS ──
+  const handleProductTypeChange = (idx: number, productTypeId: string) => {
+    setRfqLines(prev => prev.map((line, i) => {
+      if (i !== idx) return line;
+      return {
+        ...line,
+        productTypeId,
+        category: '',
+        subCategory: '',
+        subSubCategory: '',
+        productId: '',
+        productCode: '',
+        productName: '',
+        dosageForm: '',
+        packSize: '',
+        molecule: '',
+        strength: '',
+        isCustomMolecule: false,
+        uom: 'Unit'
+      };
+    }));
+  };
+
+  const handleCategoryChange = (idx: number, category: string) => {
+    setRfqLines(prev => prev.map((line, i) => {
+      if (i !== idx) return line;
+      return {
+        ...line,
+        category,
+        subCategory: '',
+        subSubCategory: '',
+        productId: '',
+        productCode: '',
+        productName: '',
+        dosageForm: '',
+        packSize: '',
+        molecule: '',
+        strength: '',
+        isCustomMolecule: false,
+        uom: 'Unit'
+      };
+    }));
+  };
+
+  const handleSubCategoryChange = (idx: number, subCategory: string) => {
+    setRfqLines(prev => prev.map((line, i) => {
+      if (i !== idx) return line;
+      return {
+        ...line,
+        subCategory,
+        subSubCategory: '',
+        productId: '',
+        productCode: '',
+        productName: '',
+        dosageForm: subCategory || line.dosageForm || '',
+        packSize: '',
+        molecule: '',
+        strength: '',
+        isCustomMolecule: false,
+        uom: 'Unit'
+      };
+    }));
+  };
+
+  const handleSubSubCategoryChange = (idx: number, subSubCategory: string) => {
+    setRfqLines(prev => prev.map((line, i) => {
+      if (i !== idx) return line;
+      return {
+        ...line,
+        subSubCategory,
+        productId: '',
+        productCode: '',
+        productName: '',
+        dosageForm: subSubCategory || line.subCategory || line.dosageForm || '',
+        packSize: '',
+        molecule: '',
+        strength: '',
+        isCustomMolecule: false,
+        uom: 'Unit'
+      };
+    }));
+  };
+
+  const handleSelectMolecule = (idx: number, molValue: string) => {
+    setRfqLines(prev => prev.map((line, i) => {
+      if (i !== idx) return line;
+      if (molValue === '__CUSTOM_MOLECULE__') {
+        return {
+          ...line,
+          isCustomMolecule: true,
+          molecule: '',
+          productName: '',
+          productId: '',
+          productCode: '',
+        };
+      }
+      const dbFormulations = getDatabaseFormulationsForLine(line);
+      const found = dbFormulations.find(f => f.molecule.toLowerCase() === molValue.toLowerCase());
+      if (found) {
+        return {
+          ...line,
+          isCustomMolecule: false,
+          molecule: found.molecule,
+          productName: `${found.molecule} (Generic)`,
+          productId: found.id,
+          productCode: '',
+          dosageForm: found.dosageForm || line.subSubCategory || line.subCategory || line.dosageForm || 'Tablet',
+          packSize: found.packSize || line.packSize || '10 x 10 Strip',
+          strength: found.strength || line.strength || '',
+        };
+      }
+      return {
+        ...line,
+        isCustomMolecule: false,
+        molecule: molValue,
+        productName: `${molValue} (Generic)`,
+        productId: '',
+        productCode: '',
+        dosageForm: line.subSubCategory || line.subCategory || line.dosageForm || 'Tablet',
+        packSize: line.packSize || '10 x 10 Strip',
+      };
+    }));
+  };
+
+  const handleSelectProduct = (idx: number, product: Product) => {
+    setRfqLines(prev => prev.map((l, i) => {
+      if (i !== idx) return l;
+      return {
+        ...l,
+        productId: product.id,
+        productCode: product.productCode || (product as any).code || '',
+        productName: product.name,
+        dosageForm: product.dosageForm || (product as any).dosage_form || '',
+        packSize: product.packSize || (product as any).pack_size || '',
+        uom: (product as any).packUom || (product as any).baseUom || product.uom || 'Unit',
+        category: product.category || l.category,
+        subCategory: product.subCategory || (product as any).sub_category || l.subCategory,
+        subSubCategory: product.subSubCategory || (product as any).sub_sub_category || l.subSubCategory,
+        productTypeId: product.productTypeId || (product as any).product_type_id || l.productTypeId,
+        brand: product.brand || (product as any).brandName || '',
+        molecule: product.genericName || '',
+        strength: (product as any).strength || (product.attributes as any)?.strength || '',
+        isOther: false,
+        customProductName: '',
+        productType: 'BRANDED'
+      };
+    }));
+  };
+
+  // Add EXACTLY ONE clean empty Product Row
   const handleAddEmptyProductRow = () => {
     setRfqLines(prev => [
       ...prev,
       {
         productId: '',
+        productCode: '',
         productName: '',
+        productTypeId: '',
+        category: '',
+        subCategory: '',
+        subSubCategory: '',
         dosageForm: '',
         packSize: '',
+        uom: 'Unit',
         quantity: '',
-        requiredDate: requiredDate || '2026-09-15',
+        requiredDate: requiredDate || defaultDeliveryStr,
         remarks: '',
         productType: 'BRANDED'
       }
     ]);
   };
 
-  // Handle Remove Product Row
+  // Handle Remove Product Row (enforcing minimum 1 line rule)
   const handleRemoveRow = (idx: number) => {
-    if (rfqLines.length === 1) return;
+    if (rfqLines.length <= 1) return;
     setRfqLines(prev => prev.filter((_, i) => i !== idx));
+    setValidationError(null);
   };
 
   // Handle Row Field Change
@@ -524,28 +985,36 @@ export const RFQModule: React.FC = () => {
 
       if (field === 'productType') {
         if (value === 'GENERIC') {
-          const defaultMol = line.molecule || 'Paracetamol';
+          const dbFormulations = getDatabaseFormulationsForLine(line);
+          const firstDb = dbFormulations[0];
           return {
             ...line,
             productType: 'GENERIC',
-            molecule: defaultMol,
-            productId: `gen_${defaultMol.toLowerCase().replace(/[^a-z0-9]/g, '_')}_500`,
-            productName: `${defaultMol} 500mg (Generic)`,
-            dosageForm: line.dosageForm || 'Tablet',
-            packSize: line.packSize || '10 x 10 Strip',
-            strength: line.strength || '500mg',
+            molecule: firstDb?.molecule || line.molecule || '',
+            productId: firstDb?.id || '',
+            productCode: '',
+            productName: firstDb?.molecule ? `${firstDb.molecule} (Generic)` : (line.molecule ? `${line.molecule} (Generic)` : ''),
+            dosageForm: firstDb?.dosageForm || line.subCategory || line.dosageForm || 'Tablet',
+            packSize: firstDb?.packSize || line.packSize || '10 x 10 Strip',
+            uom: line.uom || 'Unit',
+            strength: line.strength || firstDb?.strength || '500mg',
             isOther: false,
-            customProductName: ''
+            customProductName: '',
+            isCustomMolecule: !firstDb && !!line.molecule,
           };
         } else {
           return {
             ...line,
             productType: 'BRANDED',
             productId: '',
+            productCode: '',
             productName: '',
             dosageForm: '',
             packSize: '',
-            molecule: ''
+            uom: 'Unit',
+            molecule: '',
+            brand: '',
+            isCustomMolecule: false,
           };
         }
       }
@@ -555,37 +1024,8 @@ export const RFQModule: React.FC = () => {
         return {
           ...line,
           molecule: mol,
-          productId: `gen_${mol.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${(line.strength || 'std').toLowerCase()}`,
-          productName: `${mol} ${line.strength || '500mg'} (Generic)`
+          productName: mol ? `${mol} (Generic)` : '',
         };
-      }
-
-      if (field === 'productId') {
-        if (value === 'other') {
-          return {
-            ...line,
-            productId: 'other',
-            productName: line.customProductName || 'Other Product',
-            dosageForm: 'Custom',
-            packSize: 'Custom Pack',
-            isOther: true
-          };
-        }
-        const found = products.find(p => p.id === value);
-        if (found) {
-          return {
-            ...line,
-            productId: value,
-            productName: found.name,
-            dosageForm: found.dosageForm,
-            packSize: found.packSize,
-            isOther: false,
-            customProductName: '',
-            quantity: line.quantity || ''
-          };
-        } else {
-          return { ...line, productId: '', productName: '', dosageForm: '', packSize: '', isOther: false, customProductName: '' };
-        }
       }
 
       return { ...line, [field]: value };
@@ -598,285 +1038,364 @@ export const RFQModule: React.FC = () => {
     setIsCreateRfqDrawerOpen(false);
     setRfqWizardStep(1);
     setValidationError(null);
+    setIsEditingDraftId(null);
+    setLiveMatchingResult(null);
   };
 
   // Open Edit Draft Drawer
   const handleOpenEditDraft = (rfq: RFQ) => {
     setIsEditingDraftId(rfq.id);
-    setCustomerName(rfq.customerName);
-    setRfqDate(rfq.createdDate);
-    setDeadlineDate(rfq.deadlineDate);
+    setCustomerName(rfq.customerName || customerName);
+    setRfqDate(rfq.createdDate || todayStr);
+    setDeadlineDate(rfq.deadlineDate || defaultDeadlineStr);
     setHeaderRemarks(rfq.remarks || '');
-    setRfqLines(rfq.lines.map(l => ({
-      productId: l.productId,
-      productName: l.productName,
-      dosageForm: l.dosageForm,
-      packSize: l.packSize,
-      quantity: l.quantity,
-      requiredDate: l.requiredDate,
-      remarks: l.remarks || '',
-      isOther: l.isOther || l.productId === 'other',
-      customProductName: l.customProductName || ((l.isOther || l.productId === 'other') ? l.productName : '')
-    })));
+    setPriority((rfq.priority as any) || 'HIGH');
+    setDeliveryLocation(rfq.deliveryLocation || deliveryLocation);
+    setCreditRequired(rfq.creditRequired ?? true);
+    setCreditTermsOption(rfq.creditTerms || 'Net 30 Days');
+
+    if (rfq.lines && rfq.lines.length > 0) {
+      setRfqLines(rfq.lines.map(l => ({
+        productId: l.productId,
+        productCode: (l as any).productCode || '',
+        productName: l.productName,
+        dosageForm: l.dosageForm || 'Tablet',
+        packSize: l.packSize || '10 x 10 Strip',
+        uom: (l as any).uom || 'Unit',
+        quantity: l.quantity,
+        requiredDate: l.requiredDate || defaultDeliveryStr,
+        remarks: l.remarks || '',
+        productType: l.productType || 'BRANDED',
+        molecule: l.molecule,
+        category: (l as any).category,
+        subCategory: (l as any).subCategory,
+        subSubCategory: (l as any).subSubCategory
+      })));
+    } else {
+      handleAddEmptyProductRow();
+    }
     setRfqWizardStep(1);
     setLocalShowCreateDrawer(true);
   };
 
   // Navigation validation for Step 1 -> Step 2
   const handleContinueToGeneralTerms = () => {
-    const invalidLine = rfqLines.find(l => {
-      const hasProduct = l.productType === 'GENERIC' ? !!(l.productId || l.molecule) : !!l.productId;
-      return !hasProduct || !l.quantity || Number(l.quantity) <= 0;
-    });
-    if (invalidLine) {
-      setValidationError('Required Quantity is mandatory and must be a positive number for every product line.');
-      return;
-    }
-    const validLines = rfqLines.filter(l => {
-      const hasProduct = l.productType === 'GENERIC' ? !!(l.productId || l.molecule) : !!l.productId;
-      return hasProduct && l.quantity && Number(l.quantity) > 0;
-    });
-    if (validLines.length === 0) {
-      setValidationError('Please select at least one product line and specify a valid quantity greater than 0.');
-      return;
+    for (let i = 0; i < rfqLines.length; i++) {
+      const line = rfqLines[i];
+      // 1. Classification Hierarchy Validation: Category is mandatory
+      if (!line.category?.trim()) {
+        setValidationError(`Line #${i + 1}: Please select a Category from the Product Classification Hierarchy.`);
+        return;
+      }
+      const availableSubs = getSubCategoriesForLine(line.productTypeId, line.category);
+      if (availableSubs.length > 0 && !line.subCategory?.trim()) {
+        setValidationError(`Line #${i + 1}: Please select a Sub-Category for category "${line.category}".`);
+        return;
+      }
+
+      // 2. Product / Molecule validation
+      if (line.productType === 'GENERIC') {
+        if (!line.molecule?.trim() && !line.productName?.trim()) {
+          setValidationError(`Line #${i + 1}: Please select or specify an Active Molecule / Generic Formulation.`);
+          return;
+        }
+        if (!line.dosageForm?.trim()) {
+          setValidationError(`Line #${i + 1}: Dosage Form is required for generic formulation.`);
+          return;
+        }
+      } else {
+        if (!line.productId?.trim() && !line.productName?.trim()) {
+          setValidationError(`Line #${i + 1}: Please search and select an eligible product from the Master Product Catalog.`);
+          return;
+        }
+      }
+
+      // 3. Requisition details validation
+      if (!line.quantity || Number(line.quantity) <= 0) {
+        setValidationError(`Line #${i + 1}: Required Quantity must be greater than zero.`);
+        return;
+      }
+      if (line.requiredDate && line.requiredDate < todayStr) {
+        setValidationError(`Line #${i + 1}: Required delivery date (${line.requiredDate}) cannot be in the past.`);
+        return;
+      }
+      if (isSpecialPartyBuyer && (!line.buyerProvidedPrice || Number(line.buyerProvidedPrice) <= 0)) {
+        setValidationError(`Line #${i + 1}: Pre-Agreed Unit Price (₹/unit) is mandatory for Special Party RFQ workflow.`);
+        return;
+      }
     }
     setValidationError(null);
     setRfqWizardStep(2);
   };
 
-  // Save RFQ as Draft
-  const handleSaveDraft = () => {
-    const validLines = rfqLines.filter(l => {
-      const hasProduct = l.productType === 'GENERIC' ? !!(l.productId || l.molecule) : !!l.productId;
-      return hasProduct && l.quantity;
-    });
-    if (validLines.length === 0) {
-      setValidationError('Please select at least one product and enter a quantity.');
+  // Navigation validation for Step 2 -> Step 3
+  const handleContinueToReview = () => {
+    if (requiredDate && requiredDate < todayStr) {
+      setValidationError(`General Required Date (${requiredDate}) cannot be in the past.`);
       return;
     }
-
+    if (deadlineDate && deadlineDate < todayStr) {
+      setValidationError(`Quotation Deadline (${deadlineDate}) cannot be in the past.`);
+      return;
+    }
     setValidationError(null);
-    const rfqId = isEditingDraftId || `rfq_${Date.now()}`;
-    const hasGeneric = validLines.some(l => l.productType === 'GENERIC');
-
-    const createdLines: RFQLine[] = validLines.map((line, idx) => {
-      const genericProdId = line.productId || `gen_${(line.molecule || 'paracetamol').toLowerCase().replace(/[^a-z0-9]/g, '_')}_500`;
-      const genericProdName = line.productName || `${line.molecule || 'Paracetamol'} (Generic)`;
-      return {
-        id: `line_${Date.now()}_${idx}`,
-        productId: line.productType === 'GENERIC' ? genericProdId : line.productId,
-        productName: line.productType === 'GENERIC'
-          ? genericProdName
-          : ((line.productId === 'other' || line.isOther) ? (line.customProductName || line.productName || 'Other Product') : line.productName),
-        dosageForm: line.dosageForm || (line.productType === 'GENERIC' ? 'Tablet' : 'Custom'),
-        packSize: line.packSize || (line.productType === 'GENERIC' ? '10 x 10 Strip' : 'Custom Pack'),
-        quantity: Number(line.quantity),
-        requiredDate: line.requiredDate || requiredDate,
-        remarks: line.remarks,
-        eligibleManufacturersCount: 0,
-        isOther: line.productId === 'other' || line.isOther,
-        customProductName: line.customProductName,
-        productType: line.productType || 'BRANDED',
-        molecule: line.molecule,
-        adminProcessingStatus: line.productType === 'GENERIC' ? 'SUBMITTED' : undefined,
-        buyerProvidedPrice: (isSpecialPartyBuyer || (line.buyerProvidedPrice !== undefined && line.buyerProvidedPrice !== ''))
-          ? Number(line.buyerProvidedPrice || 14.50)
-          : undefined
-      };
-    });
-
-    const draftRfq: RFQ = {
-      id: rfqId,
-      rfqNumber: autoRfqNumber,
-      customerId: isSpecialPartyBuyer ? 'c5' : 'c1',
-      customerName: isSpecialPartyBuyer ? 'MediPlus Healthcare' : customerName,
-      customerCode: isSpecialPartyBuyer ? 'CUS000105' : customerCode,
-      customerClassification: isSpecialPartyBuyer ? 'SPECIAL_PARTY' : 'REGULAR',
-      createdDate: rfqDate,
-      deadlineDate,
-      status: 'Draft',
-      lines: createdLines,
-      remarks: headerRemarks,
-      priority,
-      deliveryLocation,
-      creditRequired,
-      creditTerms: creditRequired ? (creditTermsOption === 'Custom' ? (customCreditTerms || 'Credit Required') : creditTermsOption) : 'No Credit Required',
-      isGeneric: hasGeneric,
-      genericStatus: hasGeneric ? 'DRAFT' : undefined
-    };
-
-    addRFQ(draftRfq);
-    addAuditLog('RFQ Center', `Saved ${autoRfqNumber} as Draft (Status = Draft)`);
-    closeDrawer();
-    setIsEditingDraftId(null);
+    setRfqWizardStep(3);
   };
 
-  // Submit RFQ & Execute Automatic System Floating (Requirements #4 & #5)
-  const handleExecuteRFQSubmission = () => {
-    const invalidLine = rfqLines.find(l => {
-      const hasProduct = l.productType === 'GENERIC' ? !!(l.productId || l.molecule) : !!l.productId;
-      return !hasProduct || !l.quantity || Number(l.quantity) <= 0;
-    });
-    if (invalidLine) {
-      setValidationError('Required Quantity is mandatory and must be a positive number for every product line.');
-      return;
-    }
+  // ── SAVE RFQ AS DRAFT ──
+  const handleSaveDraft = async () => {
     const validLines = rfqLines.filter(l => {
-      const hasProduct = l.productType === 'GENERIC' ? !!(l.productId || l.molecule) : !!l.productId;
-      return hasProduct && l.quantity && Number(l.quantity) > 0;
+      const hasProduct = l.productType === 'GENERIC' ? !!(l.productId || l.molecule || l.productName) : !!(l.productId || l.productName);
+      return hasProduct;
     });
     if (validLines.length === 0) {
-      setValidationError('Please select at least one product and specify a valid quantity greater than 0.');
+      setValidationError('Please configure at least one product line before saving a draft.');
       return;
     }
 
     setValidationError(null);
-    const rfqId = isEditingDraftId || `rfq_${Date.now()}`;
+    setIsSubmittingRfq(true);
 
-    const hasGeneric = validLines.some(l => l.productType === 'GENERIC');
-    const allGeneric = validLines.every(l => l.productType === 'GENERIC');
-
-    const createdLines: RFQLine[] = [];
-    const createdMfgRfqsMap: Record<string, ManufacturerRFQ> = {};
-    const notificationLogs: string[] = [];
-
-    validLines.forEach((line, idx) => {
-      const lineId = `line_${Date.now()}_${idx}`;
-      const isLineGeneric = line.productType === 'GENERIC';
-
-      if (isLineGeneric) {
-        // Generic medicine line: NO external manufacturer query, directly routes to Admin
-        const genericProdId = line.productId || `gen_${(line.molecule || 'paracetamol').toLowerCase().replace(/[^a-z0-9]/g, '_')}_500`;
-        const genericProdName = line.productName || `${line.molecule || 'Paracetamol'} (Generic)`;
-        createdLines.push({
-          id: lineId,
-          productId: genericProdId,
-          productName: genericProdName,
-          genericName: line.molecule || 'Paracetamol',
-          molecule: line.molecule || 'Paracetamol',
-          productType: 'GENERIC',
-          dosageForm: line.dosageForm || 'Tablet',
+    try {
+      const payload = {
+        priority,
+        deliveryLocation: deliveryLocation?.trim() || 'Warehouse / Primary Facility',
+        rfqDate: rfqDate || todayStr,
+        requiredDate: requiredDate || undefined,
+        deadlineDate: deadlineDate || undefined,
+        remarks: headerRemarks || undefined,
+        creditRequired,
+        creditTerms: creditRequired ? (creditTermsOption === 'Custom' ? (customCreditTerms || 'Credit Required') : creditTermsOption) : 'No Credit Required',
+        isGeneric: validLines.some(l => l.productType === 'GENERIC'),
+        customerClassification: isSpecialPartyBuyer ? 'SPECIAL_PARTY' : 'REGULAR',
+        lines: validLines.map((line, idx) => ({
+          lineItemNumber: idx + 1,
+          productId: line.productId || undefined,
+          productName: line.productType === 'GENERIC'
+            ? (line.molecule ? `${line.molecule.trim()} (Generic)` : (line.productName || 'Generic Formulation'))
+            : (line.customProductName || line.productName),
+          productCode: line.productCode || undefined,
+          category: line.category || undefined,
+          subCategory: line.subCategory || undefined,
+          subSubCategory: line.subSubCategory || undefined,
+          productType: line.productType || 'BRANDED',
+          dosageForm: line.dosageForm || (line.subCategory || 'Tablet'),
           packSize: line.packSize || '10 x 10 Strip',
-          quantity: Number(line.quantity),
-          requiredDate: line.requiredDate || requiredDate,
-          remarks: line.remarks,
-          eligibleManufacturersCount: 0,
-          adminProcessingStatus: 'SUBMITTED'
-        });
+          uom: line.uom || 'Unit',
+          quantity: Number(line.quantity) || 1,
+          targetPrice: line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : undefined,
+          buyerProvidedPrice: isSpecialPartyBuyer && line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : undefined,
+          requiredDate: line.requiredDate || requiredDate || undefined,
+          remarks: line.remarks || undefined,
+          molecule: line.molecule || undefined,
+          strength: line.strength || undefined
+        }))
+      };
+
+      let resultRfq: any;
+      if (isEditingDraftId && !isEditingDraftId.startsWith('rfq_mock')) {
+        resultRfq = await rfqApi.updateDraft(isEditingDraftId, payload);
       } else {
-        // Branded product line: Query MANUFACTURER_PRODUCT table
-        const lineMappings = mappings.filter(m => m.productId === line.productId);
-        let eligibleMfgIds = lineMappings.map(m => m.manufacturerId);
-
-        if (eligibleMfgIds.length === 0) {
-          eligibleMfgIds = manufacturers.slice(0, 2).map(m => m.id);
-        }
-
-        eligibleMfgIds = Array.from(new Set(eligibleMfgIds));
-
-        createdLines.push({
-          id: lineId,
-          productId: line.productId,
-          productName: (line.productId === 'other' || line.isOther) ? (line.customProductName || line.productName || 'Other Product') : line.productName,
-          dosageForm: line.dosageForm || 'Custom',
-          packSize: line.packSize || 'Custom Pack',
-          quantity: Number(line.quantity),
-          requiredDate: line.requiredDate || requiredDate,
-          remarks: line.remarks,
-          productType: 'BRANDED',
-          eligibleManufacturersCount: eligibleMfgIds.length,
-          eligibleManufacturerIds: eligibleMfgIds,
-          isOther: line.productId === 'other' || line.isOther,
-          customProductName: line.customProductName,
-          buyerProvidedPrice: (isSpecialPartyBuyer || (line.buyerProvidedPrice !== undefined && line.buyerProvidedPrice !== ''))
-            ? Number(line.buyerProvidedPrice || 14.50)
-            : undefined
-        });
-
-        // Create MANUFACTURER_RFQ and MANUFACTURER_RFQ_LINE records for branded
-        eligibleMfgIds.forEach(mfgId => {
-          const mfgObj = manufacturers.find(m => m.id === mfgId);
-          const mfgName = mfgObj ? (mfgObj.companyName || mfgObj.name) : 'Verified Manufacturer';
-
-          if (!createdMfgRfqsMap[mfgId]) {
-            createdMfgRfqsMap[mfgId] = {
-              id: `mfg_rfq_${Date.now()}_${mfgId}`,
-              rfqId,
-              rfqNumber: autoRfqNumber,
-              manufacturerId: mfgId,
-              manufacturerName: mfgName,
-              status: 'Sent',
-              sentDate: new Date().toISOString().split('T')[0],
-              emailNotificationSent: true,
-              smsNotificationSent: true,
-              lines: []
-            };
-
-            notificationLogs.push(`📧 Email Notification sent to ${mfgObj?.email || 'contact@manufacturer.com'} for ${autoRfqNumber}`);
-            notificationLogs.push(`📱 SMS Notification sent to ${mfgObj?.phone || '+91 98765 43210'} for ${autoRfqNumber}`);
-          }
-
-          createdMfgRfqsMap[mfgId].lines.push({
-            id: `mfg_line_${Date.now()}_${idx}`,
-            manufacturerRfqId: createdMfgRfqsMap[mfgId].id,
-            rfqLineId: lineId,
-            productId: line.productId,
-            productName: line.productName,
-            quantity: Number(line.quantity),
-            requiredDate: line.requiredDate || requiredDate,
-            remarks: line.remarks
-          });
-        });
+        resultRfq = await rfqApi.createDraft(payload);
       }
-    });
 
-    const mfgRfqList = Object.values(createdMfgRfqsMap);
-    const matchedCust = (customers || []).find(c =>
-      (isSpecialPartyBuyer ? (c.id === 'c5' || c.name.includes('MediPlus')) : (c.id === 'c1' || c.name === customerName))
-    );
+      addAuditLog('RFQ Center', `Saved ${resultRfq.rfqNumber || 'RFQ'} as Draft`);
+      await fetchBuyerRfqs();
+      closeDrawer();
+      setIsEditingDraftId(null);
+    } catch (err: any) {
+      console.error('Failed to save draft:', err);
+      setValidationError(err.message || 'Failed to save RFQ draft');
+    } finally {
+      setIsSubmittingRfq(false);
+    }
+  };
 
-    const finalRfq: RFQ = {
-      id: rfqId,
-      rfqNumber: autoRfqNumber,
-      customerId: isSpecialPartyBuyer ? 'c5' : 'c1',
-      customerName: isSpecialPartyBuyer ? 'MediPlus Healthcare' : customerName,
-      customerCode: isSpecialPartyBuyer ? 'CUS000105' : customerCode,
-      customerClassification: isSpecialPartyBuyer ? 'SPECIAL_PARTY' : (matchedCust?.customerClassification || 'REGULAR'),
-      createdDate: rfqDate,
-      deadlineDate,
-      status: allGeneric ? 'Submitted' : 'Pricing In Progress',
-      quoteStatus: allGeneric ? 'PENDING_PRICING' : undefined,
-      isGeneric: hasGeneric,
-      genericStatus: hasGeneric ? 'SUBMITTED' : undefined,
-      lines: createdLines,
-      remarks: headerRemarks,
-      priority,
-      deliveryLocation,
-      creditRequired,
-      creditTerms: creditRequired ? (creditTermsOption === 'Custom' ? (customCreditTerms || 'Credit Required') : creditTermsOption) : 'No Credit Required'
-    };
-
-    addRFQ(finalRfq);
-    if (mfgRfqList.length > 0) {
-      setManufacturerRfqsStore(prev => ({ ...prev, [rfqId]: mfgRfqList }));
+  // ── SUBMIT RFQ TO PLATFORM ──
+  const handleExecuteRFQSubmission = async () => {
+    // Validate lines
+    for (let i = 0; i < rfqLines.length; i++) {
+      const line = rfqLines[i];
+      if (!line.category?.trim()) {
+        setValidationError(`Line item #${i + 1}: Category is mandatory in the Product Classification Hierarchy.`);
+        return;
+      }
+      const hasProduct = line.productType === 'GENERIC' ? !!(line.productId || line.molecule || line.productName) : !!line.productId;
+      if (!hasProduct) {
+        setValidationError(`Please select a valid product/formulation for line item #${i + 1}.`);
+        return;
+      }
+      if (!line.quantity || Number(line.quantity) <= 0) {
+        setValidationError(`Quantity is mandatory and must be greater than 0 for line item #${i + 1}.`);
+        return;
+      }
+      if (line.requiredDate && line.requiredDate < todayStr) {
+        setValidationError(`Required delivery date cannot be in the past for line item #${i + 1} (${line.requiredDate}).`);
+        return;
+      }
+      if (isSpecialPartyBuyer && (!line.buyerProvidedPrice || Number(line.buyerProvidedPrice) <= 0)) {
+        setValidationError(`Line item #${i + 1}: Pre-Agreed Unit Price (₹/unit) is required for Special Party Buyer.`);
+        return;
+      }
     }
 
-    if (allGeneric) {
-      addAuditLog('RFQ Center', `Submitted Generic RFQ ${autoRfqNumber} with ${createdLines.length} generic line(s) directly to FactoryGrid Admin desk for internal price list quotation.`);
-    } else {
-      addAuditLog('RFQ Center', `Submitted ${autoRfqNumber} with ${createdLines.length} lines & floated to ${mfgRfqList.length} manufacturers (Status = Pricing In Progress)`);
+    setValidationError(null);
+    setIsSubmittingRfq(true);
+
+    try {
+      const payload = {
+        priority,
+        deliveryLocation: deliveryLocation?.trim() || 'Warehouse / Primary Facility',
+        rfqDate: rfqDate || todayStr,
+        requiredDate: requiredDate || undefined,
+        deadlineDate: deadlineDate || undefined,
+        remarks: headerRemarks || undefined,
+        creditRequired,
+        creditTerms: creditRequired ? (creditTermsOption === 'Custom' ? (customCreditTerms || 'Credit Required') : creditTermsOption) : 'No Credit Required',
+        isGeneric: rfqLines.some(l => l.productType === 'GENERIC'),
+        customerClassification: isSpecialPartyBuyer ? 'SPECIAL_PARTY' : 'REGULAR',
+        lines: rfqLines.map((line, idx) => ({
+          lineItemNumber: idx + 1,
+          productId: line.productId || undefined,
+          productName: line.productType === 'GENERIC'
+            ? (line.molecule ? `${line.molecule.trim()} (Generic)` : (line.productName || 'Generic Formulation'))
+            : (line.customProductName || line.productName),
+          productCode: line.productCode || undefined,
+          category: line.category || undefined,
+          subCategory: line.subCategory || undefined,
+          subSubCategory: line.subSubCategory || undefined,
+          productType: line.productType || 'BRANDED',
+          dosageForm: line.dosageForm || (line.subCategory || 'Tablet'),
+          packSize: line.packSize || '10 x 10 Strip',
+          uom: line.uom || 'Unit',
+          quantity: Number(line.quantity),
+          targetPrice: line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : undefined,
+          buyerProvidedPrice: isSpecialPartyBuyer && line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : undefined,
+          requiredDate: line.requiredDate || requiredDate || undefined,
+          remarks: line.remarks || undefined,
+          molecule: line.molecule || undefined,
+          strength: line.strength || undefined
+        }))
+      };
+
+      let resultRfq: any;
+      if (isEditingDraftId && !isEditingDraftId.startsWith('rfq_mock')) {
+        await rfqApi.updateDraft(isEditingDraftId, payload);
+        resultRfq = await rfqApi.submitRfq(isEditingDraftId);
+      } else {
+        resultRfq = await rfqApi.createAndSubmit(payload);
+      }
+
+      const assignedRfqNumber = resultRfq.rfqNumber || `RFQ-2026-${Date.now()}`;
+      addAuditLog('RFQ Center', `Submitted RFQ ${assignedRfqNumber} (Status: ${resultRfq.status || 'Submitted'})`);
+      
+      // Perform manufacturer matching against database for preview display
+      let matchingMfgs: any[] = [];
+      try {
+        const matchesRes = await rfqApi.matchManufacturers(resultRfq.id);
+        if (matchesRes?.matchedLines) {
+          const flat = matchesRes.matchedLines.flatMap((ml: any) => ml.eligibleManufacturers || []);
+          matchingMfgs = Array.from(new Map(flat.map((m: any) => [m.manufacturerId, m])).values());
+        }
+      } catch {
+        // Non-fatal if matching preview returns empty
+      }
+
+      await fetchBuyerRfqs();
+      closeDrawer();
+      setIsEditingDraftId(null);
+
+      // Show confirmation modal
+      setDistributionResultModal({
+        rfqNumber: assignedRfqNumber,
+        mfgRfqs: matchingMfgs.map((m: any, idx: number) => ({
+          id: `mfg_rfq_${idx}`,
+          rfqId: resultRfq.id,
+          rfqNumber: assignedRfqNumber,
+          manufacturerId: String(m.id || m.manufacturerId || idx),
+          manufacturerName: m.companyName || m.name || 'Verified Manufacturer',
+          status: 'Sent',
+          sentDate: todayStr,
+          emailNotificationSent: true,
+          smsNotificationSent: true,
+          lines: []
+        })),
+        logs: [
+          `💾 Successfully registered RFQ ${assignedRfqNumber} with ${payload.lines.length} requisition line item(s).`,
+          `🔐 Requisition authenticated and sealed to buyer organization: ${buyerName} (${customerName}).`,
+          ...(matchingMfgs.length > 0
+            ? [`🏭 Identified ${matchingMfgs.length} eligible registered manufacturer(s) with verified active GMP compliance.`]
+            : [`ℹ️ Requisition routed to FactoryGrid platform procurement desk for supplier assignment.`]
+          )
+        ],
+        isGeneric: payload.isGeneric,
+        genericLinesCount: payload.lines.filter(l => l.productType === 'GENERIC').length
+      });
+    } catch (err: any) {
+      console.error('Failed to submit RFQ:', err);
+      setValidationError(err.message || 'Failed to submit RFQ');
+    } finally {
+      setIsSubmittingRfq(false);
     }
+  };
 
-    closeDrawer();
-    setIsEditingDraftId(null);
+  // ── RUN ELIGIBLE MANUFACTURER MATCHING (Step 3) ──
+  const handleRunLiveMatching = async () => {
+    setIsMatchingLoading(true);
+    setValidationError(null);
+    try {
+      let targetRfqId = isEditingDraftId;
+      if (!targetRfqId || targetRfqId.startsWith('rfq_mock')) {
+        // Save draft first to get real ID in database
+        const validLines = rfqLines.filter(l => (l.productId || l.molecule) && l.quantity);
+        if (validLines.length === 0) {
+          setValidationError('Please select products and enter quantities before running manufacturer matching.');
+          setIsMatchingLoading(false);
+          return;
+        }
+        const draft = await rfqApi.createDraft({
+          priority,
+          deliveryLocation: deliveryLocation?.trim() || 'Warehouse / Primary Facility',
+          rfqDate: rfqDate || todayStr,
+          requiredDate: requiredDate || undefined,
+          deadlineDate: deadlineDate || undefined,
+          remarks: headerRemarks || undefined,
+          creditRequired,
+          creditTerms: creditRequired ? (creditTermsOption === 'Custom' ? (customCreditTerms || 'Credit Required') : creditTermsOption) : 'No Credit Required',
+          isGeneric: validLines.some(l => l.productType === 'GENERIC'),
+          lines: validLines.map((line, idx) => ({
+            lineItemNumber: idx + 1,
+            productId: line.productId || (line.productType === 'GENERIC' ? `gen_${line.molecule?.toLowerCase()}` : undefined),
+            productName: line.productType === 'GENERIC' ? `${line.molecule || 'Paracetamol'} (Generic)` : (line.customProductName || line.productName),
+            productCode: line.productCode || undefined,
+            category: line.category || undefined,
+            subCategory: line.subCategory || undefined,
+            subSubCategory: line.subSubCategory || undefined,
+            productType: line.productType || 'BRANDED',
+            dosageForm: line.dosageForm || (line.productType === 'GENERIC' ? 'Tablet' : 'Custom'),
+            packSize: line.packSize || '10 x 10 Strip',
+            uom: line.uom || 'Unit',
+            quantity: Number(line.quantity),
+            targetPrice: line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : undefined,
+            requiredDate: line.requiredDate || requiredDate || undefined,
+            remarks: line.remarks || undefined,
+            molecule: line.molecule || undefined,
+            strength: line.strength || undefined
+          }))
+        });
+        targetRfqId = draft.id;
+        setIsEditingDraftId(draft.id);
+        await fetchBuyerRfqs();
+      }
 
-    setDistributionResultModal({
-      rfqNumber: autoRfqNumber,
-      mfgRfqs: mfgRfqList,
-      logs: notificationLogs,
-      isGeneric: hasGeneric,
-      genericLinesCount: createdLines.filter(l => l.productType === 'GENERIC').length
-    });
+      const matches = await rfqApi.matchManufacturers(targetRfqId);
+      setLiveMatchingResult(matches);
+    } catch (err: any) {
+      console.error('Error finding eligible manufacturers:', err);
+      setValidationError(err.message || 'Failed to find eligible manufacturers');
+    } finally {
+      setIsMatchingLoading(false);
+    }
   };
 
   // Manufacturer Submits Quote
@@ -1302,7 +1821,7 @@ export const RFQModule: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredRfqs.map(rfq => {
+              paginatedRfqs.map(rfq => {
                 const isExpanded = expandedRfqId === rfq.id;
                 const rfqQuotes = quotes.filter(q => q.rfqId === rfq.id);
 
@@ -1611,32 +2130,47 @@ export const RFQModule: React.FC = () => {
           </tbody>
         </table>
       </div>
+      <PaginationControl {...pagination.paginationProps} itemName="RFQs" />
 
-      {/* ── 4-STEP UNIFIED RFQ CREATION WIZARD DRAWER ── */}
+      {/* ── UNIFIED RFQ CREATION WIZARD DRAWER ── */}
       {showCreateDrawer && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'flex-end' }} onClick={closeDrawer}>
-          <div style={{ width: '100%', maxWidth: 780, height: '100%', background: '#FFFFFF', borderLeft: '1px solid #CBD5E1', display: 'flex', flexDirection: 'column', boxShadow: '-12px 0 32px rgba(15, 23, 42, 0.15)' }} onClick={e => e.stopPropagation()}>
-            
-            {/* Drawer Header */}
-            <div style={{ padding: '20px 24px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 840,
+              height: '100dvh',
+              maxHeight: '100vh',
+              background: '#FFFFFF',
+              borderLeft: '1px solid #CBD5E1',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '-12px 0 32px rgba(15, 23, 42, 0.15)',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Drawer Header (Fixed at top) */}
+            <div style={{ padding: '16px 24px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>{autoRfqNumber}</span>
                   <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8' }}>Step {rfqWizardStep} of 3</span>
                 </div>
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0F172A', margin: '2px 0 0 0' }}>
+                <h2 style={{ fontSize: 19, fontWeight: 800, color: '#0F172A', margin: '2px 0 0 0' }}>
                   {rfqWizardStep === 1 && 'Basic Information & Product Lines'}
                   {rfqWizardStep === 2 && 'General & RFQ Terms'}
                   {rfqWizardStep === 3 && 'Review & Submit RFQ'}
                 </h2>
               </div>
-              <button onClick={closeDrawer} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}>
+              <button onClick={closeDrawer} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={20} />
               </button>
             </div>
 
-            {/* 3-Step Indicator Bar */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderBottom: '1px solid #E2E8F0', background: '#F1F5F9' }}>
+            {/* 3-Step Indicator Bar (Fixed at top below header) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderBottom: '1px solid #E2E8F0', background: '#F1F5F9', flexShrink: 0 }}>
               <div style={{ padding: '10px 8px', fontSize: 11.5, fontWeight: 700, color: rfqWizardStep === 1 ? '#0F766E' : '#64748B', borderBottom: rfqWizardStep === 1 ? '2px solid #0F766E' : 'none', background: rfqWizardStep === 1 ? '#FFFFFF' : 'transparent', textAlign: 'center' }}>
                 1. Basic Info & Lines
               </div>
@@ -1650,34 +2184,112 @@ export const RFQModule: React.FC = () => {
 
             {/* Form Validation Alert */}
             {validationError && (
-              <div style={{ margin: '16px 24px 0', background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, color: '#B91C1C', fontSize: 13 }}>
+              <div style={{ margin: '14px 24px 0', background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, color: '#B91C1C', fontSize: 13, flexShrink: 0 }}>
                 <AlertTriangle size={16} style={{ flexShrink: 0 }} />
-                <span>{validationError}</span>
+                <span style={{ flex: 1 }}>{validationError}</span>
               </div>
             )}
 
             {/* ── STEP 1: BASIC INFORMATION & PRODUCT LINES BUILDER ── */}
             {rfqWizardStep === 1 && (
-              <div style={{ padding: 24, flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ padding: '20px 24px 36px', flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 
-                {/* Basic Info Header */}
-                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', marginBottom: 12, letterSpacing: '0.05em' }}>
-                    RFQ Header Details
+                {/* Authenticated Buyer Identity Header (Read-Only Identity) */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <ShieldCheck size={16} /> Authenticated Buyer Profile & RFQ Header
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        padding: '3px 10px',
+                        borderRadius: 6,
+                        border: isSpecialPartyBuyer ? '1px solid #FCD34D' : '1px solid #99F6E4',
+                        background: isSpecialPartyBuyer ? '#FEF3C7' : '#CCFBF1',
+                        color: isSpecialPartyBuyer ? '#92400E' : '#0F766E',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}>
+                        {isSpecialPartyBuyer ? (
+                          <>
+                            <Star size={12} fill="#D97706" color="#D97706" /> Special Party Buyer · Pre-Agreed Pricing
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck size={12} /> Standard Regular Buyer · Competitive Bidding
+                          </>
+                        )}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', background: '#E6FFFA', padding: '3px 8px', borderRadius: 4, border: '1px solid #99F6E4' }}>
+                        {realBuyerProfile?.isApproved ? 'Verified Account' : 'Active Account'}
+                      </span>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Auto RFQ Number</label>
-                      <input type="text" disabled value={autoRfqNumber} style={{ width: '100%', padding: '8px 12px', background: '#E2E8F0', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F766E', fontSize: 13, fontWeight: 800, fontFamily: 'monospace' }} />
+                      <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                        RFQ Number
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value={isEditingDraftId ? autoRfqNumber : "Auto-assigned on Save/Submit"}
+                        style={{ width: '100%', padding: '8px 12px', background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F766E', fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace' }}
+                      />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Buyer Name</label>
-                      <input type="text" value={buyerName} onChange={e => setBuyerName(e.target.value)} style={{ width: '100%', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }} />
+                      <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                        Buyer Name & ID
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={buyerName ? `${buyerName} (${realBuyerProfile?.userCode || (realBuyerProfile?.userId ? `USR-${realBuyerProfile.userId}` : 'BUYER')})` : 'Authenticated Buyer'}
+                        style={{ width: '100%', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 12.5, fontWeight: 600, cursor: 'default' }}
+                      />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Company Name</label>
-                      <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} style={{ width: '100%', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }} />
+                      <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                        Company / Organization
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={customerName || 'Verified Organization'}
+                        style={{ width: '100%', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13, fontWeight: 600, cursor: 'default' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                        Customer Code
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={customerCode || (realBuyerProfile?.customerCode || (realBuyerProfile?.userId ? `CUS-${realBuyerProfile.userId}` : 'CUS-VERIFIED'))}
+                        style={{ width: '100%', padding: '8px 10px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F766E', fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace', cursor: 'default' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 11.5 }}>
+                    <div style={{ color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>Segment:</span>
+                      <strong style={{ color: '#0F172A', background: '#F1F5F9', padding: '2px 8px', borderRadius: 4 }}>
+                        {realBuyerProfile?.registration?.businessType || realBuyerProfile?.verificationDetails?.customerType || 'Pharmaceutical Procurement'}
+                      </strong>
+                      <span style={{ color: '#CBD5E1' }}>|</span>
+                      <span>Default Delivery:</span>
+                      <strong style={{ color: '#334155' }}>
+                        📍 {deliveryLocation || 'Primary Dispatch Facility'}
+                      </strong>
+                    </div>
+                    <div style={{ color: '#64748B' }}>
+                      🔒 Identity and organization details are resolved from authenticated database session.
                     </div>
                   </div>
                 </div>
@@ -1703,59 +2315,49 @@ export const RFQModule: React.FC = () => {
                   </div>
                 )}
 
-                {/* PRODUCT LINES BUILDER (Requirement #4 — Strict Empty Row on Add) */}
+                {/* PRODUCT LINES BUILDER */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                     <div>
-                      <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#0F172A' }}>RFQ Product Lines ({rfqLines.length})</h4>
-                      <div style={{ fontSize: 12, color: '#64748B' }}>Add one or multiple products to include in this RFQ.</div>
+                      <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#0F172A' }}>
+                        RFQ Product Lines ({rfqLines.length})
+                      </h4>
+                      <div style={{ fontSize: 12, color: '#64748B' }}>
+                        Select products using the Category Hierarchy cascade or enter generic molecule requirements.
+                      </div>
                     </div>
                     <button
+                      type="button"
                       onClick={handleAddEmptyProductRow}
-                      style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, borderRadius: 6, background: 'rgba(15, 118, 110, 0.1)', color: '#0F766E', border: '1px solid rgba(15, 118, 110, 0.25)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      style={{ padding: '7px 14px', fontSize: 12, fontWeight: 700, borderRadius: 6, background: 'rgba(15, 118, 110, 0.1)', color: '#0F766E', border: '1px solid rgba(15, 118, 110, 0.25)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     >
-                      <Plus size={14} /> + Add Product
+                      <Plus size={14} /> + Add Product Line
                     </button>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {rfqLines.map((line, idx) => (
                       <div
                         key={idx}
                         style={{
                           background: '#F8FAFC',
                           border: isSpecialPartyBuyer ? '1px solid #F59E0B' : '1px solid #E2E8F0',
-                          borderRadius: 8,
+                          borderRadius: 10,
                           padding: 16,
-                          position: 'relative'
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
                         }}
                       >
-                        {/* Remove Row Button */}
-                        {rfqLines.length > 1 && (
-                          <button
-                            onClick={() => handleRemoveRow(idx)}
-                            style={{
-                              position: 'absolute',
-                              top: 12,
-                              right: 12,
-                              background: 'transparent',
-                              border: 'none',
-                              color: '#EF4444',
-                              cursor: 'pointer',
-                              padding: 4
-                            }}
-                            title="Remove Product Line"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-
-                        {/* Product Line Header with Product Type Selector */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                        {/* ── CARD HEADER: Line Item, Product Code, Sourcing Mode & Aligned Delete ── */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, marginBottom: 14, borderBottom: '1px solid #E2E8F0', flexWrap: 'wrap', gap: 10 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E' }}>
+                            <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', background: '#E6FFFA', padding: '3px 10px', borderRadius: 6, border: '1px solid #99F6E4' }}>
                               Item #{idx + 1}
                             </span>
+                            {line.productCode && (
+                              <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#0F766E', background: '#CCFBF1', padding: '2px 8px', borderRadius: 4 }}>
+                                {line.productCode}
+                              </span>
+                            )}
                             {line.productType === 'GENERIC' && (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999, background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0', fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase' }}>
                                 Generic Medicine
@@ -1763,178 +2365,425 @@ export const RFQModule: React.FC = () => {
                             )}
                           </div>
 
-                          <div style={{ display: 'inline-flex', background: '#F1F5F9', padding: 2, borderRadius: 6, border: '1px solid #E2E8F0' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            {/* Professional Segmented Control */}
+                            <div style={{ display: 'inline-flex', background: '#F1F5F9', padding: 3, borderRadius: 8, border: '1px solid #CBD5E1' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleRowChange(idx, 'productType', 'BRANDED')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  padding: '5px 12px',
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  borderRadius: 6,
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  background: line.productType !== 'GENERIC' ? '#0F766E' : 'transparent',
+                                  color: line.productType !== 'GENERIC' ? '#FFFFFF' : '#64748B',
+                                  boxShadow: line.productType !== 'GENERIC' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <Package size={13} />
+                                Branded Medicine
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRowChange(idx, 'productType', 'GENERIC')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  padding: '5px 12px',
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  borderRadius: 6,
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  background: line.productType === 'GENERIC' ? '#0F766E' : 'transparent',
+                                  color: line.productType === 'GENERIC' ? '#FFFFFF' : '#64748B',
+                                  boxShadow: line.productType === 'GENERIC' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <FileText size={13} />
+                                Generic Medicine
+                              </button>
+                            </div>
+
+                            {/* Cleanly Aligned Standard Trash Action Button */}
                             <button
                               type="button"
-                              onClick={() => handleRowChange(idx, 'productType', 'BRANDED')}
+                              disabled={rfqLines.length <= 1}
+                              onClick={() => handleRemoveRow(idx)}
+                              title={rfqLines.length <= 1 ? "At least one product line is mandatory" : "Remove this product line"}
                               style={{
-                                padding: '4px 10px',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                borderRadius: 4,
-                                border: 'none',
-                                cursor: 'pointer',
-                                background: line.productType !== 'GENERIC' ? '#FFFFFF' : 'transparent',
-                                color: line.productType !== 'GENERIC' ? '#0F172A' : '#64748B',
-                                boxShadow: line.productType !== 'GENERIC' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '5px 10px',
+                                background: rfqLines.length <= 1 ? '#F1F5F9' : '#FEF2F2',
+                                border: rfqLines.length <= 1 ? '1px solid #E2E8F0' : '1px solid #FECACA',
+                                borderRadius: 6,
+                                color: rfqLines.length <= 1 ? '#94A3B8' : '#DC2626',
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                cursor: rfqLines.length <= 1 ? 'not-allowed' : 'pointer',
                                 transition: 'all 0.15s ease'
                               }}
                             >
-                              Branded Medicine
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRowChange(idx, 'productType', 'GENERIC')}
-                              style={{
-                                padding: '4px 10px',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                borderRadius: 4,
-                                border: 'none',
-                                cursor: 'pointer',
-                                background: line.productType === 'GENERIC' ? '#0F766E' : 'transparent',
-                                color: line.productType === 'GENERIC' ? '#FFFFFF' : '#64748B',
-                                boxShadow: line.productType === 'GENERIC' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              Generic Medicine
+                              <Trash2 size={13} />
+                              <span>Remove</span>
                             </button>
                           </div>
                         </div>
 
-                        {line.productType === 'GENERIC' ? (
-                          /* ── GENERIC MEDICINE: MOLECULE & SPECS SELECTION ── */
-                          <div style={{ marginBottom: 12, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: 12 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                              <label style={{ fontSize: 11, fontWeight: 800, color: '#166534', textTransform: 'uppercase' }}>
-                                Molecule / Active Ingredient *
+                        {/* ── 4-TIER PRODUCT CLASSIFICATION HIERARCHY (MANDATORY FOR BOTH BRANDED AND GENERIC) ── */}
+                        <div style={{ marginBottom: 14, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12 }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Layers size={13} /> Product Classification Hierarchy (Database-Validated)
+                          </div>
+                          
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                            {/* 1. Product Type */}
+                            <div>
+                              <label style={{ fontSize: 10.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
+                                1. Product Type *
                               </label>
-                              <span style={{ fontSize: 10.5, color: '#15803D', fontWeight: 600 }}>
-                                Brand not required · No brand certificate required
+                              <select
+                                value={line.productTypeId || ''}
+                                onChange={e => handleProductTypeChange(idx, e.target.value)}
+                                style={{ width: '100%', padding: '7px 8px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 11.5, color: '#0F172A', fontWeight: 600 }}
+                              >
+                                <option value="">All Product Types</option>
+                                {availableProductTypes.map(pt => (
+                                  <option key={pt.id} value={pt.id}>{pt.name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* 2. Category */}
+                            <div>
+                              <label style={{ fontSize: 10.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
+                                2. Category *
+                              </label>
+                              <select
+                                value={line.category || ''}
+                                onChange={e => handleCategoryChange(idx, e.target.value)}
+                                style={{ width: '100%', padding: '7px 8px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 11.5, color: '#0F172A', fontWeight: 600 }}
+                              >
+                                <option value="">Select Category</option>
+                                {getCategoriesForLine(line.productTypeId).map(c => (
+                                  <option key={c} value={c}>{c}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* 3. Sub-Category */}
+                            <div>
+                              <label style={{ fontSize: 10.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
+                                3. Sub-Category
+                              </label>
+                              <select
+                                value={line.subCategory || ''}
+                                onChange={e => handleSubCategoryChange(idx, e.target.value)}
+                                style={{ width: '100%', padding: '7px 8px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 11.5, color: '#0F172A', fontWeight: 600 }}
+                              >
+                                <option value="">Select Sub-Category</option>
+                                {getSubCategoriesForLine(line.productTypeId, line.category).map(sc => (
+                                  <option key={sc} value={sc}>{sc}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* 4. Sub-Sub-Category */}
+                            <div>
+                              <label style={{ fontSize: 10.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
+                                4. Sub-Sub-Category
+                              </label>
+                              <select
+                                value={line.subSubCategory || ''}
+                                onChange={e => handleSubSubCategoryChange(idx, e.target.value)}
+                                style={{ width: '100%', padding: '7px 8px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 11.5, color: '#0F172A', fontWeight: 600 }}
+                              >
+                                <option value="">Select Sub-Sub-Category</option>
+                                {getSubSubCategoriesForLine(line.productTypeId, line.category, line.subCategory).map(ssc => (
+                                  <option key={ssc} value={ssc}>{ssc}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* ── BRANCH: BRANDED MEDICINE VS GENERIC MEDICINE ── */}
+                        {line.productType === 'GENERIC' ? (
+                          /* ── GENERIC MEDICINE FORMULATION SELECTOR & SPECIFICATIONS ── */
+                          <div style={{ marginBottom: 14, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: 14 }}>
+                            {/* Generic Sourcing Notice */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
+                              <div style={{ fontSize: 11.5, fontWeight: 800, color: '#166534', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <FileText size={14} /> Generic Medicine Sourcing Specifications
+                              </div>
+                              <span style={{ fontSize: 10.5, color: '#15803D', fontWeight: 700, background: '#DCFCE7', padding: '2px 8px', borderRadius: 4, border: '1px solid #86EFAC' }}>
+                                Direct Admin Price-List Sourcing · Brand Trademark Not Required
                               </span>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 10, marginBottom: 8 }}>
+                            {/* Active Ingredient / Molecule selector */}
+                            <div style={{ marginBottom: 10 }}>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                                5. Active Ingredient / Molecule *
+                              </label>
+                              
+                              {(() => {
+                                const dbFormulations = getDatabaseFormulationsForLine(line);
+                                const selectedMol = line.isCustomMolecule ? '__CUSTOM_MOLECULE__' : (line.molecule || '');
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <select
+                                      value={selectedMol}
+                                      onChange={e => handleSelectMolecule(idx, e.target.value)}
+                                      style={{
+                                        width: '100%',
+                                        padding: '8px 12px',
+                                        background: '#FFFFFF',
+                                        border: '1px solid #86EFAC',
+                                        borderRadius: 6,
+                                        fontSize: 13,
+                                        fontWeight: 700,
+                                        color: '#0F172A'
+                                      }}
+                                    >
+                                      <option value="">-- Select Active Molecule from Master Catalog --</option>
+                                      {dbFormulations.length > 0 && (
+                                        <optgroup label={`Database Formulations (${dbFormulations.length} matching hierarchy)`}>
+                                          {dbFormulations.map(f => (
+                                            <option key={f.id || f.molecule} value={f.molecule}>
+                                              {f.molecule} {f.strength ? `(${f.strength})` : ''} — {f.dosageForm}
+                                            </option>
+                                          ))}
+                                        </optgroup>
+                                      )}
+                                      <optgroup label="Standard Registered Pharmacopoeia Molecules">
+                                        {STANDARD_MOLECULES.filter(sm => !dbFormulations.some(df => df.molecule.toLowerCase() === sm.toLowerCase())).map(m => (
+                                          <option key={m} value={m}>{m}</option>
+                                        ))}
+                                      </optgroup>
+                                      <optgroup label="Controlled Generic Product Request">
+                                        <option value="__CUSTOM_MOLECULE__">+ Request New Generic Molecule (Not in Master Catalog)</option>
+                                      </optgroup>
+                                    </select>
+
+                                    {line.isCustomMolecule && (
+                                      <div style={{ background: '#FFFFFF', border: '1px dashed #16A34A', borderRadius: 6, padding: '10px 12px' }}>
+                                        <label style={{ fontSize: 10.5, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
+                                          New Generic Molecule / Active Formulation Name *
+                                        </label>
+                                        <input
+                                          type="text"
+                                          placeholder="Enter formulation molecule (e.g. Teneligliptin + Metformin)"
+                                          value={line.molecule || ''}
+                                          onChange={e => handleRowChange(idx, 'molecule', e.target.value)}
+                                          style={{ width: '100%', padding: '7px 10px', background: '#F8FAFC', border: '1px solid #86EFAC', borderRadius: 5, fontSize: 12.5, color: '#0F172A', fontWeight: 600 }}
+                                        />
+                                        <div style={{ fontSize: 10.5, color: '#15803D', marginTop: 4 }}>
+                                          ℹ️ Controlled generic requisition process: Will be reviewed and mapped by FactoryGrid Formulation Desk.
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+
+                            {/* 3-Column Specifications Grid: Strength, Dosage Form, Pack Size */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 10 }}>
                               <div>
-                                <select
-                                  value={line.molecule || 'Paracetamol'}
-                                  onChange={e => handleRowChange(idx, 'molecule', e.target.value)}
-                                  style={{
-                                    width: '100%',
-                                    padding: '8px 10px',
-                                    background: '#FFFFFF',
-                                    border: '1px solid #86EFAC',
-                                    borderRadius: 6,
-                                    fontSize: 12.5,
-                                    fontWeight: 700,
-                                    color: '#0F172A'
-                                  }}
-                                >
-                                  {STANDARD_MOLECULES.map(m => (
-                                    <option key={m} value={m}>{m}</option>
-                                  ))}
-                                </select>
+                                <label style={{ fontSize: 10.5, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
+                                  Strength / Potency *
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. 500mg, 250mg/5ml"
+                                  value={line.strength || ''}
+                                  onChange={e => handleRowChange(idx, 'strength', e.target.value)}
+                                  style={{ width: '100%', padding: '7px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
+                                />
                               </div>
 
                               <div>
+                                <label style={{ fontSize: 10.5, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
+                                  Dosage Form *
+                                </label>
                                 <input
                                   type="text"
-                                  placeholder="Dosage & Strength (e.g. 500mg Tablet)"
-                                  value={line.dosageForm || 'Tablet'}
+                                  placeholder="e.g. Tablet, Syrup, Injection"
+                                  value={line.dosageForm || ''}
                                   onChange={e => handleRowChange(idx, 'dosageForm', e.target.value)}
-                                  style={{
-                                    width: '100%',
-                                    padding: '8px 10px',
-                                    background: '#FFFFFF',
-                                    border: '1px solid #CBD5E1',
-                                    borderRadius: 6,
-                                    fontSize: 12.5,
-                                    color: '#0F172A'
-                                  }}
+                                  style={{ width: '100%', padding: '7px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ fontSize: 10.5, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
+                                  Pack Size
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. 10x10 Strip, 100ml Bottle"
+                                  value={line.packSize || ''}
+                                  onChange={e => handleRowChange(idx, 'packSize', e.target.value)}
+                                  style={{ width: '100%', padding: '7px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
                                 />
                               </div>
                             </div>
-
-                            <div style={{ fontSize: 11, color: '#166534', background: 'rgba(255,255,255,0.7)', padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(134, 239, 172, 0.4)' }}>
-                              ℹ️ <strong>Generic Sourcing:</strong> Request is routed directly to FactoryGrid Admin to determine price from the internal price list. FactoryGrid acts as supplier.
-                            </div>
                           </div>
                         ) : (
-                          /* ── BRANDED MEDICINE: SEARCHABLE PRODUCT SELECTOR ── */
-                          <div style={{ marginBottom: 12 }}>
-                            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Product *</label>
-                            <SearchableProductSelect
-                              products={products}
-                              selectedProductId={line.productId}
-                              selectedProductName={line.productName}
-                              isOther={line.isOther}
-                              customProductName={line.customProductName}
-                              onSelectProduct={(product) => {
-                                setRfqLines(prev => prev.map((l, i) => {
-                                  if (i !== idx) return l;
-                                  return {
-                                    ...l,
-                                    productId: product.id,
-                                    productName: product.name,
-                                    dosageForm: product.dosageForm,
-                                    packSize: product.packSize,
-                                    isOther: false,
-                                    customProductName: '',
-                                    productType: 'BRANDED'
-                                  };
-                                }));
-                              }}
-                              onSelectOther={() => {
-                                setRfqLines(prev => prev.map((l, i) => {
-                                  if (i !== idx) return l;
-                                  return {
-                                    ...l,
-                                    productId: 'other',
-                                    productName: l.customProductName || 'Other Product',
-                                    dosageForm: 'Custom',
-                                    packSize: 'Custom Pack',
-                                    isOther: true,
-                                    productType: 'BRANDED'
-                                  };
-                                }));
-                              }}
-                              onCustomProductNameChange={(customName) => {
-                                setRfqLines(prev => prev.map((l, i) => {
-                                  if (i !== idx) return l;
-                                  return {
-                                    ...l,
-                                    customProductName: customName,
-                                    productName: customName || 'Other Product'
-                                  };
-                                }));
-                              }}
-                            />
+                          /* ── BRANDED MEDICINE: SEARCH AND SELECT MASTER PRODUCTS + DETAILS CARD ── */
+                          <div style={{ marginBottom: 14 }}>
+                            {/* Searchable Product Dropdown filtered by selected hierarchy */}
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                                  5. Select Branded Product from Central Master *
+                                </label>
+                                {line.productId && (
+                                  <span style={{ fontSize: 11, color: '#0F766E', fontWeight: 600 }}>
+                                    {[line.category, line.subCategory, line.subSubCategory].filter(Boolean).join(' › ')}
+                                  </span>
+                                )}
+                              </div>
+                              <SearchableProductSelect
+                                products={getEligibleProductsForLine(line)}
+                                selectedProductId={line.productId}
+                                selectedProductName={line.productName}
+                                isOther={line.isOther}
+                                customProductName={line.customProductName}
+                                disabledProductIds={rfqLines.map((l, i) => i !== idx ? l.productId : '').filter(Boolean)}
+                                onSelectProduct={(product) => handleSelectProduct(idx, product)}
+                                onSelectOther={() => {
+                                  setRfqLines(prev => prev.map((l, i) => {
+                                    if (i !== idx) return l;
+                                    return {
+                                      ...l,
+                                      productId: 'other',
+                                      productCode: '',
+                                      productName: l.customProductName || 'Other Product',
+                                      dosageForm: 'Custom',
+                                      packSize: 'Custom Pack',
+                                      uom: 'Unit',
+                                      isOther: true,
+                                      productType: 'BRANDED'
+                                    };
+                                  }));
+                                }}
+                                onCustomProductNameChange={(customName) => {
+                                  setRfqLines(prev => prev.map((l, i) => {
+                                    if (i !== idx) return l;
+                                    return {
+                                      ...l,
+                                      customProductName: customName,
+                                      productName: customName || 'Other Product'
+                                    };
+                                  }));
+                                }}
+                              />
+                            </div>
+
+                            {/* Branded Product Details Card when product is selected */}
+                            {line.productId && line.productId !== 'other' && (
+                              <div style={{ marginTop: 10, background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: '10px 14px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ fontSize: 10.5, fontWeight: 800, color: '#0F766E', background: '#CCFBF1', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>
+                                      {line.productCode || 'MASTER-SKU'}
+                                    </span>
+                                    <strong style={{ fontSize: 13, color: '#0F172A' }}>{line.productName}</strong>
+                                    {line.brand && (
+                                      <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', background: '#E2E8F0', padding: '1px 6px', borderRadius: 4 }}>
+                                        Brand: {line.brand}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0F766E', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <CheckCircle2 size={12} /> Product Master Verified
+                                  </span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 11.5, color: '#334155' }}>
+                                  <div>
+                                    <span style={{ color: '#64748B', display: 'block', fontSize: 10.5 }}>Active Salt / Molecule:</span>
+                                    <strong>{line.molecule || 'Standard Formulation'}</strong>
+                                  </div>
+                                  <div>
+                                    <span style={{ color: '#64748B', display: 'block', fontSize: 10.5 }}>Strength:</span>
+                                    <strong>{line.strength || 'Standard'}</strong>
+                                  </div>
+                                  <div>
+                                    <span style={{ color: '#64748B', display: 'block', fontSize: 10.5 }}>Dosage Form:</span>
+                                    <strong>{line.dosageForm || 'Tablet'}</strong>
+                                  </div>
+                                  <div>
+                                    <span style={{ color: '#64748B', display: 'block', fontSize: 10.5 }}>Pack Size:</span>
+                                    <strong>{line.packSize || 'Standard Pack'}</strong>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
-                        {/* Quantity, Required Date & Special Party Agreed Price */}
-                        <div style={{ display: 'grid', gridTemplateColumns: isSpecialPartyBuyer ? '1fr 1fr 1fr' : '1fr 1fr', gap: 12, marginBottom: 10 }}>
+                        {/* Quantity, Unit of Measure, Required Date & Special Party Agreed Price */}
+                        <div style={{ display: 'grid', gridTemplateColumns: isSpecialPartyBuyer ? '1.2fr 1fr 1fr 1fr' : '1.2fr 1fr 1.2fr', gap: 12, marginBottom: 10 }}>
                           <div>
-                            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Quantity *</label>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                              Quantity *
+                            </label>
                             <input
                               type="number"
                               min={1}
-                              placeholder="Enter Quantity"
+                              placeholder="e.g. 5000"
                               value={line.quantity}
                               onChange={e => handleRowChange(idx, 'quantity', e.target.value === '' ? '' : parseInt(e.target.value) || '')}
                               style={{ width: '100%', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }}
                             />
                           </div>
+
                           <div>
-                            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Required Date *</label>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                              Unit of Measure
+                            </label>
+                            <select
+                              value={line.uom || 'Unit'}
+                              onChange={e => handleRowChange(idx, 'uom', e.target.value)}
+                              style={{ width: '100%', padding: '8px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13, fontWeight: 600 }}
+                            >
+                              <option value="Unit">Unit</option>
+                              <option value="Strip">Strip</option>
+                              <option value="Box">Box</option>
+                              <option value="Bottle">Bottle</option>
+                              <option value="Vial">Vial</option>
+                              <option value="Ampoule">Ampoule</option>
+                              <option value="Pack">Pack</option>
+                              <option value="Pouch">Pouch</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                              Required Date *
+                            </label>
                             <input
                               type="date"
+                              min={todayStr}
                               value={line.requiredDate}
                               onChange={e => handleRowChange(idx, 'requiredDate', e.target.value)}
                               style={{ width: '100%', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }}
                             />
                           </div>
+
                           {isSpecialPartyBuyer && (
                             <div>
                               <label style={{ fontSize: 11, fontWeight: 800, color: '#B45309', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4, textTransform: 'uppercase' }}>
@@ -1955,10 +2804,10 @@ export const RFQModule: React.FC = () => {
 
                         {/* Line Remarks */}
                         <div>
-                          <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Remarks</label>
+                          <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Remarks & Packaging Instructions</label>
                           <input
                             type="text"
-                            placeholder="Enter Remarks"
+                            placeholder="e.g. Alu-Alu blister packaging, batch test certificate required"
                             value={line.remarks}
                             onChange={e => handleRowChange(idx, 'remarks', e.target.value)}
                             style={{ width: '100%', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 12.5 }}
@@ -1973,10 +2822,10 @@ export const RFQModule: React.FC = () => {
 
             {/* ── STEP 2: GENERAL & TERMS ── */}
             {rfqWizardStep === 2 && (
-              <div style={{ padding: 24, flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ padding: '20px 24px 36px', flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18 }}>
                   <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', marginBottom: 14 }}>
-                    General & Delivery Terms (Step 2)
+                    General Delivery & Payment Terms (Step 2)
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
@@ -1986,7 +2835,7 @@ export const RFQModule: React.FC = () => {
                     </div>
                     <div>
                       <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>General Required Date</label>
-                      <input type="date" value={requiredDate} onChange={e => setRequiredDate(e.target.value)} style={{ width: '100%', padding: '9px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }} />
+                      <input type="date" min={todayStr} value={requiredDate} onChange={e => setRequiredDate(e.target.value)} style={{ width: '100%', padding: '9px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }} />
                     </div>
                   </div>
 
@@ -2001,12 +2850,62 @@ export const RFQModule: React.FC = () => {
                     </div>
                     <div>
                       <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Quotation Deadline</label>
-                      <input type="date" value={deadlineDate} onChange={e => setDeadlineDate(e.target.value)} style={{ width: '100%', padding: '9px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }} />
+                      <input type="date" min={todayStr} value={deadlineDate} onChange={e => setDeadlineDate(e.target.value)} style={{ width: '100%', padding: '9px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }} />
                     </div>
                   </div>
 
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Delivery Location</label>
+                    <input
+                      type="text"
+                      value={deliveryLocation}
+                      onChange={e => setDeliveryLocation(e.target.value)}
+                      placeholder="e.g. Warehouse Plot 12, Industrial Area"
+                      style={{ width: '100%', padding: '9px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <input
+                        type="checkbox"
+                        id="creditRequiredCheckbox"
+                        checked={creditRequired}
+                        onChange={e => setCreditRequired(e.target.checked)}
+                        style={{ width: 16, height: 16, accentColor: '#0F766E' }}
+                      />
+                      <label htmlFor="creditRequiredCheckbox" style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A', cursor: 'pointer' }}>
+                        Credit Payment Required
+                      </label>
+                    </div>
+
+                    {creditRequired && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <select
+                          value={creditTermsOption}
+                          onChange={e => setCreditTermsOption(e.target.value)}
+                          style={{ width: '100%', padding: '8px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
+                        >
+                          <option value="Net 30 Days">Net 30 Days</option>
+                          <option value="Net 60 Days">Net 60 Days</option>
+                          <option value="Net 90 Days">Net 90 Days</option>
+                          <option value="Custom">Custom Terms</option>
+                        </select>
+                        {creditTermsOption === 'Custom' && (
+                          <input
+                            type="text"
+                            placeholder="Specify custom credit terms"
+                            value={customCreditTerms}
+                            onChange={e => setCustomCreditTerms(e.target.value)}
+                            style={{ width: '100%', padding: '8px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Special Remarks / Instructions</label>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Special Remarks / Commercial Terms</label>
                     <textarea rows={3} value={headerRemarks} onChange={e => setHeaderRemarks(e.target.value)} placeholder="Enter delivery terms or packaging instructions..." style={{ width: '100%', padding: '9px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13 }} />
                   </div>
                 </div>
@@ -2015,71 +2914,159 @@ export const RFQModule: React.FC = () => {
 
             {/* ── STEP 3: FINAL RFQ REVIEW & SUBMISSION ── */}
             {rfqWizardStep === 3 && (
-              <div style={{ padding: 24, flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ padding: '20px 24px 36px', flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 
-                {/* Header Information Summary */}
-                <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', marginBottom: 10 }}>
-                    Review & Submit RFQ
+                {/* 1. RFQ Summary */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 18 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <FileText size={16} /> 1. RFQ Requisition Summary
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#1D4ED8', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: 4 }}>
+                      Draft — Ready for Submission
+                    </span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, fontSize: 12.5 }}>
-                    <div><span style={{ color: '#64748B' }}>RFQ Number:</span> <strong style={{ color: '#0F766E', fontFamily: 'monospace' }}>{autoRfqNumber}</strong></div>
-                    <div><span style={{ color: '#64748B' }}>Buyer:</span> <strong style={{ color: '#0F172A' }}>{buyerName}</strong></div>
-                    <div><span style={{ color: '#64748B' }}>Company:</span> <strong style={{ color: '#0F172A' }}>{customerName}</strong></div>
-                    <div><span style={{ color: '#64748B' }}>RFQ Date:</span> <strong style={{ color: '#0F172A' }}>{rfqDate}</strong></div>
-                    <div><span style={{ color: '#64748B' }}>Credit Terms:</span> <strong style={{ color: '#0F766E' }}>{creditRequired ? (creditTermsOption === 'Custom' ? (customCreditTerms || 'Credit Required') : creditTermsOption) : 'No Credit Required'}</strong></div>
-                    <div><span style={{ color: '#64748B' }}>Required Date:</span> <strong style={{ color: '#0F172A' }}>{requiredDate}</strong></div>
-                    <div><span style={{ color: '#64748B' }}>Priority:</span> <strong style={{ color: '#D97706' }}>{priority}</strong></div>
-                    <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#64748B' }}>Delivery Location:</span> <span style={{ color: '#0F172A' }}>{deliveryLocation}</span></div>
-                    {isSpecialPartyBuyer && (
-                      <div style={{ gridColumn: 'span 4', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 6, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, color: '#92400E', fontSize: 12, fontWeight: 600, marginTop: 4 }}>
-                        <Star size={14} fill="#D97706" color="#D97706" />
-                        <span>Special Party Submission: Agreed unit prices will be forwarded to manufacturer for direct confirmation.</span>
-                      </div>
-                    )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, fontSize: 12.5 }}>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>RFQ Reference</span>
+                      <strong style={{ color: '#0F766E', fontFamily: 'monospace', fontSize: 13 }}>{autoRfqNumber}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>RFQ Issue Date</span>
+                      <strong style={{ color: '#0F172A' }}>{rfqDate}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Required Delivery Date</span>
+                      <strong style={{ color: '#0F172A' }}>{requiredDate || 'Standard Delivery'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Quotation Deadline</span>
+                      <strong style={{ color: '#0F172A' }}>{deadlineDate || 'Flexible'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Priority Level</span>
+                      <span style={{
+                        display: 'inline-block',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        background: priority === 'URGENT' ? '#FEE2E2' : priority === 'HIGH' ? '#FEF3C7' : '#EFF6FF',
+                        color: priority === 'URGENT' ? '#B91C1C' : priority === 'HIGH' ? '#B45309' : '#1D4ED8'
+                      }}>
+                        {priority}
+                      </span>
+                    </div>
+                    <div style={{ gridColumn: 'span 3' }}>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Requisition Channel</span>
+                      <strong style={{ color: '#334155' }}>
+                        {rfqLines.some(l => l.productType === 'GENERIC')
+                          ? 'Hybrid Sourcing (Direct Qualified Manufacturer Sourcing & Admin Generic Routing)'
+                          : 'Direct Qualified Manufacturer Sourcing'}
+                      </strong>
+                    </div>
                   </div>
                 </div>
 
-                {/* REQUISITION PRODUCT LINES */}
-                <div style={{ border: '1px solid #CBD5E1', borderRadius: 10, overflow: 'hidden', background: '#FFFFFF', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ padding: '12px 16px', background: '#F1F5F9', borderBottom: '1px solid #E2E8F0', fontSize: 13, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    REQUISITION PRODUCT LINES ({rfqLines.filter(l => l.productId && l.quantity).length})
+                {/* 2. Buyer and Delivery Details */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 18 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Building2 size={16} /> 2. Buyer & Consignee Information
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#15803D', background: '#F0FDF4', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <ShieldCheck size={13} /> {realBuyerProfile?.isApproved ? 'Verified Enterprise Account' : 'Account in Good Standing'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, fontSize: 12.5 }}>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Authorized Buyer</span>
+                      <strong style={{ color: '#0F172A' }}>{buyerName || 'Authenticated Buyer'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Organization / Entity</span>
+                      <strong style={{ color: '#0F172A' }}>{customerName || 'Verified Organization'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Customer Account Code</span>
+                      <strong style={{ color: '#0F766E', fontFamily: 'monospace' }}>{customerCode || (realBuyerProfile?.customerCode || (realBuyerProfile?.userId ? `CUS-${realBuyerProfile.userId}` : 'CUS-VERIFIED'))}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Customer Classification</span>
+                      <strong style={{ color: '#334155' }}>{isSpecialPartyBuyer ? 'Special Party (Pre-Agreed Pricing)' : 'Standard Regular Buyer (Competitive Bidding)'}</strong>
+                    </div>
+                    <div style={{ gridColumn: 'span 4' }}>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Consignee Delivery Location</span>
+                      <span style={{ color: '#0F172A', fontWeight: 600 }}>📍 {deliveryLocation || 'Warehouse / Primary Facility'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Requested Products */}
+                <div style={{ border: '1px solid #CBD5E1', borderRadius: 10, background: '#FFFFFF', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ padding: '12px 18px', background: '#F1F5F9', borderBottom: '1px solid #E2E8F0', fontSize: 13, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Package size={16} style={{ color: '#0F766E' }} /> 3. Requested Products ({rfqLines.filter(l => (l.productId || l.molecule) && l.quantity).length})
                   </div>
                   
-                  {/* INTERNAL SCROLLABLE PRODUCT LIST CONTAINER */}
-                  <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                    {rfqLines.filter(l => l.productId && l.quantity).map((line, i, arr) => (
+                  {/* Natural unconstrained list: NO nested scrollbar */}
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {rfqLines.filter(l => (l.productId || l.molecule) && l.quantity).map((line, i, arr) => (
                       <div
                         key={i}
                         style={{
-                          padding: '14px 16px',
+                          padding: '14px 18px',
                           borderBottom: i < arr.length - 1 ? '1px solid #E2E8F0' : 'none',
                           background: '#FFFFFF',
                           display: 'flex',
                           justifyContent: 'space-between',
-                          alignItems: 'center',
+                          alignItems: 'flex-start',
                           gap: 16,
                           fontSize: 13
                         }}
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 14, wordBreak: 'break-word' }}>
-                            {line.productName}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', background: '#E6FFFA', padding: '2px 8px', borderRadius: 4, border: '1px solid #99F6E4' }}>
+                              Item #{i + 1}
+                            </span>
+                            {line.productCode ? (
+                              <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#0F766E', background: '#CCFBF1', padding: '2px 7px', borderRadius: 4 }}>
+                                {line.productCode}
+                              </span>
+                            ) : line.productType === 'GENERIC' ? (
+                              <span style={{ fontFamily: 'monospace', fontSize: 10.5, fontWeight: 700, color: '#166534', background: '#DCFCE7', padding: '2px 7px', borderRadius: 4 }}>
+                                GENERIC-ADMIN-ROUTED
+                              </span>
+                            ) : null}
+                            <strong style={{ color: '#0F172A', fontSize: 14 }}>{line.productName}</strong>
+                            <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 999, background: line.productType === 'GENERIC' ? '#F0FDF4' : '#EFF6FF', color: line.productType === 'GENERIC' ? '#15803D' : '#1D4ED8', border: line.productType === 'GENERIC' ? '1px solid #BBF7D0' : '1px solid #BFDBFE', fontWeight: 800, textTransform: 'uppercase' }}>
+                              {line.productType === 'GENERIC' ? 'Generic Medicine' : 'Branded Medicine'}
+                            </span>
                           </div>
-                          <div style={{ fontSize: 12, color: '#64748B', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '6px 12px', alignItems: 'center' }}>
-                            <span><strong>Required Date:</strong> {line.requiredDate || requiredDate || 'N/A'}</span>
-                            {line.remarks && (
-                              <span>· <strong>Remarks:</strong> {line.remarks}</span>
+
+                          <div style={{ fontSize: 12, color: '#64748B', marginTop: 5, display: 'flex', flexWrap: 'wrap', gap: '6px 14px', alignItems: 'center' }}>
+                            {[line.productTypeId, line.category, line.subCategory, line.subSubCategory].filter(Boolean).length > 0 && (
+                              <span>📁 {[line.category, line.subCategory, line.subSubCategory].filter(Boolean).join(' › ')}</span>
                             )}
+                            {(line.dosageForm || line.strength || line.packSize) && (
+                              <span>💊 {[line.dosageForm, line.strength, line.packSize].filter(Boolean).join(' · ')}</span>
+                            )}
+                            <span>📅 Required: <strong>{line.requiredDate || requiredDate || 'Standard'}</strong></span>
+                            {line.remarks && <span>💬 Note: {line.remarks}</span>}
                           </div>
                         </div>
+
                         <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          <div style={{ fontWeight: 800, color: '#0F766E', fontSize: 14, fontFamily: 'monospace' }}>
-                            {Number(line.quantity).toLocaleString()} Units
+                          <div style={{ fontWeight: 800, color: '#0F766E', fontSize: 15, fontFamily: 'monospace' }}>
+                            {Number(line.quantity).toLocaleString()} {line.uom || 'Units'}
                           </div>
-                          {(isSpecialPartyBuyer || line.buyerProvidedPrice !== undefined) && (
-                            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#B45309', marginTop: 2 }}>
-                              Agreed: ₹{(line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : 14.50).toFixed(2)}/unit
+                          {isSpecialPartyBuyer ? (
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#B45309', marginTop: 3 }}>
+                              Pre-Agreed: ₹{Number(line.buyerProvidedPrice || 0).toFixed(2)}/unit
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 11.5, fontWeight: 600, color: '#0F766E', marginTop: 3 }}>
+                              Competitive Bidding
                             </div>
                           )}
                         </div>
@@ -2088,102 +3075,226 @@ export const RFQModule: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Generic Request Admin Routing Banner */}
+                {/* Generic Direct Admin Routing Banner */}
                 {rfqLines.some(l => l.productType === 'GENERIC') && (
-                  <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 10, padding: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: '#166534', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#166534', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                       🏛️ FactoryGrid Admin Direct Generic Routing
                     </div>
-                    <div style={{ fontSize: 12, color: '#15803D', lineHeight: 1.5, marginBottom: 8 }}>
-                      Your Generic Medicine line items will be routed directly to <strong>FactoryGrid Platform Admin</strong> for quotation using FactoryGrid's internal price list. External manufacturers will <strong>NOT</strong> be contacted, and no brand certificates are required.
-                    </div>
-                    <div style={{ fontSize: 11.5, color: '#166534', fontWeight: 700 }}>
-                      ✓ Sourced by Molecule & Internal Price List · FactoryGrid acts as supplier · Seamless Quote/Order Integration
+                    <div style={{ fontSize: 12, color: '#15803D', lineHeight: 1.5 }}>
+                      Generic line items will route directly to FactoryGrid Platform Admin for quoting against internal price lists. No external manufacturer contact or trademark proof required.
                     </div>
                   </div>
                 )}
 
-                {/* Eligible Manufacturers Summary (Only shown if branded lines exist) */}
+                {/* 4. Commercial Terms */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 18 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.04em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <CreditCard size={16} /> 4. Commercial & Payment Terms
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12.5 }}>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Payment Terms</span>
+                      <strong style={{ color: '#0F766E' }}>
+                        {creditRequired ? (creditTermsOption === 'Custom' ? (customCreditTerms || 'Custom Credit Terms') : creditTermsOption) : 'Immediate / Advance (No Credit)'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Credit Facility</span>
+                      <strong style={{ color: '#0F172A' }}>{creditRequired ? 'Credit Requested' : 'Standard Commercial Settlement'}</strong>
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>Special Commercial / Packaging Remarks</span>
+                      <span style={{ color: '#334155' }}>{headerRemarks || 'Standard FactoryGrid commercial procurement and QA terms apply.'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Eligible Manufacturer Matching */}
                 {rfqLines.some(l => l.productType !== 'GENERIC') && (
-                  <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', marginBottom: 8 }}>
-                      {eligibleManufacturersForDraft.length} Eligible Manufacturers Identified (Branded Products)
+                  <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 18 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.04em' }}>
+                          5. Eligible Manufacturer Matching
+                        </div>
+                        <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                          Find eligible manufacturers based on your selected products, supplier availability and applicable compliance requirements.
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleRunLiveMatching}
+                        disabled={isMatchingLoading}
+                        style={{
+                          padding: '8px 16px',
+                          background: isMatchingLoading ? '#94A3B8' : '#0F766E',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: 6,
+                          fontSize: 12.5,
+                          fontWeight: 700,
+                          cursor: isMatchingLoading ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          boxShadow: '0 1px 3px rgba(15, 118, 110, 0.2)'
+                        }}
+                      >
+                        <RefreshCw size={13} style={{ animation: isMatchingLoading ? 'spin 1s linear infinite' : 'none' }} />
+                        {isMatchingLoading ? 'Searching Manufacturers...' : 'Find Eligible Manufacturers'}
+                      </button>
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                      {eligibleManufacturersForDraft.map(e => (
-                        <span
-                          key={e.mfg.id}
-                          onClick={() => setClickedProfileMfgId(e.mfg.id)}
-                          style={{ padding: '6px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12, fontWeight: 700, color: '#0F766E', cursor: 'pointer', textDecoration: 'underline' }}
-                        >
-                          {e.mfg.companyName || e.mfg.name} →
-                        </span>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#0F766E', fontWeight: 600 }}>
-                      ✓ Your branded RFQ lines will be automatically distributed to eligible manufacturers after submission.
+
+                    {liveMatchingResult && uniqueMatchedMfgs.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#0F766E' }}>
+                          ✓ Found {uniqueMatchedMfgs.length} eligible verified manufacturer(s) matching your requisition lines:
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                          {uniqueMatchedMfgs.map((m, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                background: '#FFFFFF',
+                                border: '1px solid #CBD5E1',
+                                borderRadius: 8,
+                                padding: '12px 14px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 5,
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <strong style={{ color: '#0F172A', fontSize: 13.5 }}>{m.companyName}</strong>
+                                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#0F766E', background: '#CCFBF1', padding: '1px 7px', borderRadius: 4 }}>
+                                  Score: {m.matchScore}%
+                                </span>
+                              </div>
+                              <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                                <span>Supplier Code: <strong style={{ fontFamily: 'monospace' }}>{m.registrationCode}</strong></span>
+                              </div>
+                              <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                                📍 {[m.city, m.state].filter(Boolean).join(', ') || 'Registered Facility'}
+                              </div>
+                              <div style={{ fontSize: 11.5, color: '#475569', marginTop: 3, display: 'flex', gap: 12, borderTop: '1px solid #F1F5F9', paddingTop: 6 }}>
+                                <span>MOQ: <strong>{m.moq ? Number(m.moq).toLocaleString() : '1,000'}</strong></span>
+                                <span>Lead Time: <strong>{m.leadTimeDays || '14'} days</strong></span>
+                              </div>
+                              <div style={{ fontSize: 10.5, fontWeight: 700, color: '#15803D', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                <CheckCircle2 size={12} /> Compliance: GMP & Drug License Verified
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : liveMatchingResult && uniqueMatchedMfgs.length === 0 ? (
+                      <div style={{ padding: '14px 16px', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 8, fontSize: 12.5, color: '#92400E', textAlign: 'center', marginTop: 10 }}>
+                        No direct manufacturer product mappings found for these lines yet. FactoryGrid platform sourcing team will review and route to suitable qualified manufacturers upon submission.
+                      </div>
+                    ) : (
+                      <div style={{ padding: '16px 18px', background: '#FFFFFF', border: '1px dashed #CBD5E1', borderRadius: 8, fontSize: 12.5, color: '#64748B', textAlign: 'center', marginTop: 10 }}>
+                        Click "Find Eligible Manufacturers" to view qualified suppliers meeting your requisition requirements prior to submission.
+                      </div>
+                    )}
+
+                    <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      ℹ️ Running manufacturer matching previews qualified suppliers and does NOT submit your RFQ. Submission only occurs when you click "Submit RFQ" below.
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Drawer Footer Actions (Wizard Navigation) */}
-            <div style={{ padding: 16, background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', gap: 12, justifyContent: 'space-between' }}>
+            {/* Drawer Footer Actions (Wizard Navigation - Fixed at bottom) */}
+            <div style={{ padding: '14px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, zIndex: 10 }}>
               <div>
                 {rfqWizardStep > 1 ? (
                   <button
+                    type="button"
                     onClick={() => setRfqWizardStep((rfqWizardStep - 1) as any)}
-                    style={{ padding: '10px 18px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                    style={{ padding: '9px 18px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                   >
-                    Back
+                    ← Back
                   </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={closeDrawer}
-                    style={{ padding: '10px 16px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                    style={{ padding: '9px 16px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                   >
                     Cancel
                   </button>
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: 10 }}>
-                {/* Save Draft button accessible at Step 3 */}
-                {rfqWizardStep === 3 && (
-                  <button
-                    onClick={handleSaveDraft}
-                    style={{ padding: '10px 18px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#475569', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Save Draft
-                  </button>
-                )}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                {/* Save Draft button always accessible across all steps */}
+                <button
+                  type="button"
+                  disabled={isSubmittingRfq}
+                  onClick={handleSaveDraft}
+                  style={{
+                    padding: '9px 18px',
+                    background: '#FFFFFF',
+                    border: '1px solid #0F766E',
+                    borderRadius: 6,
+                    color: '#0F766E',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: isSubmittingRfq ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isSubmittingRfq ? 'Saving Draft...' : 'Save Draft'}
+                </button>
 
-                {/* Wizard Next / Submit Buttons */}
+                {/* Step 1 Continue Button */}
                 {rfqWizardStep === 1 && (
                   <button
+                    type="button"
                     onClick={handleContinueToGeneralTerms}
-                    style={{ padding: '10px 22px', background: '#0F766E', border: 'none', borderRadius: 6, color: '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    style={{ padding: '9px 22px', background: '#0F766E', border: 'none', borderRadius: 6, color: '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
-                    Continue to General & Terms →
+                    Continue to Terms →
                   </button>
                 )}
 
+                {/* Step 2 Continue Button */}
                 {rfqWizardStep === 2 && (
                   <button
-                    onClick={() => setRfqWizardStep(3)}
-                    style={{ padding: '10px 22px', background: '#0F766E', border: 'none', borderRadius: 6, color: '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    type="button"
+                    onClick={handleContinueToReview}
+                    style={{ padding: '9px 22px', background: '#0F766E', border: 'none', borderRadius: 6, color: '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
-                    Continue to RFQ Review →
+                    Continue to Review →
                   </button>
                 )}
 
+                {/* Step 3 Final Submit Button */}
                 {rfqWizardStep === 3 && (
                   <button
+                    type="button"
+                    disabled={isSubmittingRfq}
                     onClick={handleExecuteRFQSubmission}
-                    style={{ padding: '10px 24px', background: '#0F766E', border: 'none', borderRadius: 6, color: '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    style={{
+                      padding: '9px 24px',
+                      background: isSubmittingRfq ? '#94A3B8' : '#0F766E',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#FFFFFF',
+                      fontSize: 13,
+                      fontWeight: 800,
+                      cursor: isSubmittingRfq ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      boxShadow: '0 2px 4px rgba(15, 118, 110, 0.25)'
+                    }}
                   >
-                    <Send size={15} /> Submit RFQ
+                    <Send size={15} />
+                    {isSubmittingRfq ? 'Submitting RFQ...' : 'Submit RFQ'}
                   </button>
                 )}
               </div>
@@ -2202,22 +3313,22 @@ export const RFQModule: React.FC = () => {
                 <Send size={24} style={{ color: '#0F766E' }} />
               </div>
               <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                {distributionResultModal.mfgRfqs.length > 0 ? 'RFQ System Floating Complete' : 'Generic RFQ Successfully Submitted'}
+                {distributionResultModal.mfgRfqs.length > 0 ? 'RFQ Distribution Complete' : 'Generic RFQ Successfully Submitted'}
               </h3>
               <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 4 }}>
                 {distributionResultModal.mfgRfqs.length > 0 ? (
-                  <>Query <strong>MANUFACTURER_PRODUCT</strong> executed. Main RFQ status updated to <strong>Pricing In Progress</strong>.</>
+                  <>Qualified manufacturer matching executed. Requisition is now active with status <strong>Submitted</strong>.</>
                 ) : (
                   <>Generic request routed directly to <strong>FactoryGrid Admin</strong> for internal price list quotation. Status: <strong>Submitted</strong>.</>
                 )}
               </div>
             </div>
 
-            {/* Created MANUFACTURER_RFQ Records Table (if branded lines exist) */}
+            {/* Qualified Manufacturer Distribution Records Table */}
             {distributionResultModal.mfgRfqs.length > 0 && (
               <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
                 <div style={{ padding: '8px 12px', background: '#F1F5F9', fontSize: 12, fontWeight: 700, color: '#334155' }}>
-                  MANUFACTURER_RFQ Distribution Records
+                  Qualified Manufacturer Distribution
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <thead>

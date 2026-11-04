@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   ShieldCheck, CheckCircle2, XCircle, AlertTriangle, Search,
   Eye, ChevronRight, X, Clock, FileText, Download, Building2,
-  Tag, Award, Check, User, Plus, FileCheck, Globe, Shield
+  Tag, Award, Check, User, Plus, FileCheck, Globe, Shield, RefreshCw
 } from 'lucide-react';
+import { brandTrademarkApi } from '../../services/brandTrademarkApi';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export type TMCheckStatus = 'Pending' | 'Verified' | 'Failed' | 'Under Review';
 export type TMFinalResult = 'Approved' | 'Conflict Found' | 'Expired' | 'Under Review';
@@ -44,7 +47,7 @@ const INITIAL_TM_RECORDS: TrademarkRecord[] = [
     customerName: 'ABC Pharma Pvt Ltd',
     customerCode: 'CUS-2026-012',
     submissionDate: '2026-08-05',
-    verificationStatus: 'UNDER REVIEW',
+    verificationStatus: 'Under Review',
     verificationSource: 'IP India Database',
     tmClass: 'Class 5 (Pharmaceuticals & Medicinal Preparations)',
     tmNumber: 'TM-908124',
@@ -64,7 +67,7 @@ const INITIAL_TM_RECORDS: TrademarkRecord[] = [
     customerName: 'Zenith Global Exporters',
     customerCode: 'CUS-2026-044',
     submissionDate: '2026-08-02',
-    verificationStatus: 'CONFLICT FOUND',
+    verificationStatus: 'Conflict Found',
     verificationSource: 'Trademark Registry',
     tmClass: 'Class 5 (Pharmaceuticals & Medicinal Preparations)',
     tmNumber: 'TM-441092',
@@ -85,7 +88,7 @@ const INITIAL_TM_RECORDS: TrademarkRecord[] = [
     customerName: 'Apex Health Formulations',
     customerCode: 'CUS-2026-089',
     submissionDate: '2026-07-28',
-    verificationStatus: 'APPROVED',
+    verificationStatus: 'Approved',
     verificationSource: 'Customer Uploaded TM Certificate',
     tmClass: 'Class 5 (Gastrointestinal Formulations)',
     tmNumber: 'TM-771802',
@@ -105,7 +108,7 @@ const INITIAL_TM_RECORDS: TrademarkRecord[] = [
     customerName: 'NovaMed Animal Health',
     customerCode: 'CUS-2026-102',
     submissionDate: '2026-06-15',
-    verificationStatus: 'EXPIRED',
+    verificationStatus: 'Expired',
     verificationSource: 'IP India Database',
     tmClass: 'Class 5 (Veterinary Formulations)',
     tmNumber: 'TM-330192',
@@ -129,6 +132,7 @@ export const TrademarkVerificationModule: React.FC = () => {
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>('tm-rec-101');
   const [activeTab, setActiveTab] = useState<'ALL' | 'UNDER_REVIEW' | 'APPROVED' | 'CONFLICT' | 'EXPIRED'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   // Conflict Input Modal
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
@@ -137,15 +141,59 @@ export const TrademarkVerificationModule: React.FC = () => {
   // Cert Viewer Modal
   const [viewingCert, setViewingCert] = useState<TrademarkRecord | null>(null);
 
+  const loadTrademarkRecords = async () => {
+    setIsLoading(true);
+    try {
+      const data = await brandTrademarkApi.listAdminTrademarkVerifications();
+      if (Array.isArray(data) && data.length > 0) {
+        const mappedBackend: TrademarkRecord[] = data.map((t: any) => ({
+          id: String(t.id),
+          trademarkName: t.trademarkName || 'Untitled Trademark',
+          customerName: t.customerName || 'Registered Buyer',
+          customerCode: t.customerCode || 'CUS-REG',
+          submissionDate: t.submissionDate || new Date().toISOString().split('T')[0],
+          verificationStatus: (t.verificationStatus || 'Under Review') as TMFinalResult,
+          verificationSource: t.verificationSource || 'Customer Uploaded TM Certificate',
+          tmClass: t.tmClass || 'Class 5 (Pharmaceuticals & Medicinal Preparations)',
+          tmNumber: t.tmNumber || '—',
+          expiryDate: t.expiryDate || '—',
+          checks: {
+            existence: t.checks?.existence || 'Pending',
+            owner: t.checks?.owner || 'Pending',
+            status: t.checks?.status || 'Under Review',
+            classMatch: t.checks?.classMatch || 'Pending',
+            validity: t.checks?.validity || 'Pending',
+          },
+          conflictNotes: t.conflictNotes,
+          certificateFileName: t.certificateFileName || t.fileName,
+        }));
+
+        const merged = [...mappedBackend, ...INITIAL_TM_RECORDS.filter(init => !mappedBackend.some(m => m.id === init.id))];
+        setRecords(merged);
+        if (mappedBackend.length > 0 && (!selectedRecordId || selectedRecordId === 'tm-rec-101')) {
+          setSelectedRecordId(mappedBackend[0].id);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not load trademark verifications from backend, using default dataset:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTrademarkRecords();
+  }, []);
+
   const selectedRecord = records.find(r => r.id === selectedRecordId) || null;
 
   // Counts
   const counts = {
     all: records.length,
-    underReview: records.filter(r => r.verificationStatus === 'Under Review').length,
-    approved: records.filter(r => r.verificationStatus === 'Approved').length,
-    conflict: records.filter(r => r.verificationStatus === 'Conflict Found').length,
-    expired: records.filter(r => r.verificationStatus === 'Expired').length,
+    underReview: records.filter(r => (r.verificationStatus || '').toLowerCase() === 'under review').length,
+    approved: records.filter(r => (r.verificationStatus || '').toLowerCase() === 'approved').length,
+    conflict: records.filter(r => (r.verificationStatus || '').toLowerCase().includes('conflict')).length,
+    expired: records.filter(r => (r.verificationStatus || '').toLowerCase() === 'expired').length,
   };
 
   // Filtered List
@@ -155,25 +203,52 @@ export const TrademarkVerificationModule: React.FC = () => {
       r.tmNumber.toLowerCase().includes(searchTerm.toLowerCase());
 
     if (!matchSearch) return false;
-    if (activeTab === 'UNDER_REVIEW') return r.verificationStatus === 'Under Review';
-    if (activeTab === 'APPROVED') return r.verificationStatus === 'Approved';
-    if (activeTab === 'CONFLICT') return r.verificationStatus === 'Conflict Found';
-    if (activeTab === 'EXPIRED') return r.verificationStatus === 'Expired';
+    const statusLower = (r.verificationStatus || '').toLowerCase();
+    if (activeTab === 'UNDER_REVIEW') return statusLower === 'under review';
+    if (activeTab === 'APPROVED') return statusLower === 'approved';
+    if (activeTab === 'CONFLICT') return statusLower.includes('conflict');
+    if (activeTab === 'EXPIRED') return statusLower === 'expired';
     return true;
+  }).sort((a, b) => {
+    // Latest record first (created_at DESC), secondary stable sort on id DESC
+    const timeA = new Date((a as any).createdAt || (a as any).created_at || a.submissionDate || 0).getTime();
+    const timeB = new Date((b as any).createdAt || (b as any).created_at || b.submissionDate || 0).getTime();
+    if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+      return timeB - timeA;
+    }
+    return String(b.id || '').localeCompare(String(a.id || ''));
   });
 
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredRecords.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, activeTab]
+  });
+  const paginatedRecords = pagination.paginateItems(filteredRecords);
+
   // Action Handlers
-  const handleApproveTM = () => {
+  const handleApproveTM = async () => {
     if (!selectedRecord) return;
+    try {
+      await brandTrademarkApi.approveTrademarkVerification(selectedRecord.id);
+    } catch (err: any) {
+      console.warn('Backend trademark approval sync:', err.message);
+    }
     setRecords(prev => prev.map(r => r.id === selectedRecord.id ? { ...r, verificationStatus: 'Approved' } : r));
     addAuditLog('Trademark Verification', `Approved trademark ${selectedRecord.trademarkName} for ${selectedRecord.customerName}`);
   };
 
-  const handleMarkConflict = () => {
+  const handleMarkConflict = async () => {
     if (!selectedRecord) return;
     if (!conflictInputText.trim()) {
       alert('Please enter conflict reason details.');
       return;
+    }
+    try {
+      await brandTrademarkApi.markConflictTrademark(selectedRecord.id, conflictInputText);
+    } catch (err: any) {
+      console.warn('Backend trademark conflict sync:', err.message);
     }
     setRecords(prev => prev.map(r => r.id === selectedRecord.id ? {
       ...r,
@@ -186,13 +261,18 @@ export const TrademarkVerificationModule: React.FC = () => {
     setConflictInputText('');
   };
 
-  const handleMarkExpired = () => {
+  const handleMarkExpired = async () => {
     if (!selectedRecord) return;
+    try {
+      await brandTrademarkApi.markExpiredTrademark(selectedRecord.id);
+    } catch (err: any) {
+      console.warn('Backend mark expired sync:', err.message);
+    }
     setRecords(prev => prev.map(r => r.id === selectedRecord.id ? { ...r, verificationStatus: 'Expired' } : r));
     addAuditLog('Trademark Verification', `Marked trademark ${selectedRecord.trademarkName} as EXPIRED`);
   };
 
-  const handleUpdateCheckStatus = (checkKey: keyof TrademarkRecord['checks'], status: TMCheckStatus) => {
+  const handleUpdateCheckStatus = async (checkKey: keyof TrademarkRecord['checks'], status: TMCheckStatus) => {
     if (!selectedRecord) return;
     setRecords(prev => prev.map(r => {
       if (r.id !== selectedRecord.id) return r;
@@ -204,37 +284,57 @@ export const TrademarkVerificationModule: React.FC = () => {
         }
       };
     }));
+    try {
+      await brandTrademarkApi.updateTrademarkCheck(selectedRecord.id, checkKey, status);
+    } catch (err: any) {
+      console.warn('Backend update check error:', err.message);
+    }
+  };
+
+  const handleDownloadCert = async (rec: TrademarkRecord) => {
+    try {
+      const blob = await brandTrademarkApi.downloadTrademarkDoc(rec.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = rec.certificateFileName || `${rec.trademarkName}_certificate.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert('Error downloading trademark certificate: ' + (err.message || 'File not found.'));
+    }
   };
 
   const renderStatusBadge = (status: TMFinalResult) => {
-    switch (status) {
-      case 'Approved':
-        return (
-          <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <CheckCircle2 size={14} /> Approved
-          </span>
-        );
-      case 'Conflict Found':
-        return (
-          <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <XCircle size={14} /> CONFLICT FOUND
-          </span>
-        );
-      case 'Expired':
-        return (
-          <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <AlertTriangle size={14} /> EXPIRED
-          </span>
-        );
-      case 'Under Review':
-        return (
-          <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <Clock size={14} /> UNDER REVIEW
-          </span>
-        );
-      default:
-        return <span style={{ fontSize: 12 }}>{status}</span>;
+    const s = (status || '').toLowerCase();
+    if (s === 'approved') {
+      return (
+        <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <CheckCircle2 size={14} /> Approved
+        </span>
+      );
     }
+    if (s.includes('conflict')) {
+      return (
+        <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <XCircle size={14} /> CONFLICT FOUND
+        </span>
+      );
+    }
+    if (s === 'expired') {
+      return (
+        <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <AlertTriangle size={14} /> EXPIRED
+        </span>
+      );
+    }
+    return (
+      <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <Clock size={14} /> UNDER REVIEW
+      </span>
+    );
   };
 
   return (
@@ -260,6 +360,21 @@ export const TrademarkVerificationModule: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <button
+          onClick={loadTrademarkRecords}
+          disabled={isLoading}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '7px 14px', borderRadius: 6,
+            background: '#F1F5F9', border: '1px solid #CBD5E1',
+            fontSize: 12, fontWeight: 700, color: '#0F172A',
+            cursor: 'pointer', transition: 'all 0.15s'
+          }}
+        >
+          <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+          <span>{isLoading ? 'Refreshing...' : 'Refresh Records'}</span>
+        </button>
       </div>
 
       {/* ── KPI TABS BAR ──────────────────────────────────────── */}
@@ -305,7 +420,7 @@ export const TrademarkVerificationModule: React.FC = () => {
           </div>
 
           <div style={{ maxHeight: 680, overflowY: 'auto' }}>
-            {filteredRecords.map(rec => {
+            {paginatedRecords.map(rec => {
               const isSelected = rec.id === selectedRecordId;
               return (
                 <div
@@ -338,6 +453,7 @@ export const TrademarkVerificationModule: React.FC = () => {
               );
             })}
           </div>
+          <PaginationControl {...pagination.paginationProps} itemName="trademark records" />
         </div>
 
         {/* RIGHT TRADEMARK REVIEW WORKSPACE */}
@@ -590,9 +706,15 @@ export const TrademarkVerificationModule: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div style={{ padding: '14px 20px', background: '#F1F5F9', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ padding: '14px 20px', background: '#F1F5F9', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button onClick={() => setViewingCert(null)} style={{ padding: '6px 18px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                 Close Viewer
+              </button>
+              <button
+                onClick={() => handleDownloadCert(viewingCert)}
+                style={{ padding: '6px 18px', borderRadius: 6, border: 'none', background: '#1D4ED8', color: '#FFF', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Download size={13} /> Download Certificate
               </button>
             </div>
           </div>

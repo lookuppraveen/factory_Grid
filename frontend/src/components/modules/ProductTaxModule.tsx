@@ -3,8 +3,9 @@ import {
   Receipt, Search, Plus, Filter, Edit2, Trash2, X, AlertTriangle,
   Package, Percent, Calendar, Eye, Power, Clock, Hash
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 import { ProductTax } from '../../types';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export const ProductTaxModule: React.FC = () => {
   const {
@@ -92,11 +93,23 @@ export const ProductTaxModule: React.FC = () => {
 
       const matchesPrd = selectedProductId === 'ALL' || (tax.product_id || (tax as any).productId) === selectedProductId;
       const statusVal = tax.status || 'ACTIVE';
-      const matchesStatus = selectedStatus === 'ALL' || statusVal === selectedStatus;
-
       return matchesSearch && matchesPrd && matchesStatus;
+    }).sort((a, b) => {
+      const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
+      const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return (b.product_tax_id || (b as any).id || '').localeCompare(a.product_tax_id || (a as any).id || '');
     });
   }, [productTaxes, products, searchTerm, selectedProductId, selectedStatus]);
+
+  const {
+    paginatedItems: paginatedTaxes,
+    paginationProps,
+    resetPage
+  } = usePagination(filteredTaxes, {
+    initialPageSize: 10,
+    resetDeps: [searchTerm, selectedProductId, selectedStatus]
+  });
 
   // Handlers
   const handleOpenAddModal = (defaultProductId?: string) => {
@@ -213,6 +226,7 @@ export const ProductTaxModule: React.FC = () => {
       };
       addProductTax(newTax);
       addAuditLog('ADD_PRODUCT_TAX', `Created tax record ${newTaxId} for product ${formData.product_id}`);
+      resetPage();
     }
 
     setIsModalOpen(false);
@@ -504,7 +518,7 @@ export const ProductTaxModule: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredTaxes.map(tax => {
+              paginatedTaxes.map(tax => {
                 const prd = getProductRecord(tax.product_id || (tax as any).productId || '');
                 const prdName = prd?.product_name || prd?.name || tax.product_id;
                 const prdCode = prd?.product_code || prd?.code || tax.product_id;
@@ -678,6 +692,7 @@ export const ProductTaxModule: React.FC = () => {
             )}
           </tbody>
         </table>
+        <PaginationControl {...paginationProps} />
       </div>
 
       {/* ── VIEW DETAILS MODAL ────────────────────────────────────── */}

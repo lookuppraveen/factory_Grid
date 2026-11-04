@@ -275,6 +275,31 @@ export interface ProductType {
   code?: string;
   name?: string;
   status?: string;
+  category_count?: number;
+  categories_count?: number;
+  categoriesCount?: number;
+  attribute_count?: number;
+  attributes_count?: number;
+  attributesCount?: number;
+  attributeIds?: string[];
+  attribute_ids?: string[];
+  attributes?: any[];
+  categories?: any[];
+}
+
+export interface ProductTypeAttributeDraft {
+  attribute_id?: string;
+  attribute_code: string;
+  attribute_name: string;
+  data_type: 'TEXT' | 'NUMBER' | 'DECIMAL' | 'BOOLEAN' | 'DATE' | 'LIST';
+  unit_of_measure?: string;
+  allowed_values?: string[];
+  is_filterable: boolean;
+  is_searchable: boolean;
+  is_required: boolean;
+  is_active: boolean;
+  display_order: number;
+  remark?: string;
 }
 
 export interface Brand {
@@ -500,17 +525,41 @@ export interface AttributeMaster {
   data_type: AttributeDataType;
   unit_of_measure?: string;
   remark?: string;
+  allowed_values?: any[];
+  allowedValues?: any[];
   is_filterable: boolean;
   is_searchable: boolean;
   is_required: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // Product Type Associations
+  assigned_product_types?: Array<{
+    productTypeId: string;
+    productTypeCode?: string;
+    productTypeName?: string;
+    isRequired: boolean;
+    displayOrder: number;
+    lifecycleStatus: string;
+  }>;
+  assignedProductTypes?: Array<{
+    productTypeId: string;
+    productTypeCode?: string;
+    productTypeName?: string;
+    isRequired: boolean;
+    displayOrder: number;
+    lifecycleStatus: string;
+  }>;
   // Aliases
   id?: string;
   code?: string;
   name?: string;
   dataType?: AttributeDataType;
+  unitOfMeasure?: string;
+  isFilterable?: boolean;
+  isSearchable?: boolean;
+  isRequired?: boolean;
+  isActive?: boolean;
 }
 
 export interface ProductAttribute {
@@ -530,18 +579,70 @@ export interface ProductAttribute {
   unitOfMeasure?: string;
 }
 
-// ── CATEGORY -> ATTRIBUTE ASSOCIATION (CRITICAL CLIENT REQUIREMENT) ──
+// ── PRODUCT TYPE -> ATTRIBUTE ASSOCIATION (CANONICAL MODEL) ──────────
+export interface ProductTypeAttribute {
+  product_type_attribute_id: string;
+  product_type_id: string;
+  attribute_id: string;
+  is_required: boolean;
+  isRequired?: boolean;
+  display_order: number;
+  displayOrder?: number;
+  lifecycle_status: string;
+  lifecycleStatus?: string;
+  remark?: string;
+  created_at?: string;
+  updated_at?: string;
+  // Aliases and UI helpers
+  id?: string;
+  productTypeId?: string;
+  attributeId?: string;
+  attribute?: AttributeMaster;
+  attribute_name?: string;
+  attributeName?: string;
+  attribute_code?: string;
+  attributeCode?: string;
+  data_type?: AttributeDataType;
+  dataType?: AttributeDataType;
+  unit_of_measure?: string;
+  unitOfMeasure?: string;
+  allowed_values?: any[];
+  allowedValues?: any[];
+  is_filterable?: boolean;
+  isFilterable?: boolean;
+  is_searchable?: boolean;
+  isSearchable?: boolean;
+  is_active?: boolean;
+  isActive?: boolean;
+}
+
+// ── CATEGORY -> ATTRIBUTE ASSOCIATION (DEPRECATED: MAINTAINED FOR BACKWARD COMPATIBILITY) ──
 export interface CategoryAttribute {
   category_attribute_id: string;
   category_id: string;
   attribute_id: string;
   remark?: string;
+  is_required?: boolean;
+  isRequired?: boolean;
+  display_order?: number;
+  displayOrder?: number;
   created_at?: string;
   updated_at?: string;
   // Aliases and UI helpers
   id?: string;
   categoryId?: string;
   attributeId?: string;
+  attribute?: AttributeMaster;
+  attribute_name?: string;
+  attributeName?: string;
+  attribute_code?: string;
+  attributeCode?: string;
+  data_type?: AttributeDataType;
+  dataType?: AttributeDataType;
+  unit_of_measure?: string;
+  unitOfMeasure?: string;
+  allowed_values?: any[];
+  allowedValues?: any[];
 }
 
 // ── PRODUCT MANUFACTURER (CRITICAL) ──────────────────────────────────
@@ -1466,3 +1567,30 @@ export interface UserDocument {
   fileName?: string;
   history?: DocumentVersion[];
 }
+
+// ── CENTRAL SPRING DATA JPA-COMPATIBLE PAGINATION TYPES ─────────────
+export interface PageResponse<T> {
+  content: T[];
+  currentPage: number;
+  pageSize: number;
+  totalElements: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
+  hasNext: boolean;
+  hasPrevious: boolean;
+  numberOfElements: number;
+  page?: number;
+  size?: number;
+  total?: number;
+  [key: string]: any;
+}
+
+export interface PageableQuery {
+  page?: number;
+  size?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+}
+

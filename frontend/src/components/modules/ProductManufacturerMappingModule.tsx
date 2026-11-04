@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ProductManufacturer, LifecycleStatus } from '../../types';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 import {
   Link2, Search, Plus, Edit3, Power, Trash2,
   CheckCircle2, AlertCircle, X, Info, Filter, ArrowRight,
@@ -130,8 +132,22 @@ export const ProductManufacturerMappingModule: React.FC = () => {
       const matchesPreferred = !preferredOnly || isPref;
 
       return matchesSearch && matchesProduct && matchesMfg && matchesStatus && matchesPreferred;
+    }).sort((a, b) => {
+      const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
+      const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return (b.product_manufacturer_id || (b as any).id || '').localeCompare(a.product_manufacturer_id || (a as any).id || '');
     });
   }, [mappings, products, manufacturers, searchTerm, selectedProductId, selectedManufacturerId, selectedStatus, preferredOnly]);
+
+  const {
+    paginatedItems: paginatedMappings,
+    paginationProps,
+    resetPage
+  } = usePagination(filteredMappings, {
+    initialPageSize: 10,
+    resetDeps: [searchTerm, selectedProductId, selectedManufacturerId, selectedStatus, preferredOnly]
+  });
 
   // KPI Calculations
   const stats = useMemo(() => {
@@ -291,6 +307,7 @@ export const ProductManufacturerMappingModule: React.FC = () => {
       }
 
       addAuditLog('CREATE_PRODUCT_MANUFACTURER', `Created new mapping for product ${prdName} (${prdCode}) with manufacturer ${mfgName}`);
+      resetPage();
     }
 
     setIsModalOpen(false);
@@ -718,7 +735,7 @@ export const ProductManufacturerMappingModule: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredMappings.map(mapping => {
+              paginatedMappings.map(mapping => {
                 const pid = mapping.product_id || mapping.productId || '';
                 const mid = mapping.manufacturer_id || mapping.manufacturerId || '';
                 const prd = getProductRecord(pid);
@@ -980,6 +997,7 @@ export const ProductManufacturerMappingModule: React.FC = () => {
             )}
           </tbody>
         </table>
+        <PaginationControl {...paginationProps} />
       </div>
 
       {/* ── VIEW DETAILS MODAL ────────────────────────────────────── */}

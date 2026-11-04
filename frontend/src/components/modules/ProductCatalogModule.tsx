@@ -5,6 +5,8 @@ import { catalogApi } from '../../services/catalogApi';
 import { Product, ManufacturerProductMapping, LifecycleStatus, AttributeMaster, ProductPrice, ProductTax, ProductUom, CustomerSegment } from '../../types';
 import { ManufacturerProductCatalogTab } from './ManufacturerProductCatalogTab';
 import { ViewModeToggle } from '../common/ViewModeToggle';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 import {
   Package, Search, Factory, Layers, Info, X,
   Plus, Edit3, Eye, AlertTriangle, Power,
@@ -56,6 +58,9 @@ export const ProductCatalogModule: React.FC = () => {
     removeMapping,
     setPreferredManufacturer,
     productTypes,
+    productTypeAttributes,
+    getProductTypeConfiguredAttributes,
+    getProductTypeAttributes,
     unifiedCategories,
     brands,
     attributeMasters,
@@ -383,6 +388,14 @@ export const ProductCatalogModule: React.FC = () => {
       subSubCategory: firstSubSub,
       categoryId: resolved?.category_id || resolved?.id || ''
     }));
+
+    // Reload applicable attributes for the newly selected Product Type
+    const newPtAttrs = getProductTypeConfiguredAttributes(newPtId);
+    const freshAttrMap: Record<string, string> = {};
+    newPtAttrs.forEach(a => {
+      freshAttrMap[a.attribute_id] = '';
+    });
+    setFormAttrValues(freshAttrMap);
   };
 
   const handleCategoryChange = (newCat: string) => {
@@ -396,6 +409,7 @@ export const ProductCatalogModule: React.FC = () => {
     const firstSubSub = matchingSubSubs[0]?.sub_sub_category || '';
     const resolved = matchingSubSubs[0] || matchingSubs[0];
 
+    // Changing Category must NOT change or reset Product Type attributes
     setFormData(prev => ({
       ...prev,
       category: newCat,
@@ -440,11 +454,12 @@ export const ProductCatalogModule: React.FC = () => {
   // Dynamic attribute form values for Add / Edit Product modal
   const [formAttrValues, setFormAttrValues] = useState<Record<string, string>>({});
 
-  // Active configured attributes for the selected category in Add / Edit Product modal (Client: Category Attributes)
-  const modalCategoryConfiguredAttributes = useMemo(() => {
-    if (!formData.categoryId) return [];
-    return getCategoryConfiguredAttributes(formData.categoryId);
-  }, [formData.categoryId, getCategoryConfiguredAttributes, categoryAttributes, attributeMasters]);
+  // Active configured attributes for the selected Product Type in Add / Edit Product modal (Client Requirement Section 5)
+  const modalProductTypeAttributes = useMemo(() => {
+    if (!formData.productTypeId) return [];
+    return getProductTypeConfiguredAttributes(formData.productTypeId);
+  }, [formData.productTypeId, getProductTypeConfiguredAttributes, productTypeAttributes, attributeMasters]);
+  const modalCategoryConfiguredAttributes = modalProductTypeAttributes;
 
   // Active attribute masters list for rendering dynamic attributes
   const activeAttributesList = useMemo(() => {
@@ -510,8 +525,26 @@ export const ProductCatalogModule: React.FC = () => {
       }
 
       return matchesSearch && matchesPt && matchesCat && matchesBrand && matchesStatus && matchesMfg;
+    }).sort((a, b) => {
+      // Latest record first (created_at DESC), secondary stable sort on id DESC
+      const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
+      const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+        return timeB - timeA;
+      }
+      const idA = String(a.id || a.product_code || '');
+      const idB = String(b.id || b.product_code || '');
+      return idB.localeCompare(idA);
     });
   }, [products, mappings, searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus, selectedMfgId, unifiedCategories, brands, productAttributes]);
+
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredProducts.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus, selectedMfgId]
+  });
+  const paginatedProducts = pagination.paginateItems(filteredProducts);
 
   // Open Add Mapping Modal (PRODUCT_MANUFACTURER)
   const handleOpenAddMapping = () => {
@@ -753,16 +786,16 @@ export const ProductCatalogModule: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
-  // Open Manage Dynamic Attributes Modal (PRODUCT_ATTRIBUTE configured for product's Category)
+  // Open Manage Dynamic Attributes Modal (PRODUCT_ATTRIBUTE configured for product's Product Type)
   const handleOpenManageAttributes = (prd?: Product) => {
     const target = prd || selectedProduct;
     if (!target) return;
     const currentAttrs = getProductAttributeMap(target.id);
-    const catId = target.category_id || target.categoryId || '';
-    const configuredAttrs = getCategoryConfiguredAttributes(catId);
+    const ptId = target.product_type_id || target.productTypeId || resolveCategoryRecord(target.category_id || target.categoryId)?.product_type_id || 'pt_med';
+    const configuredAttrs = getProductTypeConfiguredAttributes(ptId);
     const draft: Record<string, string> = {};
     configuredAttrs.forEach(ca => {
-      const aId = ca.attribute.attribute_id;
+      const aId = ca.attribute_id;
       draft[aId] = currentAttrs[aId] || '';
     });
     setAttributeDraftValues(draft);
@@ -773,23 +806,25 @@ export const ProductCatalogModule: React.FC = () => {
   const handleSaveProductAttributes = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
-    const catId = selectedProduct.category_id || selectedProduct.categoryId || '';
-    const configuredAttrs = getCategoryConfiguredAttributes(catId);
+    const ptId = selectedProduct.product_type_id || selectedProduct.productTypeId || resolveCategoryRecord(selectedProduct.category_id || selectedProduct.categoryId)?.product_type_id || 'pt_med';
+    const configuredAttrs = getProductTypeConfiguredAttributes(ptId);
 
     // Validate is_required attributes
     for (const ca of configuredAttrs) {
-      if (ca.attribute.is_required) {
-        const val = (attributeDraftValues[ca.attribute.attribute_id] || '').trim();
+      if (ca.is_required || ca.isRequired) {
+        const aId = ca.attribute_id;
+        const aName = ca.attribute_name || ca.attribute?.attribute_name || aId;
+        const val = (attributeDraftValues[aId] || '').trim();
         if (!val) {
-          alert(`Attribute "${ca.attribute.attribute_name}" is mandatory for this category.`);
+          alert(`Attribute "${aName}" is mandatory for Product Type.`);
           return;
         }
       }
     }
 
     const entries = configuredAttrs.map(ca => ({
-      attribute_id: ca.attribute.attribute_id,
-      attribute_value: attributeDraftValues[ca.attribute.attribute_id] || ''
+      attribute_id: ca.attribute_id,
+      attribute_value: attributeDraftValues[ca.attribute_id] || ''
     }));
     saveProductAttributesBulk(selectedProduct.id, entries);
     addAuditLog('UPDATE_PRODUCT_ATTRIBUTES', `Updated dynamic attributes for product ${selectedProduct.product_code || selectedProduct.code}`);
@@ -845,13 +880,15 @@ export const ProductCatalogModule: React.FC = () => {
       return;
     }
 
-    // 3. Category Attributes Validation (Required Attributes as configured in ATTRIBUTE_MASTER)
-    const configuredAttrs = getCategoryConfiguredAttributes(formData.categoryId);
+    // 3. Product Type Attributes Validation (Required Attributes as configured in PRODUCT_TYPE_ATTRIBUTE)
+    const configuredAttrs = getProductTypeConfiguredAttributes(formData.productTypeId);
     for (const ca of configuredAttrs) {
-      if (ca.attribute.is_required) {
-        const val = (formAttrValues[ca.attribute.attribute_id] || '').trim();
+      if (ca.is_required || ca.isRequired) {
+        const aId = ca.attribute_id;
+        const aName = ca.attribute_name || ca.attribute?.attribute_name || aId;
+        const val = (formAttrValues[aId] || '').trim();
         if (!val) {
-          setModalFormError(`Attribute "${ca.attribute.attribute_name}" is required by Category specifications.`);
+          setModalFormError(`Attribute "${aName}" is required by Product Type specifications.`);
           return;
         }
       }
@@ -901,6 +938,7 @@ export const ProductCatalogModule: React.FC = () => {
       } else {
         savedProduct = await catalogApi.createProduct(apiPayload);
         addProductMaster(savedProduct);
+        pagination.resetPage();
         addAuditLog('CREATE_CENTRAL_PRODUCT', `Created Central Product Master: ${savedProduct.product_name || savedProduct.name} (${savedProduct.product_code || savedProduct.code})`);
         setFeedbackToast({
           type: 'success',
@@ -913,10 +951,10 @@ export const ProductCatalogModule: React.FC = () => {
         setSelectedProduct(savedProduct);
       }
 
-      // Save Dynamic Category Attributes in PRODUCT_ATTRIBUTE
+      // Save Dynamic Product Attributes in PRODUCT_ATTRIBUTE
       const dynamicAttrEntries = configuredAttrs.map(ca => ({
-        attribute_id: ca.attribute.attribute_id,
-        attribute_value: formAttrValues[ca.attribute.attribute_id] || ''
+        attribute_id: ca.attribute_id,
+        attribute_value: formAttrValues[ca.attribute_id] || ''
       }));
       if (dynamicAttrEntries.length > 0) {
         saveProductAttributesBulk(savedProduct.id || targetId, dynamicAttrEntries);
@@ -1065,9 +1103,8 @@ export const ProductCatalogModule: React.FC = () => {
   }, [unifiedCategories, formData.productTypeId]);
 
   // If viewed by Manufacturer role, render "My Product Catalog" for the logged-in manufacturer
-  if (currentRole === 'SUPPLIER') {
-    const loggedInMfg = manufacturers[0];
-    return <ManufacturerProductCatalogTab manufacturer={loggedInMfg} />;
+  if (currentRole === 'SUPPLIER' || (currentRole as string) === 'MANUFACTURER') {
+    return <ManufacturerProductCatalogTab />;
   }
 
   return (
@@ -1385,7 +1422,7 @@ export const ProductCatalogModule: React.FC = () => {
                 No products found matching your search and filter criteria.
               </div>
             ) : (
-              filteredProducts.map(p => {
+              paginatedProducts.map(p => {
                 const badge = getLifecycleBadge(p.lifecycle_status || (p.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'));
                 const brandStr = getBrandName(p);
                 const pShort = p.product_short_name || '—';
@@ -1614,7 +1651,7 @@ export const ProductCatalogModule: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredProducts.map((prd) => {
+                paginatedProducts.map((prd) => {
                   const badge = getLifecycleBadge(prd.lifecycle_status || (prd.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'));
                   const brandStr = getBrandName(prd);
                   const pCode = prd.product_code || prd.code;
@@ -1859,6 +1896,7 @@ export const ProductCatalogModule: React.FC = () => {
           </table>
         )}
       </div>
+      <PaginationControl {...pagination.paginationProps} itemName="products" />
 
       {/* ── INTERACTIVE PRODUCT DETAIL DRAWER ─────────────────────── */}
       {selectedProduct && (
@@ -2127,13 +2165,13 @@ export const ProductCatalogModule: React.FC = () => {
 
                 {(() => {
                   const pAttrs = getProductAttributeMap(selectedProduct.id);
-                  const selCatId = selectedProduct.category_id || selectedProduct.categoryId || '';
-                  const configuredAttrs = getCategoryConfiguredAttributes(selCatId);
+                  const prdPtId = selectedProduct.product_type_id || selectedProduct.productTypeId || resolveCategoryRecord(selectedProduct.category_id || selectedProduct.categoryId)?.product_type_id || 'pt_med';
+                  const configuredAttrs = getProductTypeConfiguredAttributes(prdPtId);
 
                   if (configuredAttrs.length === 0) {
                     return (
                       <div style={{ fontSize: 12.5, color: '#64748B', fontStyle: 'italic', padding: '12px 14px', background: '#FFFFFF', borderRadius: 8, border: '1px dashed #99F6E4' }}>
-                        <div>No dynamic attributes configured for this product's category in Category Master.</div>
+                        <div>No dynamic attributes configured for this product's type in Product Type Master.</div>
                       </div>
                     );
                   }
@@ -2141,20 +2179,22 @@ export const ProductCatalogModule: React.FC = () => {
                   return (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12.5 }}>
                       {configuredAttrs.map(ca => {
-                        const attr = ca.attribute;
-                        const attrId = attr.attribute_id;
+                        const attr = ca.attribute || ca;
+                        const attrId = ca.attribute_id || attr.attribute_id;
+                        const attrName = ca.attribute_name || attr.attribute_name;
+                        const dType = ca.data_type || attr.data_type;
+                        const uom = ca.unit_of_measure || attr.unit_of_measure;
                         const val = pAttrs[attrId];
-                        const uom = attr.unit_of_measure;
                         const remark = ca.remark;
 
                         return (
                           <div key={attrId} style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 6, border: '1px solid #CCFBF1', display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{ color: '#64748B', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
-                                {attr.attribute_name} {uom ? `(${uom})` : ''}
+                                {attrName} {uom ? `(${uom})` : ''}
                               </span>
                               <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#F1F5F9', color: '#475569' }}>
-                                {attr.data_type}
+                                {dType}
                               </span>
                             </div>
                             <strong style={{ color: val ? '#0F172A' : '#94A3B8', fontStyle: val ? 'normal' : 'italic', fontSize: 13, marginTop: 2 }}>
@@ -3246,12 +3286,12 @@ export const ProductCatalogModule: React.FC = () => {
               </div>
 
               {/* ────────────────────────────────────────────────────────── */}
-              {/* 2. CATEGORY ATTRIBUTES (DYNAMIC BY CATEGORY) */}
+              {/* 2. PRODUCT TYPE ATTRIBUTES (DYNAMIC BY PRODUCT TYPE) */}
               {/* ────────────────────────────────────────────────────────── */}
               <div style={{ background: '#FFFFFF', border: '1.5px solid #99F6E4', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Sparkles size={14} /> 2. CATEGORY ATTRIBUTES (SPECIFICATIONS)
+                    <Sparkles size={14} /> 2. PRODUCT TYPE ATTRIBUTES (SPECIFICATIONS)
                   </div>
                   <span style={{
                     fontSize: 11,
@@ -3262,15 +3302,15 @@ export const ProductCatalogModule: React.FC = () => {
                     color: '#0F766E',
                     border: '1px solid #99F6E4'
                   }}>
-                    {modalCategoryConfiguredAttributes.length} / 10 Attributes Configured
+                    {modalProductTypeAttributes.length} Attributes Applicable
                   </span>
                 </div>
 
                 <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.4 }}>
-                  Attributes configured specifically for category <strong>{selectedModalCategoryRecord?.category || formData.categoryId}</strong>. Values are saved to <code>PRODUCT_ATTRIBUTE</code>.
+                  Attributes applicable to Product Type <strong>{(productTypes.find(p => (p.product_type_id || p.id) === formData.productTypeId)?.product_type_name) || formData.productTypeId}</strong>. Values are saved to <code>PRODUCT_ATTRIBUTE</code> table.
                 </div>
 
-                {modalCategoryConfiguredAttributes.length === 0 ? (
+                {modalProductTypeAttributes.length === 0 ? (
                   <div style={{
                     padding: '16px 20px',
                     borderRadius: 8,
@@ -3280,26 +3320,36 @@ export const ProductCatalogModule: React.FC = () => {
                     color: '#64748B',
                     textAlign: 'center'
                   }}>
-                    No attributes are currently assigned to this category. You can configure up to 10 attributes in the <strong>Category Master</strong>.
+                    No attributes are currently assigned to this Product Type. You can configure attributes in <strong>Product Type Master</strong>.
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    {modalCategoryConfiguredAttributes.map(ca => {
-                      const attr = ca.attribute;
-                      const attrId = attr.attribute_id;
+                    {modalProductTypeAttributes.map(ca => {
+                      const attr = ca.attribute || ca;
+                      const attrId = ca.attribute_id || attr.attribute_id;
+                      const attrName = ca.attribute_name || attr.attribute_name;
+                      const isReq = ca.is_required || ca.isRequired;
+                      const dType = ca.data_type || attr.data_type;
+                      const uom = ca.unit_of_measure || attr.unit_of_measure;
                       const val = formAttrValues[attrId] || '';
-                      const listOpts = LIST_ATTRIBUTE_OPTIONS[attr.attribute_code];
+                      const listOpts = (ca.allowed_values && ca.allowed_values.length > 0)
+                        ? ca.allowed_values
+                        : (attr.allowed_values && attr.allowed_values.length > 0)
+                          ? attr.allowed_values
+                          : (attr.allowedValues && attr.allowedValues.length > 0)
+                            ? attr.allowedValues
+                            : LIST_ATTRIBUTE_OPTIONS[ca.attribute_code || attr.attribute_code];
 
                       return (
                         <div key={attrId} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
-                              {attr.attribute_name}
-                              {attr.unit_of_measure ? ` (${attr.unit_of_measure})` : ''}
-                              {attr.is_required && <span style={{ color: '#DC2626' }}> *</span>}
+                              {attrName}
+                              {uom ? ` (${uom})` : ''}
+                              {isReq && <span style={{ color: '#DC2626' }}> *</span>}
                             </label>
                             <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#E2E8F0', color: '#475569' }}>
-                              {attr.data_type}
+                              {dType}
                             </span>
                           </div>
 
@@ -3666,14 +3716,15 @@ export const ProductCatalogModule: React.FC = () => {
             </div>
 
             {(() => {
-              const selCatId = selectedProduct.category_id || selectedProduct.categoryId || '';
-              const configuredAttrs = getCategoryConfiguredAttributes(selCatId);
-              const catRecord = resolveCategoryRecord(selCatId);
+              const ptId = selectedProduct.product_type_id || selectedProduct.productTypeId || resolveCategoryRecord(selectedProduct.category_id || selectedProduct.categoryId)?.product_type_id || 'pt_med';
+              const configuredAttrs = getProductTypeConfiguredAttributes(ptId);
+              const ptObj = (productTypes || []).find(p => (p.product_type_id || p.id) === ptId);
+              const ptName = ptObj?.product_type_name || ptObj?.name || ptId;
 
               return (
                 <form onSubmit={handleSaveProductAttributes} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12, color: '#0F766E', lineHeight: 1.4 }}>
-                    <strong>Category Attributes Architecture:</strong> Only attributes configured for category <strong>{catRecord?.category || selCatId}</strong> in Category Master are active here. Values are stored in <code>PRODUCT_ATTRIBUTE</code> (referenced to <code>ATTRIBUTE_MASTER</code>).
+                    <strong>Product Type Attributes Architecture:</strong> Attributes applicable to Product Type <strong>{ptName}</strong> configured in Product Type Master are active here. Values are stored in <code>PRODUCT_ATTRIBUTE</code> (referenced to <code>ATTRIBUTE_MASTER</code>).
                   </div>
 
                   {configuredAttrs.length === 0 ? (
@@ -3686,26 +3737,36 @@ export const ProductCatalogModule: React.FC = () => {
                       fontSize: 13,
                       color: '#64748B'
                     }}>
-                      No attributes configured for category <strong>{catRecord?.category || selCatId}</strong>. You can configure up to 10 attributes in Category Master.
+                      No attributes configured for Product Type <strong>{ptName}</strong>. You can configure attributes in Product Type Master.
                     </div>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                       {configuredAttrs.map(ca => {
-                        const attr = ca.attribute;
-                        const attrKey = attr.attribute_id;
+                        const attr = ca.attribute || ca;
+                        const attrKey = ca.attribute_id || attr.attribute_id;
+                        const attrName = ca.attribute_name || attr.attribute_name;
+                        const isReq = ca.is_required || ca.isRequired;
+                        const dType = ca.data_type || attr.data_type;
+                        const uom = ca.unit_of_measure || attr.unit_of_measure;
                         const val = attributeDraftValues[attrKey] || '';
-                        const listOpts = LIST_ATTRIBUTE_OPTIONS[attr.attribute_code];
+                        const listOpts = (ca.allowed_values && ca.allowed_values.length > 0)
+                          ? ca.allowed_values
+                          : (attr.allowed_values && attr.allowed_values.length > 0)
+                            ? attr.allowed_values
+                            : (attr.allowedValues && attr.allowedValues.length > 0)
+                              ? attr.allowedValues
+                              : LIST_ATTRIBUTE_OPTIONS[ca.attribute_code || attr.attribute_code];
 
                         return (
-                          <div key={attr.attribute_id}>
+                          <div key={attrKey}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                               <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
-                                {attr.attribute_name}
-                                {attr.unit_of_measure ? ` (${attr.unit_of_measure})` : ''}
-                                {attr.is_required && <span style={{ color: '#DC2626' }}> *</span>}
+                                {attrName}
+                                {uom ? ` (${uom})` : ''}
+                                {isReq && <span style={{ color: '#DC2626' }}> *</span>}
                               </label>
                               <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#E2E8F0', color: '#475569' }}>
-                                {attr.data_type}
+                                {dType}
                               </span>
                             </div>
 
@@ -3715,38 +3776,38 @@ export const ProductCatalogModule: React.FC = () => {
                               </div>
                             )}
 
-                            {attr.data_type === 'LIST' ? (
+                            {dType === 'LIST' ? (
                               <div style={{ display: 'flex', gap: 6 }}>
                                 <input
                                   type="text"
-                                  list={`modal_attr_list_${attr.attribute_id}`}
-                                  placeholder={`Select or type ${attr.attribute_name.toLowerCase()}...`}
+                                  list={`modal_attr_list_${attrKey}`}
+                                  placeholder={`Select or type ${attrName.toLowerCase()}...`}
                                   value={val}
                                   onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.value })}
                                   style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
                                 />
                                 {listOpts && (
-                                  <datalist id={`modal_attr_list_${attr.attribute_id}`}>
+                                  <datalist id={`modal_attr_list_${attrKey}`}>
                                     {listOpts.map(opt => (
                                       <option key={opt} value={opt} />
                                     ))}
                                   </datalist>
                                 )}
                               </div>
-                            ) : attr.data_type === 'BOOLEAN' ? (
+                            ) : dType === 'BOOLEAN' ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38 }}>
                                 <input
                                   type="checkbox"
-                                  id={`modal_attr_check_${attr.attribute_id}`}
+                                  id={`modal_attr_check_${attrKey}`}
                                   checked={val === 'true'}
                                   onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.checked ? 'true' : 'false' })}
                                   style={{ width: 18, height: 18, cursor: 'pointer' }}
                                 />
-                                <label htmlFor={`modal_attr_check_${attr.attribute_id}`} style={{ fontSize: 13, color: '#334155', cursor: 'pointer', fontWeight: 600 }}>
+                                <label htmlFor={`modal_attr_check_${attrKey}`} style={{ fontSize: 13, color: '#334155', cursor: 'pointer', fontWeight: 600 }}>
                                   {val === 'true' ? 'Enabled (True)' : 'Disabled (False)'}
                                 </label>
                               </div>
-                            ) : attr.data_type === 'NUMBER' ? (
+                            ) : dType === 'NUMBER' ? (
                               <input
                                 type="number"
                                 placeholder="e.g. 24"
@@ -3754,7 +3815,7 @@ export const ProductCatalogModule: React.FC = () => {
                                 onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.value })}
                                 style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
                               />
-                            ) : attr.data_type === 'DECIMAL' ? (
+                            ) : dType === 'DECIMAL' ? (
                               <input
                                 type="number"
                                 step="0.01"
@@ -3763,7 +3824,7 @@ export const ProductCatalogModule: React.FC = () => {
                                 onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.value })}
                                 style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
                               />
-                            ) : attr.data_type === 'DATE' ? (
+                            ) : dType === 'DATE' ? (
                               <input
                                 type="date"
                                 value={val}
@@ -3773,7 +3834,7 @@ export const ProductCatalogModule: React.FC = () => {
                             ) : (
                               <input
                                 type="text"
-                                placeholder={`Enter ${attr.attribute_name.toLowerCase()}...`}
+                                placeholder={`Enter ${attrName.toLowerCase()}...`}
                                 value={val}
                                 onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.value })}
                                 style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}

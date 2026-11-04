@@ -7,11 +7,13 @@ import {
   Factory, Award, Check, User, Plus, FileCheck, Calendar, Shield, AlertCircle, RefreshCw, ExternalLink,
   Image as ImageIcon, ZoomIn, MapPin, ChevronDown, ChevronUp, Layers, Package, Phone, Mail, CheckCircle
 } from 'lucide-react';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export const MANDATORY_MFR_CERTIFICATIONS = [
   { key: 'mfgLicense', name: 'Manufacturing License' },
-  { key: 'gmpCert', name: 'GLP Certificate' },
-  { key: 'whoGmpCert', name: 'WHO-GLP Certificate' },
+  { key: 'gmpCert', name: 'GMP Certificate' },
+  { key: 'whoGmpCert', name: 'WHO-GMP Certificate' },
   { key: 'isoCert', name: 'ISO Certification' },
   { key: 'pollutionCert', name: 'Pollution Certificate' },
 ];
@@ -60,11 +62,11 @@ export const isDocMatchingMandatory = (docCategory: string, docDisplayName: stri
   const name = (docDisplayName || '').toLowerCase();
   const key = mandatoryKey.toLowerCase();
   if (cat === key) return true;
-  if (key === 'gmpcert' && (cat.includes('glp') || name.includes('glp') || cat === 'gmpcert')) return true;
   if (key === 'whogmpcert' && (cat.includes('who') || name.includes('who'))) return true;
-  if (key === 'mfglicense' && (cat.includes('mfg') || name.includes('manufacturing license') || cat.includes('license'))) return true;
+  if (key === 'gmpcert' && !cat.includes('who') && !name.includes('who') && (cat.includes('gmp') || name.includes('gmp') || cat.includes('glp') || name.includes('glp') || cat === 'gmpcert')) return true;
+  if (key === 'mfglicense' && (cat.includes('mfg') || name.includes('manufacturing') || cat.includes('license'))) return true;
   if (key === 'isocert' && (cat.includes('iso') || name.includes('iso'))) return true;
-  if (key === 'pollutioncert' && (cat.includes('pollution') || name.includes('pollution'))) return true;
+  if (key === 'pollutioncert' && (cat.includes('pollution') || name.includes('pollution') || cat.includes('spcb') || name.includes('spcb'))) return true;
   return cat.includes(key) || name.includes(key);
 };
 
@@ -224,20 +226,40 @@ export const ManufacturerVerificationModule: React.FC = () => {
       if (activeStatusTab === 'APPROVED') return r.status === 'APPROVED';
       if (activeStatusTab === 'REJECTED') return r.status === 'REJECTED';
       return true;
+    }).sort((a, b) => {
+      // Latest record first (created_at DESC), secondary stable sort on registrationCode DESC
+      const timeA = new Date((a as any).createdAt || (a as any).created_at || a.registrationDate || 0).getTime();
+      const timeB = new Date((b as any).createdAt || (b as any).created_at || b.registrationDate || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+        return timeB - timeA;
+      }
+      return String(b.registrationCode || '').localeCompare(String(a.registrationCode || ''));
     });
   }, [records, searchTerm, activeStatusTab]);
+
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredRecords.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, activeStatusTab]
+  });
+  const paginatedRecords = pagination.paginateItems(filteredRecords);
 
   // Real document verification readiness checks
   const missingCertifications = useMemo(() => {
     if (!selectedDetail) return [];
-    return MANDATORY_MFR_CERTIFICATIONS.filter(mand =>
-      !selectedDetail.documents?.some(d => isDocMatchingMandatory(d.category, d.categoryDisplayName, mand.key))
-    );
+    const isWhoGmpExempt = (selectedDetail as any).whoGmpApplicable === false;
+    return MANDATORY_MFR_CERTIFICATIONS.filter(mand => {
+      if (mand.key === 'whoGmpCert' && isWhoGmpExempt) return false;
+      return !selectedDetail.documents?.some(d => isDocMatchingMandatory(d.category, d.categoryDisplayName, mand.key));
+    });
   }, [selectedDetail]);
 
   const unverifiedMandatory = useMemo(() => {
     if (!selectedDetail) return [];
+    const isWhoGmpExempt = (selectedDetail as any).whoGmpApplicable === false;
     return MANDATORY_MFR_CERTIFICATIONS.filter(mand => {
+      if (mand.key === 'whoGmpCert' && isWhoGmpExempt) return false;
       const doc = selectedDetail.documents?.find(d => isDocMatchingMandatory(d.category, d.categoryDisplayName, mand.key));
       return !doc || (doc.status !== 'APPROVED' && doc.status !== 'VALID');
     });
@@ -730,7 +752,7 @@ export const ManufacturerVerificationModule: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredRecords.map(record => {
+              paginatedRecords.map(record => {
                 const isSelected = record.registrationCode === selectedRecordId;
                 const isActive = record.status === 'APPROVED';
 
@@ -836,6 +858,7 @@ export const ManufacturerVerificationModule: React.FC = () => {
           </tbody>
         </table>
       </div>
+      <PaginationControl {...pagination.paginationProps} itemName="manufacturer registrations" />
 
       {/* ── 5. MANUFACTURER VERIFICATION DETAIL DRAWER (MATCHES CUSTOMER VERIFICATION DRAWER) ── */}
       {selectedRecordId && (
@@ -935,6 +958,25 @@ export const ManufacturerVerificationModule: React.FC = () => {
                       {selectedRecord?.status === 'APPROVED' ? 'ACTIVE' : 'PENDING ACTIVATION'}
                     </div>
                   </div>
+                  <div>
+                    <span style={{ color: '#64748B' }}>Regulatory Compliance Scope:</span>
+                    <div style={{ marginTop: 2 }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        background: (selectedDetail as any)?.whoGmpApplicable === false ? '#F1F5F9' : '#ECFDF5',
+                        color: (selectedDetail as any)?.whoGmpApplicable === false ? '#475569' : '#047857',
+                        border: (selectedDetail as any)?.whoGmpApplicable === false ? '1px solid #CBD5E1' : '1px solid #A7F3D0'
+                      }}>
+                        {(selectedDetail as any)?.whoGmpApplicable === false ? 'Domestic Schedule M Only (WHO-GMP Exempt)' : 'WHO-GMP Certified / Export Plant'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 {selectedDetail?.rejectionReason && (
@@ -1022,7 +1064,7 @@ export const ManufacturerVerificationModule: React.FC = () => {
                               </div>
 
                               <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
-                                File: <strong>{doc.fileName}</strong> ({formatFileSize(doc.fileSize)}) • Expiry: <strong>{formatDate(doc.expiryDate)}</strong>
+                                File: <strong>{doc.fileName}</strong> ({formatFileSize(doc.fileSize)}){doc.expiryDate ? <> • Expiry: <strong>{formatDate(doc.expiryDate)}</strong></> : null}
                               </div>
 
                               {doc.rejectionReason && (
@@ -1701,7 +1743,7 @@ export const ManufacturerVerificationModule: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. WHO-GLP Certificate or Valid Form 25 License"
+                  placeholder="e.g. WHO-GMP Certificate or Valid Form 25 License"
                   value={missingDocInput}
                   onChange={e => setMissingDocInput(e.target.value)}
                   style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12, boxSizing: 'border-box' }}

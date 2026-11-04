@@ -22,6 +22,8 @@ import {
   Key, ArrowRight, AlertCircle, Plus, Check, Mail, Phone, MapPin, Award, Globe,
   Star, Tag, ExternalLink
 } from 'lucide-react';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 const REQUIRED_DOC_TYPES: CustomerVerificationDocumentType[] = [
   'GST Certificate',
@@ -260,6 +262,9 @@ export const CustomerVerificationModule: React.FC = () => {
 
   // Decision Dialog States
   const [decisionModalType, setDecisionModalType] = useState<'APPROVE' | 'REJECT' | 'NEED_MORE_DOCS' | null>(null);
+  const [approvalClassification, setApprovalClassification] = useState<'REGULAR' | 'SPECIAL_PARTY'>('REGULAR');
+  const [approvalRemarks, setApprovalRemarks] = useState<string>('');
+  const [classificationRemarksInput, setClassificationRemarksInput] = useState<string>('');
   const [rejectionReasonInput, setRejectionReasonInput] = useState<string>('');
   const [moreDocsNotesInput, setMoreDocsNotesInput] = useState<string>('');
 
@@ -322,7 +327,23 @@ export const CustomerVerificationModule: React.FC = () => {
     if (activeStatusTab === 'NEED_MORE_DOCS') return r.verificationStatus === 'Need More Docs';
     if (activeStatusTab === 'REJECTED') return r.verificationStatus === 'Rejected';
     return true;
+  }).sort((a, b) => {
+    // Latest record first (created_at DESC), secondary stable sort on id DESC
+    const timeA = new Date((a as any).createdAt || (a as any).created_at || a.registrationDate || 0).getTime();
+    const timeB = new Date((b as any).createdAt || (b as any).created_at || b.registrationDate || 0).getTime();
+    if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+      return timeB - timeA;
+    }
+    return String(b.id || '').localeCompare(String(a.id || ''));
   });
+
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredRecords.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, customerTypeFilter, classificationFilter, activeStatusTab]
+  });
+  const paginatedRecords = pagination.paginateItems(filteredRecords);
 
   // Handle Registration Form Submit
   const handleCreateRequestSubmit = async (e: React.FormEvent) => {
@@ -343,10 +364,14 @@ export const CustomerVerificationModule: React.FC = () => {
     setIsActionLoading(true);
     try {
       const targetCode = selectedRecord.requestCode || selectedRecord.id;
-      const updated = await adminVerificationApi.approveCustomerVerification(targetCode);
-      setToastMessage(`✓ Successfully approved ${selectedRecord.companyName}. Customer Code: ${updated.customerCode || 'Issued'}`);
-      addAuditLog('Customer Verification', `Approved ${selectedRecord.companyName} (${targetCode})`);
+      const updated = await adminVerificationApi.approveCustomerVerification(targetCode, {
+        customerClassification: approvalClassification,
+        remarks: approvalRemarks.trim() || undefined,
+      });
+      setToastMessage(`✓ Successfully approved ${selectedRecord.companyName} as ${approvalClassification === 'SPECIAL_PARTY' ? 'Special Buyer' : 'Normal Buyer'}. Customer Code: ${updated.customerCode || 'Issued'}`);
+      addAuditLog('Customer Verification', `Approved ${selectedRecord.companyName} as ${approvalClassification} (${targetCode})`);
       setDecisionModalType(null);
+      setApprovalRemarks('');
       await loadVerifications();
     } catch (err: any) {
       alert(`Approval failed: ${err.message}`);
@@ -459,11 +484,12 @@ export const CustomerVerificationModule: React.FC = () => {
     }
   };
 
-  const handleUpdateClassification = async (recordId: string, classification: 'REGULAR' | 'SPECIAL_PARTY') => {
+  const handleUpdateClassification = async (recordId: string, classification: 'REGULAR' | 'SPECIAL_PARTY', remarks?: string) => {
     try {
-      await adminVerificationApi.updateCustomerClassification(recordId, classification);
-      setToastMessage(`Customer classification updated to ${classification === 'SPECIAL_PARTY' ? 'Special Party' : 'Regular'}`);
+      await adminVerificationApi.updateCustomerClassification(recordId, classification, remarks);
+      setToastMessage(`Customer classification updated to ${classification === 'SPECIAL_PARTY' ? 'Special Party / Special Buyer' : 'Standard Regular Buyer'}`);
       setClassificationConfirmModal(null);
+      setClassificationRemarksInput('');
       await loadVerifications();
     } catch (err: any) {
       alert(`Classification update failed: ${err.message}`);
@@ -722,7 +748,7 @@ export const CustomerVerificationModule: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredRecords.map(record => (
+              paginatedRecords.map(record => (
                 <tr key={record.id} style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 120ms ease' }} className="hover:bg-slate-50">
                   <td style={{ padding: '16px 18px', fontSize: 13, fontWeight: 600, color: '#0F172A' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -796,6 +822,7 @@ export const CustomerVerificationModule: React.FC = () => {
           </tbody>
         </table>
       </div>
+      <PaginationControl {...pagination.paginationProps} itemName="verification requests" />
 
       {/* ── CUSTOMER VERIFICATION DETAIL DRAWER (13 SECTIONS EXACTLY) ───────── */}
       {selectedRecord && (
@@ -812,6 +839,37 @@ export const CustomerVerificationModule: React.FC = () => {
                 <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: '4px 0 0' }}>
                   {selectedRecord.companyName}
                 </h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                  {selectedRecord.customerClassification === 'SPECIAL_PARTY' ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 800, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
+                      <Star size={12} fill="#0E7490" /> Special Buyer (Pre-Agreed Pricing Permitted)
+                    </span>
+                  ) : (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1' }}>
+                      Standard Normal Buyer (Competitive Bidding)
+                    </span>
+                  )}
+                  <button
+                    onClick={() => {
+                      const nextClassification = selectedRecord.customerClassification === 'SPECIAL_PARTY' ? 'REGULAR' : 'SPECIAL_PARTY';
+                      setClassificationConfirmModal({
+                        isOpen: true,
+                        targetRecordId: selectedRecord.requestCode || selectedRecord.id,
+                        targetCompanyName: selectedRecord.companyName,
+                        targetClassification: nextClassification,
+                      });
+                    }}
+                    style={{
+                      padding: '3px 10px', fontSize: 11, fontWeight: 700, borderRadius: 5,
+                      background: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#FFFBEB' : '#ECFEFF',
+                      color: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#92400E' : '#0E7490',
+                      border: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '1px solid #FCD34D' : '1px solid #A5F3FC',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {selectedRecord.customerClassification === 'SPECIAL_PARTY' ? 'Change to Normal Buyer' : '★ Promote to Special Buyer'}
+                  </button>
+                </div>
               </div>
               <button onClick={() => setSelectedRecordId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 4 }}>
                 <X size={20} />
@@ -1601,28 +1659,108 @@ export const CustomerVerificationModule: React.FC = () => {
       {/* ── DECISION MODAL DIALOGS ────────────────────────────── */}
       {decisionModalType === 'APPROVE' && selectedRecord && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(3px)' }}>
-          <div style={{ width: '100%', maxWidth: 480, background: '#FFFFFF', borderRadius: 14, padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+          <div style={{ width: '100%', maxWidth: 540, background: '#FFFFFF', borderRadius: 14, padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#16A34A', fontWeight: 800, fontSize: 16 }}>
               <CheckCircle2 size={20} /> Approve Customer Verification
             </div>
-            <div style={{ fontSize: 13, color: '#334155', marginTop: 12, lineHeight: 1.5 }}>
-              Are you sure you want to approve <strong>{selectedRecord.companyName}</strong>?
+            <div style={{ fontSize: 13, color: '#334155', marginTop: 10, lineHeight: 1.5 }}>
+              Select buyer classification and confirm statutory approval for <strong>{selectedRecord.companyName}</strong>:
             </div>
-            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: 12, marginTop: 12, fontSize: 12, color: '#166534' }}>
-              <strong>Execution Sequence:</strong>
-              <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                <li>Status becomes <strong>Approved</strong></li>
-                <li>System auto-generates <strong>Customer Code</strong> (e.g. CUS000123)</li>
-                <li>Creates <strong>Portal Login Credentials</strong></li>
-                <li>Account status becomes <strong>Active</strong></li>
-              </ol>
+
+            {/* Buyer Classification Selection */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+              <label
+                onClick={() => setApprovalClassification('REGULAR')}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 8,
+                  border: approvalClassification === 'REGULAR' ? '2px solid #2563EB' : '1px solid #CBD5E1',
+                  background: approvalClassification === 'REGULAR' ? '#EFF6FF' : '#FFFFFF',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10
+                }}
+              >
+                <input
+                  type="radio"
+                  name="approvalClass"
+                  checked={approvalClassification === 'REGULAR'}
+                  onChange={() => setApprovalClassification('REGULAR')}
+                  style={{ marginTop: 3 }}
+                />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#1E293B' }}>
+                    Standard Normal Buyer
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                    Standard procurement flow, competitive manufacturer bidding, standard quotation cycle.
+                  </div>
+                </div>
+              </label>
+
+              <label
+                onClick={() => setApprovalClassification('SPECIAL_PARTY')}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 8,
+                  border: approvalClassification === 'SPECIAL_PARTY' ? '2px solid #0E7490' : '1px solid #CBD5E1',
+                  background: approvalClassification === 'SPECIAL_PARTY' ? '#ECFEFF' : '#FFFFFF',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10
+                }}
+              >
+                <input
+                  type="radio"
+                  name="approvalClass"
+                  checked={approvalClassification === 'SPECIAL_PARTY'}
+                  onChange={() => setApprovalClassification('SPECIAL_PARTY')}
+                  style={{ marginTop: 3 }}
+                />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#0E7490', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Star size={13} fill="#0E7490" /> Special Buyer (Special Party Pre-Agreed Pricing)
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                    Explicitly reviewed buyer eligible for pre-agreed unit pricing workflow, skipping competitive bidding.
+                  </div>
+                </div>
+              </label>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-              <button onClick={() => setDecisionModalType(null)} style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+
+            {/* Compliance remarks */}
+            <div style={{ marginTop: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                Reviewer Remarks / Approval Notes (persisted in audit trail)
+              </label>
+              <textarea
+                rows={2}
+                placeholder="e.g. Verified statutory PAN, GSTIN & Drug License. Compliance desk approval granted."
+                value={approvalRemarks}
+                onChange={e => setApprovalRemarks(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 12.5, outline: 'none' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+              <button
+                onClick={() => setDecisionModalType(null)}
+                style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+              >
                 Cancel
               </button>
-              <button onClick={handleExecuteApprove} style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: '#16A34A', color: '#FFF', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
-                Confirm & Approve →
+              <button
+                onClick={handleExecuteApprove}
+                style={{
+                  padding: '8px 20px', borderRadius: 6, border: 'none',
+                  background: approvalClassification === 'SPECIAL_PARTY' ? '#0E7490' : '#16A34A',
+                  color: '#FFF', fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6
+                }}
+              >
+                Confirm & Approve as {approvalClassification === 'SPECIAL_PARTY' ? 'Special Buyer' : 'Normal Buyer'} →
               </button>
             </div>
           </div>
@@ -1863,8 +2001,21 @@ export const CustomerVerificationModule: React.FC = () => {
 
             <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.5, background: '#F8FAFC', padding: 14, borderRadius: 8, border: '1px solid #E2E8F0' }}>
               {classificationConfirmModal.targetClassification === 'SPECIAL_PARTY'
-                ? 'This customer will be identified as a Special Party across the FactoryGrid procurement workflow.'
-                : 'This will remove the Special Party classification from this customer.'}
+                ? 'This customer will be identified as a Special Party across the FactoryGrid procurement workflow and will receive the Special Buyer RFQ interface with pre-agreed pricing permissions.'
+                : 'This will revert this customer to a Standard Regular Buyer with competitive bidding workflow.'}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                Reason / Remarks (persisted in PostgreSQL audit trail)
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Enter justification for classification change..."
+                value={classificationRemarksInput}
+                onChange={e => setClassificationRemarksInput(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 12.5, outline: 'none' }}
+              />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 6 }}>
@@ -1878,7 +2029,11 @@ export const CustomerVerificationModule: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  handleUpdateClassification(classificationConfirmModal.targetRecordId, classificationConfirmModal.targetClassification);
+                  handleUpdateClassification(
+                    classificationConfirmModal.targetRecordId,
+                    classificationConfirmModal.targetClassification,
+                    classificationRemarksInput.trim() || undefined
+                  );
                 }}
                 style={{
                   height: 38, padding: '0 18px', borderRadius: 8,

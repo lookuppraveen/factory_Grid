@@ -10,6 +10,8 @@ import {
   Layers, Package, AlertCircle, File, MoreVertical, Activity, ArrowLeft, XCircle,
   Receipt, DollarSign, Send, Printer, CreditCard, Eye
 } from 'lucide-react';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 interface ShipmentModuleProps {
   onNavigateTab?: (tabId: string) => void;
@@ -1029,17 +1031,40 @@ export const ShipmentModule: React.FC<ShipmentModuleProps> = ({ onNavigateTab })
     alert(`✔ Payment Entry Submitted!\n\nInvoice: ${targetInvoiceForModal.invoiceNumber}\nAmount Paid: ₹${amt.toLocaleString()}\nMethod: ${paymentMethodSelect}\nUTR / Ref #: ${paymentRefInput}\nNew Status: ${newStatus.replace(/_/g, ' ')}\n\nAccounts Receivable updated successfully.`);
   };
 
-  // Active Dispatches Queue (ONLY active non-closed shipments)
+  // Active Dispatches Queue (ONLY active non-closed shipments, latest first)
   const activeDispatchesList = Object.values(subOrdersStore)
     .filter((s: any) => s.shipment && s.shipment.shipmentStatus !== 'CLOSED')
-    .map((s: any) => s.shipment);
+    .map((s: any) => s.shipment)
+    .sort((a: any, b: any) => {
+      const timeA = new Date(a.createdAt || a.dispatchDate || 0).getTime();
+      const timeB = new Date(b.createdAt || b.dispatchDate || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) return timeB - timeA;
+      return String(b.trackingNumber || b.id || '').localeCompare(String(a.trackingNumber || a.id || ''));
+    });
 
-  // Delivery History Archive (ONLY closed shipments)
+  // Delivery History Archive (ONLY closed shipments, latest first)
   const activeClosedShipments = Object.values(subOrdersStore)
     .filter((s: any) => s.shipment && s.shipment.shipmentStatus === 'CLOSED')
     .map((s: any) => s.shipment);
 
-  const deliveryHistoryList = [...activeClosedShipments, ...historicalShipments];
+  const deliveryHistoryList = [...activeClosedShipments, ...historicalShipments].sort((a: any, b: any) => {
+    const timeA = new Date(a.actualDeliveryDate || a.dispatchDate || 0).getTime();
+    const timeB = new Date(b.actualDeliveryDate || b.dispatchDate || 0).getTime();
+    if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) return timeB - timeA;
+    return String(b.trackingNumber || b.id || '').localeCompare(String(a.trackingNumber || a.id || ''));
+  });
+
+  const dispatchPagination = usePagination({
+    totalItems: activeDispatchesList.length,
+    initialPageSize: 10
+  });
+  const paginatedDispatches = dispatchPagination.paginateItems(activeDispatchesList);
+
+  const historyPagination = usePagination({
+    totalItems: deliveryHistoryList.length,
+    initialPageSize: 10
+  });
+  const paginatedDeliveryHistory = historyPagination.paginateItems(deliveryHistoryList);
 
   // Helper: Format Time String
   const getTimeString = () => {
@@ -2422,7 +2447,7 @@ export const ShipmentModule: React.FC<ShipmentModuleProps> = ({ onNavigateTab })
                   </tr>
                 </thead>
                 <tbody>
-                  {activeDispatchesList.map((shp: any) => (
+                  {paginatedDispatches.map((shp: any) => (
                     <tr
                       key={shp.id}
                       onClick={() => handleOpenSpecificShipment(shp.id, shp.trackingNumber)}
@@ -2471,6 +2496,7 @@ export const ShipmentModule: React.FC<ShipmentModuleProps> = ({ onNavigateTab })
                   ))}
                 </tbody>
               </table>
+              <PaginationControl {...dispatchPagination.paginationProps} itemName="dispatches" />
             </div>
           )}
         </div>
@@ -2615,7 +2641,7 @@ export const ShipmentModule: React.FC<ShipmentModuleProps> = ({ onNavigateTab })
                   </tr>
                 </thead>
                 <tbody>
-                  {deliveryHistoryList.map((shp: any) => (
+                  {paginatedDeliveryHistory.map((shp: any) => (
                     <tr key={shp.id} onClick={() => handleOpenSpecificShipment(shp.id, shp.trackingNumber)} style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}>
                       <td style={{ padding: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>{shp.trackingNumber}</td>
                       <td style={{ padding: 12, fontFamily: 'monospace' }}>{shp.subOrderNumber}</td>
@@ -2635,6 +2661,7 @@ export const ShipmentModule: React.FC<ShipmentModuleProps> = ({ onNavigateTab })
                   ))}
                 </tbody>
               </table>
+              <PaginationControl {...historyPagination.paginationProps} itemName="deliveries" />
             </div>
           )}
         </div>

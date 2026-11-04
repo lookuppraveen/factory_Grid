@@ -4,6 +4,8 @@ import { MasterOrder, AdvanceMethod } from '../../types';
 import { ShoppingBag, Search, Eye, X, CheckCircle2, Clock, RefreshCw, Send, ShieldCheck, CheckSquare, Square, PauseCircle, AlertTriangle, Star, Lock, ThumbsUp, ThumbsDown, CreditCard, IndianRupee, ChevronDown } from 'lucide-react';
 import { AdvancePaymentSection } from '../common/AdvancePaymentSection';
 import { EnterpriseMetricBar } from '../common/EnterpriseMetricBar';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export const AdminOrderMonitor: React.FC = () => {
   const {
@@ -152,8 +154,22 @@ export const AdminOrderMonitor: React.FC = () => {
       if (poStatusFilter === 'REJECTED' && !isRejected) return false;
 
       return true;
+    }).sort((a, b) => {
+      const dateA = new Date(a.createdDate || a.createdAt || (a as any).created_at || 0).getTime();
+      const dateB = new Date(b.createdDate || b.createdAt || (b as any).created_at || 0).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return (b.id || '').localeCompare(a.id || '');
     });
   }, [orders, searchTerm, approvalFilter, advanceFilter, poStatusFilter]);
+
+  const {
+    paginatedItems: paginatedOrders,
+    paginationProps,
+    resetPage
+  } = usePagination(filteredOrders, {
+    initialPageSize: 10,
+    resetDeps: [searchTerm, approvalFilter, advanceFilter, poStatusFilter]
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 48, background: '#F8FAFC', color: '#0F172A', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -291,13 +307,13 @@ export const AdminOrderMonitor: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.length === 0 ? (
+              {paginatedOrders.length === 0 ? (
                 <tr>
                   <td colSpan={9} style={{ padding: '32px 16px', textAlign: 'center', color: '#94A3B8' }}>
                     No purchase orders found matching the filter criteria.
                   </td>
                 </tr>
-              ) : filteredOrders.map(ord => {
+              ) : paginatedOrders.map(ord => {
                 const isHeld = ord.isOnHold || ord.status === 'ON_HOLD';
                 const isApproved = ord.adminApprovalStatus === 'APPROVED' || ord.status === 'CONFIRMED_RELEASED' || ord.status === 'PENDING_ADVANCE';
                 const isRejected = ord.status === 'REJECTED_BY_ADMIN' || ord.adminApprovalStatus === 'REJECTED';
@@ -506,6 +522,7 @@ export const AdminOrderMonitor: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <PaginationControl {...paginationProps} />
       </div>
 
       {/* ── MANDATORY HOLD REASON NOTE MODAL ── */}

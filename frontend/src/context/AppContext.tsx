@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   UserRole, Customer, Manufacturer, Product, RFQ,
   ManufacturerQuote, MasterOrder, MasterOrderStatus, Invoice, ComplianceCase,
@@ -8,7 +8,7 @@ import {
   CustomerVerificationStatus, CustomerVerificationDocument,
   UserProfile, OrganizationProfile, UserDocument, ProfileDocStatus, DocumentVersion,
   CustomerClassification, AdvanceMethod, AdvanceStatus, AdvancePaymentRecord,
-  ProductType, Brand, Category, AttributeMaster, ProductAttribute, CategoryAttribute, CustomerSegment,
+  ProductType, Brand, Category, AttributeMaster, ProductAttribute, CategoryAttribute, ProductTypeAttribute, CustomerSegment,
   ProductPrice, ProductTax, ProductUom, ManufacturerDirectOrderEligibility,
   CustomerQuote, CustomerQuoteLine, CustomerQuoteStatus, OrderLine, ProductManufacturer
 } from '../types';
@@ -33,6 +33,7 @@ import { verifyTOTPToken, generateRecoveryCodes } from '../services/auth/totpUti
 import { authApi, AuthUser } from '../services/authApi';
 import { adminVerificationApi } from '../services/adminVerificationApi';
 import { catalogApi } from '../services/catalogApi';
+import { rfqApi } from '../services/rfqApi';
 
 export interface TwoFactorState {
   isEnabled: boolean;
@@ -45,35 +46,46 @@ interface AppContextType {
 
   // ── Canonical Domain Entities & Master Models ──
   productTypes: ProductType[];
-  addProductType: (newType: ProductType) => void;
-  updateProductType: (id: string, updates: Partial<ProductType>) => void;
-  deleteProductType: (id: string) => void;
-  toggleProductTypeStatus: (id: string) => void;
+  addProductType: (newType: ProductType) => Promise<any> | void;
+  updateProductType: (id: string, updates: Partial<ProductType>) => Promise<any> | void;
+  deleteProductType: (id: string) => Promise<any> | void;
+  toggleProductTypeStatus: (id: string) => Promise<any> | void;
+  refreshProductTypes: () => Promise<void>;
   unifiedCategories: Category[];
-  addUnifiedCategory: (cat: Category) => void;
-  updateUnifiedCategory: (id: string, updates: Partial<Category>) => void;
-  deleteUnifiedCategory: (id: string) => void;
-  toggleUnifiedCategoryStatus: (id: string) => void;
+  addUnifiedCategory: (cat: Category) => Promise<any> | void;
+  updateUnifiedCategory: (id: string, updates: Partial<Category>) => Promise<any> | void;
+  deleteUnifiedCategory: (id: string) => Promise<any> | void;
+  toggleUnifiedCategoryStatus: (id: string) => Promise<any> | void;
   brands: Brand[];
   addBrand: (newBrand: Brand) => void;
   updateBrand: (id: string, updates: Partial<Brand>) => void;
   deleteBrand: (id: string) => void;
   toggleBrandStatus: (id: string) => void;
-  unifiedCategories: Category[];
   attributeMasters: AttributeMaster[];
   productAttributes: ProductAttribute[];
-  addAttributeMaster: (attr: AttributeMaster) => void;
-  updateAttributeMaster: (id: string, updates: Partial<AttributeMaster>) => void;
+  addAttributeMaster: (attr: AttributeMaster) => Promise<any> | void;
+  updateAttributeMaster: (id: string, updates: Partial<AttributeMaster>) => Promise<any> | void;
+  toggleAttributeMasterStatus: (id: string) => Promise<any> | void;
+  refreshAttributeMasters: () => Promise<void>;
+  refreshUnifiedCategories: () => Promise<void>;
   addProductAttribute: (pa: ProductAttribute) => void;
   updateProductAttribute: (id: string, updates: Partial<ProductAttribute>) => void;
   saveProductAttributesBulk: (productId: string, attributes: { attribute_id: string; attribute_value: string }[]) => void;
   getProductAttributes: (productId: string) => Record<string, string>;
   getProductAttributeValues: (productId: string) => { attribute: AttributeMaster; value: string }[];
+  productTypeAttributes: ProductTypeAttribute[];
+  getProductTypeAttributes: (productTypeId: string) => ProductTypeAttribute[];
+  getProductTypeConfiguredAttributes: (productTypeId: string) => { attribute: AttributeMaster; remark?: string; product_type_attribute_id: string; is_required: boolean; display_order: number }[];
+  addProductTypeAttribute: (pta: { product_type_id: string; attribute_id: string; is_required?: boolean; display_order?: number; remark?: string; lifecycle_status?: string }) => Promise<{ success: boolean; error?: string }>;
+  updateProductTypeAttribute: (productTypeId: string, attributeId: string, updates: Partial<ProductTypeAttribute>) => Promise<{ success: boolean; error?: string }>;
+  removeProductTypeAttribute: (productTypeId: string, attributeId: string) => Promise<{ success: boolean; error?: string }>;
+  bulkSaveProductTypeAttributes: (productTypeId: string, attributes: Array<{ attribute_id: string; is_required?: boolean; display_order?: number; remark?: string; lifecycle_status?: string }>) => Promise<{ success: boolean; error?: string }>;
+  refreshProductTypeAttributes: (productTypeId?: string) => Promise<void>;
   categoryAttributes: CategoryAttribute[];
-  addCategoryAttribute: (catAttr: CategoryAttribute) => { success: boolean; error?: string };
-  removeCategoryAttribute: (categoryId: string, attributeId: string) => void;
+  addCategoryAttribute: (catAttr: CategoryAttribute) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
+  removeCategoryAttribute: (categoryId: string, attributeId: string) => Promise<void> | void;
   updateCategoryAttributeRemark: (categoryId: string, attributeId: string, remark: string) => void;
-  setCategoryAttributesForCategory: (categoryId: string, attributes: { attribute_id: string; remark?: string }[]) => { success: boolean; error?: string };
+  setCategoryAttributesForCategory: (categoryId: string, attributes: { attribute_id: string; remark?: string; is_required?: boolean; display_order?: number }[]) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
   getCategoryAttributes: (categoryId: string) => CategoryAttribute[];
   getCategoryConfiguredAttributes: (categoryId: string) => { attribute: AttributeMaster; remark?: string; category_attribute_id: string }[];
   customerSegments: CustomerSegment[];
@@ -327,6 +339,9 @@ interface AppContextType {
   activeBuyerAccount: 'NORMAL' | 'SPECIAL_PARTY';
   setActiveBuyerAccount: (account: 'NORMAL' | 'SPECIAL_PARTY') => void;
   resetDemoState: () => void;
+  buyerBackendProfile: any;
+  isResolvingBuyerProfile: boolean;
+  refreshBuyerProfile: () => Promise<any>;
 
   // My Profile & Organization Profile Management
   userProfile: UserProfile;
@@ -748,6 +763,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (refreshToken) localStorage.setItem('fg_refresh_token', refreshToken);
       if (newAuthUser) localStorage.setItem('fg_auth_user', JSON.stringify(newAuthUser));
     }
+    if (effectiveRole === 'BUYER') {
+      setTimeout(() => {
+        refreshBuyerProfile();
+      }, 50);
+    }
   };
 
   const logout = () => {
@@ -832,7 +852,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           jobTitle: user.jobTitle || (mappedRole === 'BUYER' ? 'Procurement Lead' : mappedRole === 'ADMIN' ? 'System Administrator' : 'Plant Head'),
           role: mappedRole,
           department: user.department || 'Operations',
-          accountStatus: 'Active',
+          accountStatus: (user.accountStatus as any) || 'Active',
           lastLogin: 'Just now',
           avatarUrl: ''
         });
@@ -844,27 +864,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           companyCode: user.companyCode || user.userCode || '',
           contactEmail: user.email
         }));
+
+        if (mappedRole === 'BUYER') {
+          refreshBuyerProfile();
+        }
       })
       .catch(() => {
         logout();
       });
   }, []);
 
-  // Active Buyer Account State (Normal Buyer vs Special Party Demo Buyer)
+  // Real Authenticated Buyer Profile State (resolved from PostgreSQL backend)
+  const [buyerBackendProfile, setBuyerBackendProfile] = useState<any>(null);
+  const [isResolvingBuyerProfile, setIsResolvingBuyerProfile] = useState<boolean>(false);
+
+  // Synchronizes buyer's effective customer classification directly from backend
+  const refreshBuyerProfile = useCallback(async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('fg_auth_token') : null;
+    if (!token) return null;
+
+    setIsResolvingBuyerProfile(true);
+    try {
+      const profile = await rfqApi.getBuyerProfile();
+      if (profile) {
+        setBuyerBackendProfile(profile);
+        const classification = profile.customerClassification === 'SPECIAL_PARTY' ? 'SPECIAL_PARTY' : 'NORMAL';
+        setActiveBuyerAccountState(classification);
+
+        // Keep real user & organization profile updated with real persisted buyer details
+        setUserProfileState(prev => ({
+          ...prev,
+          id: profile.userCode || String(profile.userId || prev.id),
+          fullName: profile.fullName || prev.fullName,
+          email: profile.email || prev.email,
+          phone: profile.phone || prev.phone,
+          accountStatus: profile.accountStatus === 'ACTIVE' ? 'Active' : 'Inactive',
+        }));
+
+        setOrgProfileState(prev => ({
+          ...prev,
+          id: 'org_' + (profile.companyCode || profile.userCode || '001'),
+          companyName: profile.companyName || prev.companyName,
+          companyCode: profile.companyCode || profile.customerCode || prev.companyCode,
+          contactEmail: profile.email || prev.contactEmail,
+          registeredAddress: profile.registration?.billingAddress || prev.registeredAddress,
+          city: profile.registration?.state || prev.city,
+        }));
+
+        return profile;
+      }
+    } catch (err) {
+      console.warn('Failed to load authenticated buyer profile from backend:', err);
+    } finally {
+      setIsResolvingBuyerProfile(false);
+    }
+    return null;
+  }, []);
+
+  // Active Buyer Account State (Normal Buyer vs Special Party Buyer)
   const [activeBuyerAccount, setActiveBuyerAccountState] = useState<'NORMAL' | 'SPECIAL_PARTY'>('NORMAL');
 
   const setActiveBuyerAccount = (account: 'NORMAL' | 'SPECIAL_PARTY') => {
     setActiveBuyerAccountState(account);
     if (account === 'SPECIAL_PARTY') {
-      setUserProfileState(defaultSpecialPartyBuyerProfile);
-      setOrgProfileState(defaultSpecialPartyBuyerOrg);
       setCurrentRoleState('BUYER');
-      addAuditLog('User Session', 'Switched active workspace to Special Party Demo Buyer (MediPlus Healthcare)');
+      addAuditLog('User Session', 'Switched active workspace view to Special Party');
     } else {
-      setUserProfileState(defaultBuyerProfile);
-      setOrgProfileState(defaultBuyerOrg);
       setCurrentRoleState('BUYER');
-      addAuditLog('User Session', 'Switched active workspace to Normal Buyer');
+      addAuditLog('User Session', 'Switched active workspace view to Normal Buyer');
     }
   };
 
@@ -1313,8 +1380,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     (async () => {
       try {
         const [liveProds, liveCats] = await Promise.all([
-          catalogApi.listProducts().catch(() => null),
-          catalogApi.listCategories().catch(() => null),
+          catalogApi.listProducts({ size: 100, sort: 'createdAt,desc' }).catch(() => null),
+          catalogApi.listCategories({ size: 100, sort: 'createdAt,desc' }).catch(() => null),
         ]);
         if (!mounted) return;
         if (liveProds && Array.isArray(liveProds) && liveProds.length > 0) {
@@ -2683,26 +2750,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   
-  // ── Canonical Product Types State ──
-  const [productTypes, setProductTypes] = useState<ProductType[]>(() => {
-    try {
-      const saved = localStorage.getItem('fg_product_types');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return mockProductTypes;
-  });
+  // ── Canonical Product Types State (PostgreSQL Database-backed) ──
+  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
 
-  const addProductType = (newType: ProductType) => {
-    setProductTypes(prev => [newType, ...prev.filter(t => t.product_type_id !== newType.product_type_id)]);
-    addAuditLog('Product Type', `Added product type ${newType.product_type_name} (${newType.product_type_code})`);
+  const refreshProductTypes = useCallback(async () => {
+    try {
+      const types = await catalogApi.listProductTypes({ size: 100, sort: 'createdAt,desc' });
+      if (Array.isArray(types)) {
+        setProductTypes(types);
+      }
+    } catch (err) {
+      console.warn('Failed to load product types from database:', err);
+    }
+  }, []);
+
+  const addProductType = async (newType: ProductType): Promise<ProductType> => {
+    try {
+      const saved = await catalogApi.createProductType({
+        id: newType.product_type_id || newType.id,
+        product_type_code: newType.product_type_code || newType.code,
+        productTypeCode: newType.product_type_code || newType.code,
+        product_type_name: newType.product_type_name || newType.name,
+        productTypeName: newType.product_type_name || newType.name,
+        description: newType.description,
+        lifecycle_status: newType.lifecycle_status || newType.status || 'ACTIVE',
+        lifecycleStatus: newType.lifecycle_status || newType.status || 'ACTIVE',
+        display_order: newType.display_order || 1,
+        displayOrder: newType.display_order || 1,
+        attributeIds: newType.attributeIds || (Array.isArray(newType.attributes) ? newType.attributes.map((a: any) => typeof a === 'string' ? a : (a.attributeId || a.attribute_id || a.id)) : undefined),
+        attributes: newType.attributes,
+      });
+      await Promise.all([
+        refreshProductTypes(),
+        refreshProductTypeAttributes(),
+        refreshAttributeMasters()
+      ]);
+      addAuditLog('Product Type', `Added product type ${saved.product_type_name || saved.name} (${saved.product_type_code || saved.code})`);
+      return saved;
+    } catch (err: any) {
+      console.error('Failed to create product type in database:', err);
+      throw err;
+    }
   };
 
-  const updateProductType = (id: string, updates: Partial<ProductType>) => {
-    setProductTypes(prev => prev.map(t => (t.product_type_id === id || t.id === id) ? { ...t, ...updates, updated_at: new Date().toISOString() } : t));
-    addAuditLog('Product Type', `Updated product type ID ${id}`);
+  const updateProductType = async (id: string, updates: Partial<ProductType>): Promise<ProductType> => {
+    try {
+      const saved = await catalogApi.updateProductType(id, {
+        product_type_code: updates.product_type_code || updates.code,
+        productTypeCode: updates.product_type_code || updates.code,
+        product_type_name: updates.product_type_name || updates.name,
+        productTypeName: updates.product_type_name || updates.name,
+        description: updates.description,
+        lifecycle_status: updates.lifecycle_status || updates.status,
+        lifecycleStatus: updates.lifecycle_status || updates.status,
+        display_order: updates.display_order,
+        displayOrder: updates.display_order,
+        attributeIds: updates.attributeIds || (Array.isArray(updates.attributes) ? updates.attributes.map((a: any) => typeof a === 'string' ? a : (a.attributeId || a.attribute_id || a.id)) : undefined),
+        attributes: updates.attributes,
+      });
+      await Promise.all([
+        refreshProductTypes(),
+        refreshProductTypeAttributes(),
+        refreshAttributeMasters()
+      ]);
+      addAuditLog('Product Type', `Updated product type ID ${id}`);
+      return saved;
+    } catch (err: any) {
+      console.error('Failed to update product type in database:', err);
+      throw err;
+    }
+  };
+
+  const toggleProductTypeStatus = async (id: string): Promise<ProductType> => {
+    try {
+      const updated = await catalogApi.toggleProductTypeStatus(id);
+      await refreshProductTypes();
+      return updated;
+    } catch (err: any) {
+      console.error('Failed to toggle product type status in database:', err);
+      throw err;
+    }
+  };
+
+  const deleteProductType = async (id: string): Promise<void> => {
+    try {
+      await catalogApi.deleteProductType(id);
+      await refreshProductTypes();
+      addAuditLog('Product Type', `Deleted product type ${id}`);
+    } catch (err: any) {
+      console.error('Failed to delete product type from database:', err);
+      throw err;
+    }
   };
 
   // ── Canonical Brand Master State (Product -> Brand relationship) ──
@@ -2751,141 +2889,203 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {}
   }, [brands]);
 
-  // ── Canonical Product Types State ──
-  useEffect(() => {
-    try {
-      localStorage.setItem('fg_product_types', JSON.stringify(productTypes));
-    } catch (e) {}
-  }, [productTypes]);
+  // ── Unified Single Category Table State (Canonical Client Model - PostgreSQL Backed) ──
+  const [unifiedCategories, setUnifiedCategories] = useState<Category[]>([]);
 
-  const deleteProductType = (id: string) => {
-    const pt = productTypes.find(t => t.product_type_id === id || t.id === id);
-    setProductTypes(prev => prev.filter(t => t.product_type_id !== id && t.id !== id));
-    if (pt) {
-      addAuditLog('Product Type', `Deleted product type ${pt.product_type_name || pt.name} (${pt.product_type_code || pt.code})`);
+  const addUnifiedCategory = async (newCat: Category): Promise<Category> => {
+    try {
+      const saved = await catalogApi.createCategory({
+        id: newCat.category_id || newCat.id,
+        category_id: newCat.category_id || newCat.id,
+        product_type_id: newCat.product_type_id || newCat.productTypeId,
+        productTypeId: newCat.product_type_id || newCat.productTypeId,
+        category: newCat.category,
+        sub_category: newCat.sub_category || newCat.subCategory || null,
+        subCategory: newCat.sub_category || newCat.subCategory || null,
+        sub_sub_category: newCat.sub_sub_category || newCat.subSubCategory || null,
+        subSubCategory: newCat.sub_sub_category || newCat.subSubCategory || null,
+        category_code: newCat.category_code || newCat.code,
+        categoryCode: newCat.category_code || newCat.code,
+        description: newCat.description || null,
+        lifecycle_status: newCat.lifecycle_status || newCat.status || 'ACTIVE',
+        lifecycleStatus: newCat.lifecycle_status || newCat.status || 'ACTIVE',
+        display_order: newCat.display_order || newCat.displayOrder || 1,
+        displayOrder: newCat.display_order || newCat.displayOrder || 1,
+      });
+      await refreshUnifiedCategories();
+      addAuditLog('Category Master', `Added Category ${saved.category_code || newCat.category_code} (${saved.category || newCat.category})`);
+      return saved;
+    } catch (err: any) {
+      console.error('Failed to persist category to database:', err);
+      throw err;
     }
   };
 
-  const toggleProductTypeStatus = (id: string) => {
-    setProductTypes(prev => prev.map(t => {
-      if (t.product_type_id === id || t.id === id) {
-        const newStatus: LifecycleStatus = (t.lifecycle_status === 'ACTIVE' || t.status === 'ACTIVE') ? 'INACTIVE' : 'ACTIVE';
-        return { ...t, lifecycle_status: newStatus, status: newStatus, updated_at: new Date().toISOString() };
-      }
-      return t;
-    }));
-  };
-
-  // ── Unified Single Category Table State (Canonical Client Model) ──
-  const [unifiedCategories, setUnifiedCategories] = useState<Category[]>(() => {
+  const updateUnifiedCategory = async (id: string, updates: Partial<Category>): Promise<Category> => {
     try {
-      const saved = localStorage.getItem('fg_unified_categories_v3');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= 10 && parsed.some((c: any) => c.category_code === 'DRUG-TAB-FCT' || c.category_id === 'CAT001')) {
-          return parsed;
-        }
-      }
-      // Clear out stale legacy v2 storage if present
-      localStorage.removeItem('fg_unified_categories_v2');
-    } catch (e) {}
-    return mockUnifiedCategories;
-  });
+      const saved = await catalogApi.updateCategory(id, {
+        product_type_id: updates.product_type_id || updates.productTypeId,
+        productTypeId: updates.product_type_id || updates.productTypeId,
+        category: updates.category,
+        sub_category: updates.sub_category || updates.subCategory || null,
+        subCategory: updates.sub_category || updates.subCategory || null,
+        sub_sub_category: updates.sub_sub_category || updates.subSubCategory || null,
+        subSubCategory: updates.sub_sub_category || updates.subSubCategory || null,
+        category_code: updates.category_code || updates.code,
+        categoryCode: updates.category_code || updates.code,
+        description: updates.description,
+        lifecycle_status: updates.lifecycle_status || updates.status,
+        lifecycleStatus: updates.lifecycle_status || updates.status,
+        display_order: updates.display_order || updates.displayOrder,
+        displayOrder: updates.display_order || updates.displayOrder,
+      });
+      await refreshUnifiedCategories();
+      addAuditLog('Category Master', `Updated Category ${id}`);
+      return saved;
+    } catch (err: any) {
+      console.error('Failed to persist category update to database:', err);
+      throw err;
+    }
+  };
 
-  useEffect(() => {
+  const deleteUnifiedCategory = async (id: string): Promise<void> => {
     try {
-      localStorage.setItem('fg_unified_categories_v3', JSON.stringify(unifiedCategories));
-    } catch (e) {}
-  }, [unifiedCategories]);
-
-  const addUnifiedCategory = (newCat: Category) => {
-    setUnifiedCategories(prev => {
-      const codeUpper = (newCat.category_code || newCat.code || '').toUpperCase();
-      const exists = prev.some(c =>
-        c.product_type_id === newCat.product_type_id &&
-        (c.category_code || c.code || '').toUpperCase() === codeUpper
-      );
-      if (exists) return prev;
-      return [newCat, ...prev];
-    });
-    addAuditLog('Category Master', `Added Category ${newCat.category_code} (${newCat.category})`);
-    catalogApi.createCategory(newCat).catch(err => {
-      console.warn('Failed to persist category to database:', err);
-    });
-  };
-
-  const updateUnifiedCategory = (id: string, updates: Partial<Category>) => {
-    setUnifiedCategories(prev => prev.map(c => {
-      if (c.category_id === id || c.id === id) {
-        return {
-          ...c,
-          ...updates,
-          category_code: updates.category_code ? updates.category_code.toUpperCase() : c.category_code,
-          code: updates.category_code ? updates.category_code.toUpperCase() : (updates.code || c.code),
-          updated_at: new Date().toISOString().split('T')[0]
-        };
-      }
-      return c;
-    }));
-    catalogApi.updateCategory(id, updates).catch(err => {
-      console.warn('Failed to persist category update to database:', err);
-    });
-  };
-
-  const deleteUnifiedCategory = (id: string) => {
-    setUnifiedCategories(prev => prev.filter(c => c.category_id !== id && c.id !== id));
+      await catalogApi.deleteCategory?.(id);
+    } catch (err: any) {
+      console.warn('Failed to delete category via API:', err);
+    }
+    await refreshUnifiedCategories();
     addAuditLog('Category Master', `Deleted Category ID ${id}`);
   };
 
-  const toggleUnifiedCategoryStatus = (id: string) => {
-    setUnifiedCategories(prev => prev.map(c => {
-      if (c.category_id === id || c.id === id) {
-        const currentActive = c.lifecycle_status === 'ACTIVE' || c.status === 'Active';
-        const newStatus: LifecycleStatus = currentActive ? 'INACTIVE' : 'ACTIVE';
-        return {
-          ...c,
-          lifecycle_status: newStatus,
-          status: newStatus === 'ACTIVE' ? 'Active' : 'Inactive',
-          updated_at: new Date().toISOString().split('T')[0]
-        };
+  const toggleUnifiedCategoryStatus = async (id: string): Promise<Category> => {
+    try {
+      const updated = await catalogApi.toggleCategoryStatus(id);
+      await refreshUnifiedCategories();
+      return updated;
+    } catch (err: any) {
+      console.error('Failed to persist category status toggle to database:', err);
+      throw err;
+    }
+  };
+
+  // ── Dynamic Attribute Master & Product Attributes (PostgreSQL Database-backed) ──
+  const [attributeMasters, setAttributeMasters] = useState<AttributeMaster[]>([]);
+  const [productAttributes, setProductAttributes] = useState<ProductAttribute[]>([]);
+  const [productTypeAttributes, setProductTypeAttributes] = useState<ProductTypeAttribute[]>([]);
+  const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttribute[]>([]);
+
+  const refreshAttributeMasters = useCallback(async () => {
+    try {
+      const attrs = await catalogApi.listAttributes({ size: 100, sort: 'createdAt,desc' });
+      if (Array.isArray(attrs)) {
+        setAttributeMasters(attrs);
       }
-      return c;
-    }));
-    catalogApi.toggleCategoryStatus(id).catch(err => {
-      console.warn('Failed to persist category status toggle to database:', err);
-    });
+    } catch (err) {
+      console.warn('Failed to load attribute masters from API:', err);
+    }
+  }, []);
+
+  const refreshProductTypeAttributes = useCallback(async (targetProductTypeId?: string) => {
+    try {
+      if (targetProductTypeId) {
+        const ptaList = await catalogApi.getProductTypeAttributes(targetProductTypeId);
+        setProductTypeAttributes(prev => [
+          ...prev.filter(pta => (pta.product_type_id !== targetProductTypeId && pta.productTypeId !== targetProductTypeId)),
+          ...(Array.isArray(ptaList) ? ptaList : [])
+        ]);
+        return;
+      }
+      const pts = productTypes.length > 0 ? productTypes : await catalogApi.listProductTypes({ size: 100, sort: 'createdAt,desc' });
+      if (Array.isArray(pts)) {
+        const results = await Promise.all(
+          pts.map(async pt => {
+            const ptId = pt.product_type_id || pt.productTypeId || pt.id;
+            try {
+              return await catalogApi.getProductTypeAttributes(ptId);
+            } catch {
+              return [];
+            }
+          })
+        );
+        const flattened = results.flat();
+        setProductTypeAttributes(flattened);
+      }
+    } catch (err) {
+      console.warn('Failed to load product type attributes:', err);
+    }
+  }, [productTypes]);
+
+  const refreshUnifiedCategories = useCallback(async () => {
+    try {
+      const res = await catalogApi.listCategories({ size: 100, sort: 'createdAt,desc' });
+      if (res && Array.isArray(res.categories)) {
+        setUnifiedCategories(res.categories);
+        // Category records are now pure entities without attached category attributes
+        setCategoryAttributes([]);
+      }
+    } catch (err) {
+      console.warn('Failed to load categories from API:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshProductTypes();
+    refreshAttributeMasters();
+    refreshUnifiedCategories();
+  }, [refreshProductTypes, refreshAttributeMasters, refreshUnifiedCategories]);
+
+  useEffect(() => {
+    if (productTypes.length > 0) {
+      refreshProductTypeAttributes();
+    }
+  }, [productTypes, refreshProductTypeAttributes]);
+
+  const addAttributeMaster = async (attr: AttributeMaster) => {
+    try {
+      const saved = await catalogApi.createAttribute({
+        attributeCode: attr.attribute_code || attr.code || '',
+        attributeName: attr.attribute_name || attr.name || '',
+        dataType: attr.data_type || attr.dataType || 'TEXT',
+        unitOfMeasure: attr.unit_of_measure || attr.unitOfMeasure,
+        remark: attr.remark,
+        allowedValues: attr.allowed_values || attr.allowedValues,
+        isFilterable: attr.is_filterable,
+        isSearchable: attr.is_searchable,
+        isRequired: attr.is_required,
+        isActive: attr.is_active,
+      });
+      setAttributeMasters(prev => [saved, ...prev.filter(a => (a.attribute_id !== saved.attribute_id && a.id !== saved.id))]);
+      addAuditLog('Attribute Master', `Created attribute ${saved.attribute_name} (${saved.attribute_code}) in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to create attribute in database:', err);
+      throw err;
+    }
   };
 
-  // ── Dynamic Attribute Master & Product Attributes ──
-  const [attributeMasters, setAttributeMasters] = useState<AttributeMaster[]>(() => {
+  const updateAttributeMaster = async (id: string, updates: Partial<AttributeMaster>) => {
     try {
-      const saved = localStorage.getItem('fg_attribute_masters_v2');
-      if (saved) return JSON.parse(saved);
-    } catch(e) {}
-    return mockAttributeMasters;
-  });
-  useEffect(() => {
-    try { localStorage.setItem('fg_attribute_masters_v2', JSON.stringify(attributeMasters)); } catch(e) {}
-  }, [attributeMasters]);
-
-  const [productAttributes, setProductAttributes] = useState<ProductAttribute[]>(() => {
-    try {
-      const saved = localStorage.getItem('fg_product_attributes_v2');
-      if (saved) return JSON.parse(saved);
-    } catch(e) {}
-    return mockProductAttributes;
-  });
-  useEffect(() => {
-    try { localStorage.setItem('fg_product_attributes_v2', JSON.stringify(productAttributes)); } catch(e) {}
-  }, [productAttributes]);
-
-  const addAttributeMaster = (attr: AttributeMaster) => {
-    setAttributeMasters(prev => [attr, ...prev.filter(a => a.attribute_id !== attr.attribute_id)]);
-    addAuditLog('Attribute Master', `Added dynamic attribute ${attr.attribute_name} (${attr.attribute_code})`);
+      const saved = await catalogApi.updateAttribute(id, updates);
+      setAttributeMasters(prev => prev.map(a => (a.attribute_id === id || a.id === id) ? { ...a, ...saved } : a));
+      addAuditLog('Attribute Master', `Updated attribute ${saved.attribute_name} (${saved.attribute_code}) in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to update attribute in database:', err);
+      throw err;
+    }
   };
 
-  const updateAttributeMaster = (id: string, updates: Partial<AttributeMaster>) => {
-    setAttributeMasters(prev => prev.map(a => (a.attribute_id === id || a.id === id) ? { ...a, ...updates, updated_at: new Date().toISOString() } : a));
+  const toggleAttributeMasterStatus = async (id: string) => {
+    try {
+      const saved = await catalogApi.toggleAttributeStatus(id);
+      setAttributeMasters(prev => prev.map(a => (a.attribute_id === id || a.id === id) ? { ...a, is_active: saved.is_active, isActive: saved.isActive } : a));
+      addAuditLog('Attribute Master', `Toggled attribute ${id} status in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to toggle attribute status in database:', err);
+      throw err;
+    }
   };
 
   const addProductAttribute = (pa: ProductAttribute) => {
@@ -2896,7 +3096,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProductAttributes(prev => prev.map(p => (p.product_attribute_id === id || p.id === id) ? { ...p, ...updates, updated_at: new Date().toISOString() } : p));
   };
 
-    const saveProductAttributesBulk = (productId: string, attributes: { attribute_id: string; attribute_value: string }[]) => {
+  const saveProductAttributesBulk = async (productId: string, attributes: { attribute_id: string; attribute_value: string }[]) => {
+    try {
+      await catalogApi.saveProductAttributes(productId, attributes.map(a => ({
+        attributeId: a.attribute_id,
+        attributeValue: a.attribute_value,
+      })));
+    } catch (err) {
+      console.warn('Failed to save product attributes to API:', err);
+    }
     setProductAttributes(prev => {
       const remaining = prev.filter(pa => pa.product_id !== productId && pa.productId !== productId);
       const newItems: ProductAttribute[] = attributes
@@ -2923,7 +3131,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-const getProductAttributes = (productId: string): Record<string, string> => {
+  const getProductAttributes = (productId: string): Record<string, string> => {
     const res: Record<string, string> = {};
     productAttributes.filter(pa => pa.product_id === productId || pa.productId === productId).forEach(pa => {
       const master = attributeMasters.find(m => m.attribute_id === pa.attribute_id || m.id === pa.attributeId);
@@ -2953,112 +3161,154 @@ const getProductAttributes = (productId: string): Record<string, string> => {
       });
   };
 
-  // ── CATEGORY -> ATTRIBUTE ASSOCIATION (CATEGORY_ATTRIBUTE) ──
-  const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttribute[]>(() => {
-    try {
-      const saved = localStorage.getItem('fg_category_attributes_v2');
-      if (saved) return JSON.parse(saved);
-    } catch(e) {}
-    return mockCategoryAttributes;
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem('fg_category_attributes_v2', JSON.stringify(categoryAttributes));
-    } catch(e) {}
-  }, [categoryAttributes]);
-
-  const addCategoryAttribute = (catAttr: CategoryAttribute): { success: boolean; error?: string } => {
-    const catId = catAttr.category_id || catAttr.categoryId || '';
-    const attrId = catAttr.attribute_id || catAttr.attributeId || '';
-    if (!catId || !attrId) {
-      return { success: false, error: 'Category ID and Attribute ID are required.' };
-    }
-    const existingForCategory = categoryAttributes.filter(ca => (ca.category_id === catId || ca.categoryId === catId));
-    if (existingForCategory.length >= 10) {
-      return { success: false, error: 'Maximum 10 attributes allowed for this category.' };
-    }
-    const alreadyExists = existingForCategory.some(ca => (ca.attribute_id === attrId || ca.attributeId === attrId));
-    if (alreadyExists) {
-      return { success: false, error: 'This attribute is already assigned to this category.' };
-    }
-    const today = new Date().toISOString().split('T')[0];
-    const newRecord: CategoryAttribute = {
-      category_attribute_id: catAttr.category_attribute_id || `ca_${catId}_${attrId}`,
-      category_id: catId,
-      attribute_id: attrId,
-      remark: catAttr.remark || '',
-      created_at: today,
-      updated_at: today,
-      id: catAttr.category_attribute_id || `ca_${catId}_${attrId}`,
-      categoryId: catId,
-      attributeId: attrId
-    };
-    setCategoryAttributes(prev => [...prev, newRecord]);
-    addAuditLog('Category Attribute', `Assigned attribute ${attrId} to category ${catId}`);
-    return { success: true };
+  // ── PRODUCT TYPE -> ATTRIBUTE ASSOCIATION (CANONICAL ARCHITECTURE) ──
+  const getProductTypeAttributes = (productTypeId: string): ProductTypeAttribute[] => {
+    return productTypeAttributes.filter(pta => 
+      pta.product_type_id === productTypeId || pta.productTypeId === productTypeId
+    );
   };
 
-  const removeCategoryAttribute = (categoryId: string, attributeId: string) => {
-    setCategoryAttributes(prev => prev.filter(ca => 
-      !((ca.category_id === categoryId || ca.categoryId === categoryId) && 
-        (ca.attribute_id === attributeId || ca.attributeId === attributeId))
-    ));
-    addAuditLog('Category Attribute', `Removed attribute ${attributeId} from category ${categoryId}`);
-  };
-
-  const updateCategoryAttributeRemark = (categoryId: string, attributeId: string, remark: string) => {
-    setCategoryAttributes(prev => prev.map(ca => {
-      const isMatch = (ca.category_id === categoryId || ca.categoryId === categoryId) && 
-                      (ca.attribute_id === attributeId || ca.attributeId === attributeId);
-      return isMatch ? { ...ca, remark, updated_at: new Date().toISOString().split('T')[0] } : ca;
-    }));
-  };
-
-  const setCategoryAttributesForCategory = (categoryId: string, attributes: { attribute_id: string; remark?: string }[]): { success: boolean; error?: string } => {
-    if (attributes.length > 10) {
-      return { success: false, error: 'Maximum 10 attributes allowed for this category.' };
-    }
-    const uniqueIds = Array.from(new Set(attributes.map(a => a.attribute_id)));
-    if (uniqueIds.length !== attributes.length) {
-      return { success: false, error: 'Duplicate attributes cannot be assigned to the same category.' };
-    }
-    const today = new Date().toISOString().split('T')[0];
-    const newItems: CategoryAttribute[] = attributes.map(a => ({
-      category_attribute_id: `ca_${categoryId}_${a.attribute_id}`,
-      category_id: categoryId,
-      attribute_id: a.attribute_id,
-      remark: a.remark || '',
-      created_at: today,
-      updated_at: today,
-      id: `ca_${categoryId}_${a.attribute_id}`,
-      categoryId: categoryId,
-      attributeId: a.attribute_id
-    }));
-    setCategoryAttributes(prev => {
-      const remaining = prev.filter(ca => ca.category_id !== categoryId && ca.categoryId !== categoryId);
-      return [...remaining, ...newItems];
-    });
-    return { success: true };
-  };
-
-  const getCategoryAttributes = (categoryId: string): CategoryAttribute[] => {
-    return categoryAttributes.filter(ca => ca.category_id === categoryId || ca.categoryId === categoryId);
-  };
-
-  const getCategoryConfiguredAttributes = (categoryId: string): { attribute: AttributeMaster; remark?: string; category_attribute_id: string }[] => {
-    const mappings = categoryAttributes.filter(ca => ca.category_id === categoryId || ca.categoryId === categoryId);
+  const getProductTypeConfiguredAttributes = (productTypeId: string): { attribute: AttributeMaster; remark?: string; product_type_attribute_id: string; is_required: boolean; display_order: number }[] => {
+    const mappings = productTypeAttributes.filter(pta => 
+      pta.product_type_id === productTypeId || pta.productTypeId === productTypeId
+    );
     return mappings
-      .map(ca => {
-        const attrId = ca.attribute_id || ca.attributeId || '';
-        const master = attributeMasters.find(m => (m.attribute_id === attrId || m.id === attrId) && m.is_active);
+      .map(pta => {
+        const attrId = pta.attribute_id || pta.attributeId || '';
+        const master = attributeMasters.find(m => (m.attribute_id === attrId || m.id === attrId || m.attribute_code === attrId) && (m.is_active ?? true)) || pta.attribute;
         if (!master) return null;
         return {
           attribute: master,
-          remark: ca.remark,
-          category_attribute_id: ca.category_attribute_id || ca.id || `ca_${categoryId}_${attrId}`
+          remark: pta.remark,
+          product_type_attribute_id: pta.product_type_attribute_id || pta.id || `pta_${productTypeId}_${attrId}`,
+          is_required: pta.is_required !== undefined ? pta.is_required : (pta.isRequired ?? false),
+          display_order: pta.display_order ?? pta.displayOrder ?? 1,
         };
       })
-      .filter((item): item is { attribute: AttributeMaster; remark?: string; category_attribute_id: string } => item !== null);
+      .filter((item): item is { attribute: AttributeMaster; remark?: string; product_type_attribute_id: string; is_required: boolean; display_order: number } => item !== null)
+      .sort((a, b) => a.display_order - b.display_order);
+  };
+
+  const addProductTypeAttribute = async (pta: {
+    product_type_id: string;
+    attribute_id: string;
+    is_required?: boolean;
+    display_order?: number;
+    remark?: string;
+    lifecycle_status?: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    const ptId = pta.product_type_id || '';
+    const attrId = pta.attribute_id || '';
+    if (!ptId || !attrId) {
+      return { success: false, error: 'Product Type ID and Attribute ID are required.' };
+    }
+    const existing = productTypeAttributes.filter(p => (p.product_type_id === ptId || p.productTypeId === ptId));
+    if (existing.some(p => (p.attribute_id === attrId || p.attributeId === attrId))) {
+      return { success: false, error: 'This attribute is already assigned to this Product Type.' };
+    }
+
+    try {
+      await catalogApi.assignProductTypeAttribute(ptId, {
+        attributeId: attrId,
+        isRequired: pta.is_required,
+        displayOrder: pta.display_order || (existing.length + 1),
+        remark: pta.remark,
+        lifecycleStatus: pta.lifecycle_status || 'ACTIVE',
+      });
+      await refreshProductTypeAttributes(ptId);
+      await refreshAttributeMasters();
+      addAuditLog('Product Type Attribute', `Assigned attribute ${attrId} to product type ${ptId} in database`);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Failed to assign product type attribute:', err);
+      return { success: false, error: err.message || 'Failed to assign attribute to Product Type in database' };
+    }
+  };
+
+  const updateProductTypeAttribute = async (
+    productTypeId: string,
+    attributeId: string,
+    updates: Partial<ProductTypeAttribute>
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await catalogApi.updateProductTypeAttributeConfig(productTypeId, attributeId, {
+        isRequired: updates.is_required !== undefined ? updates.is_required : updates.isRequired,
+        displayOrder: updates.display_order ?? updates.displayOrder,
+        remark: updates.remark,
+        lifecycleStatus: updates.lifecycle_status || updates.lifecycleStatus,
+      });
+      await refreshProductTypeAttributes(productTypeId);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Failed to update product type attribute configuration:', err);
+      return { success: false, error: err.message || 'Failed to update attribute configuration in database' };
+    }
+  };
+
+  const removeProductTypeAttribute = async (
+    productTypeId: string,
+    attributeId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await catalogApi.removeProductTypeAttribute(productTypeId, attributeId);
+      setProductTypeAttributes(prev => prev.filter(p => 
+        !((p.product_type_id === productTypeId || p.productTypeId === productTypeId) &&
+          (p.attribute_id === attributeId || p.attributeId === attributeId))
+      ));
+      await refreshAttributeMasters();
+      addAuditLog('Product Type Attribute', `Removed attribute ${attributeId} from product type ${productTypeId} in database`);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Failed to remove product type attribute from database:', err);
+      return { success: false, error: err.message || 'Failed to remove attribute from database' };
+    }
+  };
+
+  const bulkSaveProductTypeAttributes = async (
+    productTypeId: string,
+    attributes: Array<{ attribute_id: string; is_required?: boolean; display_order?: number; remark?: string; lifecycle_status?: string }>
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await catalogApi.bulkUpdateProductTypeAttributes(productTypeId, attributes);
+      await refreshProductTypeAttributes(productTypeId);
+      await refreshAttributeMasters();
+      return { success: true };
+    } catch (err: any) {
+      console.error('Failed to bulk save product type attributes:', err);
+      return { success: false, error: err.message || 'Failed to persist product type attributes to database' };
+    }
+  };
+
+  // ── CATEGORY -> ATTRIBUTE ASSOCIATION (DEPRECATED STUBS FOR BACKWARD COMPATIBILITY) ──
+  const addCategoryAttribute = async (_catAttr: CategoryAttribute): Promise<{ success: boolean; error?: string }> => {
+    return { success: true };
+  };
+
+  const removeCategoryAttribute = async (_categoryId: string, _attributeId: string) => {};
+
+  const updateCategoryAttributeRemark = (_categoryId: string, _attributeId: string, _remark: string) => {};
+
+  const setCategoryAttributesForCategory = async (_categoryId: string, _attributes: any[]): Promise<{ success: boolean; error?: string }> => {
+    return { success: true };
+  };
+
+  const getCategoryAttributes = (_categoryId: string): CategoryAttribute[] => {
+    return [];
+  };
+
+  const getCategoryConfiguredAttributes = (categoryId: string): { attribute: AttributeMaster; remark?: string; category_attribute_id: string }[] => {
+    // Backward compatibility: delegate to the category's Product Type configured attributes
+    const cat = unifiedCategories.find(c => c.category_id === categoryId || c.categoryId === categoryId || c.id === categoryId);
+    const ptId = cat?.productTypeId || cat?.product_type_id;
+    if (ptId) {
+      const ptAttrs = getProductTypeConfiguredAttributes(ptId);
+      return ptAttrs.map(pa => ({
+        attribute: pa.attribute,
+        remark: pa.remark,
+        category_attribute_id: pa.product_type_attribute_id,
+      }));
+    }
+    return [];
   };
 
   // ── Customer Segments & Product Pricing ──
@@ -5409,6 +5659,7 @@ const getProductAttributes = (productId: string): Record<string, string> => {
         updateProductType,
         deleteProductType,
         toggleProductTypeStatus,
+        refreshProductTypes,
         unifiedCategories,
         addUnifiedCategory,
         updateUnifiedCategory,
@@ -5424,10 +5675,21 @@ const getProductAttributes = (productId: string): Record<string, string> => {
         productAttributes,
         addAttributeMaster,
         updateAttributeMaster,
+        toggleAttributeMasterStatus,
+        refreshAttributeMasters,
+        refreshUnifiedCategories,
         addProductAttribute,
         updateProductAttribute,
         getProductAttributes,
         getProductAttributeValues,
+        productTypeAttributes,
+        getProductTypeAttributes,
+        getProductTypeConfiguredAttributes,
+        addProductTypeAttribute,
+        updateProductTypeAttribute,
+        removeProductTypeAttribute,
+        bulkSaveProductTypeAttributes,
+        refreshProductTypeAttributes,
         categoryAttributes,
         addCategoryAttribute,
         removeCategoryAttribute,
@@ -5465,6 +5727,7 @@ const getProductAttributes = (productId: string): Record<string, string> => {
       currentRole, setCurrentRole,
       activeTab, setActiveTab,
       activeBuyerAccount, setActiveBuyerAccount, resetDemoState,
+      buyerBackendProfile, isResolvingBuyerProfile, refreshBuyerProfile,
       customers, manufacturers, products, setProducts, addProductMaster, updateProductMaster, toggleProductMasterStatus,
       refreshProducts, refreshCategories,
       addManufacturer, updateManufacturer, deleteManufacturer, toggleManufacturerStatus, setPreferredManufacturer,

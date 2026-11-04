@@ -4,8 +4,9 @@ import {
   Package, Factory, Users, DollarSign, Calendar, Eye, Power,
   Clock, Hash, ArrowRight, Layers, CheckCircle2, ChevronRight
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 import { ProductPrice } from '../../types';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export const ProductPriceModule: React.FC = () => {
   const {
@@ -268,11 +269,23 @@ export const ProductPriceModule: React.FC = () => {
       const matchesPrd = selectedProductId === 'ALL' || (prc.product_id || (prc as any).productId) === selectedProductId;
       const matchesSeg = selectedSegmentId === 'ALL' || (prc.customer_segment_id || (prc as any).customerSegmentId) === selectedSegmentId;
       const statusVal = prc.price_status || (prc as any).status || 'ACTIVE';
-      const matchesStatus = selectedStatus === 'ALL' || statusVal === selectedStatus;
-
       return matchesSearch && matchesPrd && matchesSeg && matchesStatus;
+    }).sort((a, b) => {
+      const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
+      const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return (b.product_price_id || (b as any).id || '').localeCompare(a.product_price_id || (a as any).id || '');
     });
   }, [productPrices, products, customerSegments, searchTerm, selectedProductId, selectedSegmentId, selectedStatus]);
+
+  const {
+    paginatedItems: paginatedPrices,
+    paginationProps,
+    resetPage
+  } = usePagination(filteredPrices, {
+    initialPageSize: 10,
+    resetDeps: [searchTerm, selectedProductId, selectedSegmentId, selectedStatus]
+  });
 
   // Handlers
   const handleOpenAddModal = (defaultProductId?: string) => {
@@ -513,6 +526,7 @@ export const ProductPriceModule: React.FC = () => {
       };
       addProductPrice(newPrice);
       addAuditLog('ADD_PRODUCT_PRICE', `Created new price record ${newPriceId} for product ${formData.product_id}`);
+      resetPage();
     }
 
     setIsModalOpen(false);
@@ -848,7 +862,7 @@ export const ProductPriceModule: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredPrices.map(prc => {
+              paginatedPrices.map(prc => {
                 const prodDetails = getProductDetails(prc.product_id || (prc as any).productId || '');
                 const segDetails = getSegmentDetails(prc.customer_segment_id || (prc as any).customerSegmentId || '');
                 const mfgDetails = getManufacturerMappingDetails(prc.product_manufacturer_id || (prc as any).productManufacturerId);
@@ -1081,6 +1095,7 @@ export const ProductPriceModule: React.FC = () => {
             )}
           </tbody>
         </table>
+        <PaginationControl {...paginationProps} />
       </div>
 
       {/* ── VIEW DETAILS MODAL ────────────────────────────────────── */}

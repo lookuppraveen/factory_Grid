@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Brand, LifecycleStatus } from '../../types';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 import {
   Tag, Search, Plus, Edit3, Trash2, CheckCircle2,
   AlertTriangle, X, Power, ArrowUpDown, Sparkles, Filter
@@ -52,8 +54,26 @@ export const BrandMasterModule: React.FC = () => {
       const matchesStatus = statusFilter === 'ALL' || status === statusFilter;
 
       return matchesSearch && matchesStatus;
+    }).sort((a, b) => {
+      // Latest record first (created_at DESC), secondary stable sort on id DESC
+      const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
+      const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+        return timeB - timeA;
+      }
+      const idA = String(a.brand_id || a.id || '');
+      const idB = String(b.brand_id || b.id || '');
+      return idB.localeCompare(idA);
     });
   }, [brands, searchTerm, statusFilter]);
+
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredBrands.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, statusFilter]
+  });
+  const paginatedBrands = pagination.paginateItems(filteredBrands);
 
 
   const formatMasterDate = (dateStr?: string): string => {
@@ -167,6 +187,7 @@ export const BrandMasterModule: React.FC = () => {
         status: formData.lifecycle_status
       };
       addBrand(newBrand);
+      pagination.resetPage();
       showToast(`Brand "${cleanName}" (${cleanCode}) created successfully.`);
     }
 
@@ -391,7 +412,7 @@ export const BrandMasterModule: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredBrands.map((b, idx) => {
+              paginatedBrands.map((b, idx) => {
                 const bName = b.brand_name || b.name || '';
                 const bCode = b.brand_code || b.code || '';
                 const status = (b.lifecycle_status || b.status || 'ACTIVE').toUpperCase();
@@ -556,6 +577,7 @@ export const BrandMasterModule: React.FC = () => {
           </tbody>
         </table>
         </div>
+        <PaginationControl {...pagination.paginationProps} itemName="brands" />
       </div>
 
       {/* ── MODAL: ADD / EDIT BRAND ── */}

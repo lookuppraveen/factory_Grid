@@ -56,15 +56,8 @@ export class BuyerAccessController {
       message: 'Welcome to Buyer Procurement Portal. Manufacturer access is strictly denied.',
     }) as PortalAccessResponseDto;
   }
-
-  @Get('profile')
-  @ApiOperation({ summary: 'Buyer profile access check' })
-  @ApiOkResponse({ type: PortalProfileResponseDto })
-  @ApiForbiddenResponse({ type: ErrorResponseDto })
-  profile(@CurrentUser() user: AuthUser): PortalProfileResponseDto {
-    return ok('Buyer profile accessed', { username: user.username, role: 'BUYER' }) as PortalProfileResponseDto;
-  }
 }
+
 
 /** Role-isolation checks for the manufacturer portal, kept from the Java service. */
 @ApiTags('Manufacturer Access Isolation')

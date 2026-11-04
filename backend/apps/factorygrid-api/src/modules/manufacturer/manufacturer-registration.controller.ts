@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -49,7 +50,7 @@ import {
 import { ManufacturerRegistrationService } from './manufacturer-registration.service';
 
 @ApiTags('Manufacturer Registration & Onboarding')
-@Controller('manufacturer')
+@Controller(['manufacturer', 'manufacturers'])
 export class ManufacturerRegistrationController {
   constructor(private readonly service: ManufacturerRegistrationService) {}
 
@@ -89,8 +90,8 @@ export class ManufacturerRegistrationController {
   })
   @ApiQuery({ name: 'category', required: true, enum: MANUFACTURER_CATEGORY_KEYS })
   @ApiQuery({ name: 'registrationCode', required: true })
-  @ApiQuery({ name: 'issueDate', required: true, example: '2023-04-15' })
-  @ApiQuery({ name: 'expiryDate', required: true, example: '2028-04-14' })
+  @ApiQuery({ name: 'issueDate', required: false, example: '2023-04-15' })
+  @ApiQuery({ name: 'expiryDate', required: false, example: '2028-04-14' })
   @ApiBody({
     schema: {
       type: 'object',
@@ -100,12 +101,14 @@ export class ManufacturerRegistrationController {
       required: ['file'],
     },
   })
+  @ApiQuery({ name: 'documentNumber', required: false, description: 'Optional official certificate or license number' })
   async uploadDocument(
     @Req() req: FastifyRequest,
     @Query('category') categoryParam?: string,
     @Query('registrationCode') regCodeParam?: string,
     @Query('issueDate') issueDateParam?: string,
     @Query('expiryDate') expiryDateParam?: string,
+    @Query('documentNumber') docNumParam?: string,
   ) {
     if (!req.isMultipart()) {
       throw new BadRequestException('Request must be multipart/form-data.');
@@ -121,6 +124,7 @@ export class ManufacturerRegistrationController {
     const regCode = regCodeParam || fields.registrationCode?.value;
     const issueDate = issueDateParam || fields.issueDate?.value;
     const expiryDate = expiryDateParam || fields.expiryDate?.value;
+    const documentNumber = docNumParam || fields.documentNumber?.value;
 
     const callerUser = (req as any).user as AuthUser | undefined;
 
@@ -133,6 +137,7 @@ export class ManufacturerRegistrationController {
       issueDate,
       expiryDate,
       callerUser,
+      documentNumber,
     );
   }
 
@@ -201,6 +206,116 @@ export class ManufacturerRegistrationController {
     return this.service.getMyRegistration(Number(user.id));
   }
 
+  // ------------------------------------------------------------- Authenticated Manufacturer Documents (/me/documents)
+
+  @Get('me/documents')
+  @ApiBearerAuth()
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Get current authenticated manufacturer uploaded certification documents' })
+  getMyDocuments(@CurrentUser() user: AuthUser) {
+    return this.service.getMyDocuments(Number(user.id));
+  }
+
+  @Post('me/documents')
+  @ApiBearerAuth()
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a new certification document for the authenticated manufacturer' })
+  async uploadMyDocument(
+    @Req() req: FastifyRequest,
+    @CurrentUser() user: AuthUser,
+    @Query('category') categoryParam?: string,
+    @Query('documentType') docTypeParam?: string,
+    @Query('issueDate') issueDateParam?: string,
+    @Query('expiryDate') expiryDateParam?: string,
+    @Query('documentNumber') docNumParam?: string,
+  ) {
+    if (!req.isMultipart()) {
+      throw new BadRequestException('Request must be multipart/form-data.');
+    }
+    const part = await req.file();
+    if (!part) {
+      throw new BadRequestException('No file uploaded in "file" field.');
+    }
+    const buffer = await part.toBuffer();
+    const fields = (part.fields as any) || {};
+
+    const category = categoryParam || docTypeParam || fields.category?.value || fields.documentType?.value;
+    const issueDate = issueDateParam || fields.issueDate?.value;
+    const expiryDate = expiryDateParam || fields.expiryDate?.value;
+    const documentNumber = docNumParam || fields.documentNumber?.value;
+
+    return this.service.uploadMyDocument(
+      Number(user.id),
+      buffer,
+      part.filename,
+      part.mimetype,
+      category,
+      documentNumber,
+      issueDate,
+      expiryDate,
+      user,
+    );
+  }
+
+  @Put('me/documents/:id')
+  @ApiBearerAuth()
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Replace an existing certification document for the authenticated manufacturer' })
+  async replaceMyDocument(
+    @Req() req: FastifyRequest,
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Query('issueDate') issueDateParam?: string,
+    @Query('expiryDate') expiryDateParam?: string,
+    @Query('documentNumber') docNumParam?: string,
+  ) {
+    if (!req.isMultipart()) {
+      throw new BadRequestException('Request must be multipart/form-data.');
+    }
+    const part = await req.file();
+    if (!part) {
+      throw new BadRequestException('No file uploaded in "file" field.');
+    }
+    const buffer = await part.toBuffer();
+    const fields = (part.fields as any) || {};
+
+    const issueDate = issueDateParam || fields.issueDate?.value;
+    const expiryDate = expiryDateParam || fields.expiryDate?.value;
+    const documentNumber = docNumParam || fields.documentNumber?.value;
+
+    return this.service.replaceMyDocument(
+      Number(user.id),
+      id,
+      buffer,
+      part.filename,
+      part.mimetype,
+      documentNumber,
+      issueDate,
+      expiryDate,
+      user,
+    );
+  }
+
+  @Get('me/documents/:id/download')
+  @ApiBearerAuth()
+  @Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Download or stream an authenticated manufacturer certification document' })
+  async downloadMyDocument(
+    @Param('id') id: string,
+    @Res() res: FastifyReply,
+    @CurrentUser() user: AuthUser,
+  ): Promise<void> {
+    const file = await this.service.downloadMyDocument(Number(user.id), id, user);
+    res.header('Content-Type', file.mimeType || file.contentType || 'application/pdf');
+    res.header('Content-Disposition', `inline; filename="${encodeURIComponent(file.fileName)}"`);
+    if (file.contentLength) {
+      res.header('Content-Length', file.contentLength);
+    }
+    return res.send(file.stream);
+  }
+
   @Public()
   @Get('registration/:code')
   @ApiBearerAuth()
@@ -227,17 +342,19 @@ export class ManufacturerRegistrationController {
     return this.service.getDocuments(regCode, user);
   }
 
+  @Public()
   @Get('documents/:id/download')
   @ApiBearerAuth()
-  @Roles('ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER', 'MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER')
-  @ApiOperation({ summary: 'Download a manufacturer certification document' })
+  @ApiOperation({ summary: 'Download or view a manufacturer certification document' })
   @ApiParam({ name: 'id', description: 'Document ID' })
+  @ApiQuery({ name: 'registrationCode', required: false, description: 'Optional registration code for pre-login draft view' })
   async downloadDocument(
     @Param('id') id: string,
     @Res() res: FastifyReply,
-    @CurrentUser() user: AuthUser,
+    @Query('registrationCode') registrationCode?: string,
+    @CurrentUser() user?: AuthUser,
   ): Promise<void> {
-    const file = await this.service.getDocumentForDownload(id, user);
+    const file = await this.service.getDocumentForDownload(id, user, registrationCode);
     res.header('Content-Type', file.mimeType || file.contentType || 'application/pdf');
     res.header('Content-Disposition', `inline; filename="${encodeURIComponent(file.fileName)}"`);
     if (file.contentLength) {

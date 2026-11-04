@@ -43,6 +43,9 @@ model User {
   verificationRequests CustomerVerificationRequest[]
   refreshTokens        RefreshToken[]
   roles                UserRole[]
+  brandDocuments       BuyerBrandDocument[]
+  trademarkDocuments   BuyerTrademarkDocument[]
+  rfqs                 Rfq[]
 
   @@index([username], map: "idx_users_username")
   @@index([email], map: "idx_users_email")
@@ -107,6 +110,9 @@ model BuyerRegistration {
   documents           BuyerDocument[]
   user                User?                         @relation(fields: [userId], references: [id])
   verificationRequests CustomerVerificationRequest[]
+  brandDocuments       BuyerBrandDocument[]
+  trademarkDocuments   BuyerTrademarkDocument[]
+  rfqs                 Rfq[]
 
   @@index([email], map: "idx_buyer_reg_email")
   @@index([gstNumber], map: "idx_buyer_reg_gst")
@@ -218,6 +224,9 @@ model CatalogProduct {
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   manufacturerProducts ManufacturerProduct[]
+  rfqLines             RfqLine[]
+  productAttributes    ProductAttribute[]
+  productPrices        ProductPrice[]
 
   @@index([category], map: "idx_catalog_products_category")
   @@index([categoryId], map: "idx_catalog_products_category_id")
@@ -228,18 +237,19 @@ model CatalogProduct {
 
 /// Client single Category table architecture for Category -> Sub-Category -> Sub-Sub-Category hierarchy
 model Category {
-  id              String   @id @db.VarChar(50)
-  categoryId      String   @unique @map("category_id") @db.VarChar(50)
-  productTypeId   String   @default("pt_med") @map("product_type_id") @db.VarChar(50)
-  category        String   @db.VarChar(150)
-  subCategory     String?  @map("sub_category") @db.VarChar(150)
-  subSubCategory  String?  @map("sub_sub_category") @db.VarChar(150)
-  categoryCode    String   @unique @map("category_code") @db.VarChar(50)
-  description     String?  @db.VarChar(500)
-  lifecycleStatus String   @default("ACTIVE") @map("lifecycle_status") @db.VarChar(50)
-  displayOrder    Int      @default(1) @map("display_order")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 String              @id @db.VarChar(50)
+  categoryId         String              @unique @map("category_id") @db.VarChar(50)
+  productTypeId      String              @default("pt_med") @map("product_type_id") @db.VarChar(50)
+  category           String              @db.VarChar(150)
+  subCategory        String?             @map("sub_category") @db.VarChar(150)
+  subSubCategory     String?             @map("sub_sub_category") @db.VarChar(150)
+  categoryCode       String              @unique @map("category_code") @db.VarChar(50)
+  description        String?             @db.VarChar(500)
+  lifecycleStatus    String              @default("ACTIVE") @map("lifecycle_status") @db.VarChar(50)
+  displayOrder       Int                 @default(1) @map("display_order")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  categoryAttributes CategoryAttribute[]
 
   @@index([category], map: "idx_categories_category")
   @@index([subCategory], map: "idx_categories_sub_category")
@@ -268,6 +278,7 @@ model ManufacturerRegistration {
   reviewedBy       String?                @map("reviewed_by") @db.VarChar(150)
   rejectionReason  String?                @map("rejection_reason") @db.VarChar(500)
   manufacturerCode String?                @map("manufacturer_code") @db.VarChar(50)
+  whoGmpApplicable Boolean                @default(true) @map("who_gmp_applicable")
   createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   user             User?                  @relation(fields: [userId], references: [id])
@@ -287,15 +298,17 @@ model ManufacturerDocument {
   registrationId      BigInt                   @map("registration_id")
   category            String                   @db.VarChar(50)
   categoryDisplayName String                   @map("category_display_name") @db.VarChar(100)
+  documentNumber      String?                  @map("document_number") @db.VarChar(100)
   fileName            String                   @map("file_name") @db.VarChar(255)
   fileSize            BigInt                   @map("file_size")
   mimeType            String                   @map("mime_type") @db.VarChar(100)
   storageKey          String                   @map("storage_key") @db.VarChar(500)
   storageBucket       String                   @map("storage_bucket") @db.VarChar(100)
-  issueDate           DateTime                 @map("issue_date") @db.Date
-  expiryDate          DateTime                 @map("expiry_date") @db.Date
+  issueDate           DateTime?                @map("issue_date") @db.Date
+  expiryDate          DateTime?                @map("expiry_date") @db.Date
   status              String                   @default("PENDING") @db.VarChar(50)
   rejectionReason     String?                  @map("rejection_reason") @db.VarChar(500)
+  adminRemarks        String?                  @map("admin_remarks") @db.VarChar(500)
   reviewedBy          String?                  @map("reviewed_by") @db.VarChar(150)
   reviewedAt          DateTime?                @map("reviewed_at") @db.Timestamptz(6)
   reviewDecision      String?                  @map("review_decision") @db.VarChar(50)
@@ -310,15 +323,24 @@ model ManufacturerDocument {
 }
 
 model ManufacturerProduct {
-  id             BigInt                   @id @default(autoincrement())
-  registrationId BigInt                   @map("registration_id")
-  productId      String                   @map("product_id") @db.VarChar(50)
-  moq            Int?
-  leadTimeDays   Int?                     @map("lead_time_days")
-  createdAt      DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  registration   ManufacturerRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  product        CatalogProduct           @relation(fields: [productId], references: [id])
+  id                      BigInt                   @id @default(autoincrement())
+  registrationId          BigInt                   @map("registration_id")
+  productId               String                   @map("product_id") @db.VarChar(50)
+  manufacturerProductCode String?                  @map("manufacturer_product_code") @db.VarChar(100)
+  manufacturerPartNumber  String?                  @map("manufacturer_part_number") @db.VarChar(100)
+  manufacturerSku         String?                  @map("manufacturer_sku") @db.VarChar(100)
+  moq                     Int?
+  leadTimeDays            Int?                     @map("lead_time_days")
+  lifecycleStatus         String                   @default("ACTIVE") @map("lifecycle_status") @db.VarChar(50)
+  effectiveFrom           DateTime?                @map("effective_from") @db.Timestamptz(6)
+  effectiveTo             DateTime?                @map("effective_to") @db.Timestamptz(6)
+  isPreferred             Boolean                  @default(false) @map("is_preferred")
+  packagingDetails        String?                  @map("packaging_details") @db.VarChar(255)
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  registration            ManufacturerRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  product                 CatalogProduct           @relation(fields: [productId], references: [id])
+  productPrices           ProductPrice[]
 
   @@unique([registrationId, productId], map: "uq_mfg_product_registration_product")
   @@map("manufacturer_products")
@@ -379,3 +401,250 @@ model ManufacturerAchievement {
   @@map("manufacturer_achievements")
 }
 
+model BuyerBrandDocument {
+  id               BigInt             @id @default(autoincrement())
+  userId           BigInt             @map("user_id")
+  registrationId   BigInt?            @map("registration_id")
+  brandName        String             @map("brand_name") @db.VarChar(150)
+  brandReference   String?            @map("brand_reference") @db.VarChar(100)
+  documentType     String             @map("document_type") @db.VarChar(100)
+  documentNumber   String?            @map("document_number") @db.VarChar(100)
+  dosageForm       String?            @map("dosage_form") @db.VarChar(150)
+  tmRegistrationNo String?            @map("tm_registration_no") @db.VarChar(100)
+  issueDate        DateTime?          @map("issue_date") @db.Date
+  expiryDate       DateTime?          @map("expiry_date") @db.Date
+  fileName         String             @map("file_name") @db.VarChar(255)
+  fileSize         BigInt             @map("file_size")
+  mimeType         String             @map("mime_type") @db.VarChar(100)
+  storageKey       String             @map("storage_key") @db.VarChar(500)
+  storageBucket    String             @map("storage_bucket") @db.VarChar(100)
+  status           String             @default("UNDER REVIEW") @db.VarChar(50)
+  checks           Json?              @map("checks")
+  rejectionReason  String?            @map("rejection_reason") @db.VarChar(500)
+  authNotes        String?            @map("auth_notes") @db.VarChar(1000)
+  reviewedBy       String?            @map("reviewed_by") @db.VarChar(150)
+  reviewedAt       DateTime?          @map("reviewed_at") @db.Timestamptz(6)
+  approvedAt       DateTime?          @map("approved_at") @db.Timestamptz(6)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registration     BuyerRegistration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+
+  @@index([userId], map: "idx_buyer_brand_doc_user_id")
+  @@index([registrationId], map: "idx_buyer_brand_doc_reg_id")
+  @@index([status], map: "idx_buyer_brand_doc_status")
+  @@index([brandName], map: "idx_buyer_brand_doc_name")
+  @@map("buyer_brand_documents")
+}
+
+model BuyerTrademarkDocument {
+  id                 BigInt             @id @default(autoincrement())
+  userId             BigInt             @map("user_id")
+  registrationId     BigInt?            @map("registration_id")
+  trademarkName      String             @map("trademark_name") @db.VarChar(150)
+  tmNumber           String             @map("tm_number") @db.VarChar(100)
+  tmClass            String             @default("Class 5 (Pharmaceuticals & Medicinal Preparations)") @map("tm_class") @db.VarChar(150)
+  documentType       String             @map("document_type") @db.VarChar(100)
+  verificationSource String             @default("Customer Uploaded TM Certificate") @map("verification_source") @db.VarChar(100)
+  issueDate          DateTime?          @map("issue_date") @db.Date
+  expiryDate         DateTime?          @map("expiry_date") @db.Date
+  fileName           String             @map("file_name") @db.VarChar(255)
+  fileSize           BigInt             @map("file_size")
+  mimeType           String             @map("mime_type") @db.VarChar(100)
+  storageKey         String             @map("storage_key") @db.VarChar(500)
+  storageBucket      String             @map("storage_bucket") @db.VarChar(100)
+  status             String             @default("UNDER REVIEW") @db.VarChar(50)
+  checks             Json?              @map("checks")
+  conflictNotes      String?            @map("conflict_notes") @db.VarChar(1000)
+  rejectionReason    String?            @map("rejection_reason") @db.VarChar(500)
+  reviewedBy         String?            @map("reviewed_by") @db.VarChar(150)
+  reviewedAt         DateTime?          @map("reviewed_at") @db.Timestamptz(6)
+  approvedAt         DateTime?          @map("approved_at") @db.Timestamptz(6)
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registration       BuyerRegistration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+
+  @@index([userId], map: "idx_buyer_tm_doc_user_id")
+  @@index([registrationId], map: "idx_buyer_tm_doc_reg_id")
+  @@index([status], map: "idx_buyer_tm_doc_status")
+  @@index([trademarkName], map: "idx_buyer_tm_doc_name")
+  @@map("buyer_trademark_documents")
+}
+
+model Rfq {
+  id                     BigInt             @id @default(autoincrement())
+  rfqNumber              String             @unique @map("rfq_number") @db.VarChar(50)
+  userId                 BigInt             @map("user_id")
+  buyerRegistrationId    BigInt?            @map("buyer_registration_id")
+  buyerName              String             @map("buyer_name") @db.VarChar(150)
+  companyName            String             @map("company_name") @db.VarChar(150)
+  customerCode           String             @map("customer_code") @db.VarChar(50)
+  customerClassification String             @default("REGULAR") @map("customer_classification") @db.VarChar(50)
+  status                 String             @default("Draft") @db.VarChar(50)
+  priority               String             @default("STANDARD") @db.VarChar(50)
+  deliveryLocation       String             @map("delivery_location") @db.VarChar(500)
+  rfqDate                DateTime           @default(now()) @map("rfq_date") @db.Date
+  requiredDate           DateTime?          @map("required_date") @db.Date
+  deadlineDate           DateTime?          @map("deadline_date") @db.Date
+  remarks                String?            @db.VarChar(1000)
+  creditRequired         Boolean            @default(false) @map("credit_required")
+  creditTerms            String?            @map("credit_terms") @db.VarChar(255)
+  isGeneric              Boolean            @default(false) @map("is_generic")
+  submittedAt            DateTime?          @map("submitted_at") @db.Timestamptz(6)
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  buyerRegistration      BuyerRegistration? @relation(fields: [buyerRegistrationId], references: [id], onDelete: SetNull)
+  lines                  RfqLine[]
+
+  @@index([userId], map: "idx_rfqs_user_id")
+  @@index([buyerRegistrationId], map: "idx_rfqs_buyer_reg_id")
+  @@index([status], map: "idx_rfqs_status")
+  @@index([rfqNumber], map: "idx_rfqs_rfq_number")
+  @@map("rfqs")
+}
+
+model RfqLine {
+  id             BigInt          @id @default(autoincrement())
+  rfqId          BigInt          @map("rfq_id")
+  lineItemNumber Int             @default(1) @map("line_item_number")
+  productId      String?         @map("product_id") @db.VarChar(50)
+  productName    String          @map("product_name") @db.VarChar(250)
+  productCode    String?         @map("product_code") @db.VarChar(50)
+  category       String?         @db.VarChar(150)
+  subCategory    String?         @map("sub_category") @db.VarChar(150)
+  subSubCategory String?         @map("sub_sub_category") @db.VarChar(150)
+  productType    String          @default("BRANDED") @map("product_type") @db.VarChar(50)
+  dosageForm     String?         @map("dosage_form") @db.VarChar(100)
+  packSize       String?         @map("pack_size") @db.VarChar(100)
+  uom            String          @default("Units") @db.VarChar(50)
+  quantity       Int             @map("quantity")
+  targetPrice    Decimal?        @map("target_price") @db.Decimal(12, 2)
+  requiredDate   DateTime?       @map("required_date") @db.Date
+  remarks        String?         @db.VarChar(500)
+  molecule       String?         @db.VarChar(250)
+  strength       String?         @db.VarChar(100)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  rfq            Rfq             @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  product        CatalogProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([rfqId], map: "idx_rfq_lines_rfq_id")
+  @@index([productId], map: "idx_rfq_lines_product_id")
+  @@map("rfq_lines")
+}
+
+model AttributeMaster {
+  id                 String              @id @db.VarChar(50)
+  attributeCode      String              @unique @map("attribute_code") @db.VarChar(50)
+  attributeName      String              @map("attribute_name") @db.VarChar(150)
+  dataType           String              @default("TEXT") @map("data_type") @db.VarChar(30)
+  unitOfMeasure      String?             @map("unit_of_measure") @db.VarChar(50)
+  remark             String?             @db.VarChar(500)
+  allowedValues      Json?               @map("allowed_values")
+  isFilterable       Boolean             @default(true) @map("is_filterable")
+  isSearchable       Boolean             @default(true) @map("is_searchable")
+  isRequired         Boolean             @default(false) @map("is_required")
+  isActive           Boolean             @default(true) @map("is_active")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  categoryAttributes    CategoryAttribute[]
+  productTypeAttributes ProductTypeAttribute[]
+  productAttributes     ProductAttribute[]
+
+  @@index([attributeCode], map: "idx_attr_masters_code")
+  @@index([isActive], map: "idx_attr_masters_active")
+  @@map("attribute_masters")
+}
+
+model CategoryAttribute {
+  id           BigInt          @id @default(autoincrement())
+  categoryId   String          @map("category_id") @db.VarChar(50)
+  attributeId  String          @map("attribute_id") @db.VarChar(50)
+  isRequired   Boolean         @default(false) @map("is_required")
+  displayOrder Int             @default(1) @map("display_order")
+  remark       String?         @db.VarChar(255)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  category     Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  attribute    AttributeMaster @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, attributeId], map: "uq_category_attribute")
+  @@index([categoryId], map: "idx_cat_attr_category_id")
+  @@index([attributeId], map: "idx_cat_attr_attribute_id")
+  @@map("category_attributes")
+}
+
+model ProductTypeAttribute {
+  id              BigInt          @id @default(autoincrement())
+  productTypeId   String          @map("product_type_id") @db.VarChar(50)
+  attributeId     String          @map("attribute_id") @db.VarChar(50)
+  isRequired      Boolean         @default(false) @map("is_required")
+  displayOrder    Int             @default(1) @map("display_order")
+  lifecycleStatus String          @default("ACTIVE") @map("lifecycle_status") @db.VarChar(50)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  productType     ProductType     @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+  attribute       AttributeMaster @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@unique([productTypeId, attributeId], map: "uq_product_type_attribute")
+  @@index([productTypeId], map: "idx_pta_product_type_id")
+  @@index([attributeId], map: "idx_pta_attribute_id")
+  @@map("product_type_attributes")
+}
+
+model ProductAttribute {
+  id             BigInt          @id @default(autoincrement())
+  productId      String          @map("product_id") @db.VarChar(50)
+  attributeId    String          @map("attribute_id") @db.VarChar(50)
+  attributeValue String?         @map("attribute_value") @db.VarChar(1000)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  product        CatalogProduct  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attribute      AttributeMaster @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, attributeId], map: "uq_product_attribute")
+  @@index([productId], map: "idx_prod_attr_product_id")
+  @@index([attributeId], map: "idx_prod_attr_attribute_id")
+  @@map("product_attributes")
+}
+
+model ProductPrice {
+  id                    BigInt               @id @default(autoincrement())
+  productId             String               @map("product_id") @db.VarChar(50)
+  productManufacturerId BigInt?              @map("product_manufacturer_id")
+  customerSegmentId     String?              @map("customer_segment_id") @db.VarChar(50)
+  priceType             String               @default("BASE") @map("price_type") @db.VarChar(50)
+  currency              String               @default("INR") @db.VarChar(10)
+  unitPrice             Decimal              @map("unit_price") @db.Decimal(12, 2)
+  minQuantity           Int                  @default(1) @map("min_quantity")
+  maxQuantity           Int?                 @map("max_quantity")
+  effectiveFrom         DateTime?            @map("effective_from") @db.Date
+  effectiveTo           DateTime?            @map("effective_to") @db.Date
+  priceStatus           String               @default("ACTIVE") @map("price_status") @db.VarChar(30)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  product               CatalogProduct       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  manufacturerProduct   ManufacturerProduct? @relation(fields: [productManufacturerId], references: [id], onDelete: SetNull)
+
+  @@index([productId], map: "idx_prod_prices_product_id")
+  @@index([productManufacturerId], map: "idx_prod_prices_mfg_id")
+  @@map("product_prices")
+}
+
+model ProductType {
+  id                    String                 @id @db.VarChar(50)
+  productTypeCode       String                 @unique @map("product_type_code") @db.VarChar(50)
+  productTypeName       String                 @map("product_type_name") @db.VarChar(150)
+  description           String?                @db.VarChar(500)
+  lifecycleStatus       String                 @default("ACTIVE") @map("lifecycle_status") @db.VarChar(50)
+  displayOrder          Int                    @default(1) @map("display_order")
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  productTypeAttributes ProductTypeAttribute[]
+
+  @@index([productTypeCode], map: "idx_product_types_code")
+  @@index([lifecycleStatus], map: "idx_product_types_status")
+  @@map("product_types")
+}

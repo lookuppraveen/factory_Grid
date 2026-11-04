@@ -11,6 +11,7 @@ import {
   CategoryHierarchyItem,
   CategoryTreeCategory,
 } from '../../services/manufacturerRegistrationApi';
+import { adminVerificationApi } from '../../services/adminVerificationApi';
 
 interface ManufacturerOnboardingWizardProps {
   onSuccess?: () => void;
@@ -29,17 +30,22 @@ export interface CertDocState {
   issueDate: string;
   expiryDate: string;
   documentCode?: string;
+  documentNumber?: string;
   fileSize?: number;
+  uploadedAt?: string;
 }
 
-/** The 5 mandatory certifications required for manufacturer onboarding. */
-const MANDATORY_CERTIFICATIONS = [
-  { key: 'mfgLicense', name: 'Manufacturing License', code: 'Form 25/28' },
-  { key: 'gmpCert', name: 'GLP Certificate', code: 'CDSCO / GLP Standard' },
-  { key: 'whoGmpCert', name: 'WHO-GLP Certificate', code: 'WHO-GLP Standard' },
-  { key: 'isoCert', name: 'ISO Certification', code: 'ISO 9001:2015' },
-  { key: 'pollutionCert', name: 'Pollution Certificate', code: 'SPCB NOC' },
-];
+/** Complete original statutory certifications & compliance documents list for manufacturer onboarding */
+export const ORIGINAL_MANUFACTURER_DOCUMENTS = [
+  { key: 'mfgLicense', name: 'Manufacturing License', isMandatory: true },
+  { key: 'gmpCert', name: 'GMP Certificate', isMandatory: true },
+  { key: 'whoGmpCert', name: 'WHO-GMP Certificate', isMandatory: true },
+  { key: 'isoCert', name: 'ISO Certification', isMandatory: true },
+  { key: 'pollutionCert', name: 'Pollution Certificate', isMandatory: true },
+  { key: 'factoryReg', name: 'Factory Registration', isMandatory: false },
+] as const;
+
+const MANDATORY_CERTIFICATIONS = ORIGINAL_MANUFACTURER_DOCUMENTS;
 
 /** 28 States and 8 Union Territories in India for state selection */
 export const INDIAN_STATES = [
@@ -198,19 +204,23 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   // Wizard Steps: 1 = Company Details, 2 = Certifications, 3 = Category Capabilities, 4 = Batch Size & Delivery Schedule, 5 = Review
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
-  // STEP 2 — Certifications & Expiry Dates State (Initial state: unuploaded and blank dates)
+  // Regulatory Scope: Whether WHO-GMP certification is applicable for this facility (true = Export/WHO tenders, false = Domestic Schedule M only)
+  const [whoGmpApplicable, setWhoGmpApplicable] = useState<boolean>(true);
+
+  // STEP 2 — Certifications State (Initial state: unuploaded)
   const [certificationsMap, setCertificationsMap] = useState<Record<string, CertDocState>>({
-    mfgLicense: { key: 'mfgLicense', name: 'Manufacturing License', code: 'Form 25/28', fileName: '', uploaded: false, issueDate: '', expiryDate: '' },
-    gmpCert: { key: 'gmpCert', name: 'GLP Certificate', code: 'CDSCO / GLP Standard', fileName: '', uploaded: false, issueDate: '', expiryDate: '' },
-    whoGmpCert: { key: 'whoGmpCert', name: 'WHO-GLP Certificate', code: 'WHO-GLP Standard', fileName: '', uploaded: false, issueDate: '', expiryDate: '' },
-    isoCert: { key: 'isoCert', name: 'ISO Certification', code: 'ISO 9001:2015', fileName: '', uploaded: false, issueDate: '', expiryDate: '' },
-    pollutionCert: { key: 'pollutionCert', name: 'Pollution Certificate', code: 'SPCB NOC', fileName: '', uploaded: false, issueDate: '', expiryDate: '' },
-    factoryReg: { key: 'factoryReg', name: 'Factory Registration', code: 'Factories Act Cert', fileName: '', uploaded: false, issueDate: '', expiryDate: '' },
+    mfgLicense: { key: 'mfgLicense', name: 'Manufacturing License', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
+    gmpCert: { key: 'gmpCert', name: 'GMP Certificate', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
+    whoGmpCert: { key: 'whoGmpCert', name: 'WHO-GMP Certificate', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
+    isoCert: { key: 'isoCert', name: 'ISO Certification', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
+    pollutionCert: { key: 'pollutionCert', name: 'Pollution Certificate', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
+    factoryReg: { key: 'factoryReg', name: 'Factory Registration', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
   });
 
   // Other Certificates state (supports uploading multiple additional certificates)
   const [otherCertsList, setOtherCertsList] = useState<CertDocState[]>([]);
   const [newOtherCertName, setNewOtherCertName] = useState('');
+  const [newOtherDocNumber, setNewOtherDocNumber] = useState('');
   const [newOtherIssueDate, setNewOtherIssueDate] = useState('');
   const [newOtherExpiryDate, setNewOtherExpiryDate] = useState('');
 
@@ -288,7 +298,9 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                   issueDate: d.issueDate || next[d.category].issueDate,
                   expiryDate: d.expiryDate || next[d.category].expiryDate,
                   documentCode: d.documentCode,
+                  documentNumber: d.documentNumber || next[d.category].documentNumber || '',
                   fileSize: d.fileSize,
+                  uploadedAt: d.uploadedAt,
                 };
               }
             });
@@ -308,7 +320,9 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
               issueDate: d.issueDate,
               expiryDate: d.expiryDate,
               documentCode: d.documentCode,
+              documentNumber: d.documentNumber || '',
               fileSize: d.fileSize,
+              uploadedAt: d.uploadedAt,
             }));
           setOtherCertsList(others);
         }
@@ -320,6 +334,9 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
     // Reload saved capabilities and company details
     manufacturerRegistrationApi.getRegistration(registrationCode)
       .then(reg => {
+        if (reg?.whoGmpApplicable !== undefined) {
+          setWhoGmpApplicable(reg.whoGmpApplicable);
+        }
         if (reg?.products && Array.isArray(reg.products) && reg.products.length > 0) {
           const ids = reg.products.map((p: any) => p.productId || p.categoryId);
           setSelectedCategoryIds(prev => prev.length === 0 ? ids : prev);
@@ -374,48 +391,21 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   };
 
   const validateStep2 = (): { valid: boolean; message?: string } => {
-    const missing = MANDATORY_CERTIFICATIONS.filter(c => !certificationsMap[c.key]?.uploaded);
+    const isWhoGmpRequired = whoGmpApplicable !== false;
+    const requiredDocs = ORIGINAL_MANUFACTURER_DOCUMENTS.filter(c => {
+      if (c.key === 'whoGmpCert') return isWhoGmpRequired;
+      return c.isMandatory;
+    });
+
+    const missing = requiredDocs.filter(c => !certificationsMap[c.key]?.uploaded);
     if (missing.length > 0) {
       missing.forEach(m => {
         setCardErrors(prev => ({ ...prev, [m.key]: `${m.name} is required.` }));
       });
       return {
         valid: false,
-        message: `Please upload all 5 mandatory certifications before continuing. Missing: ${missing.map(m => m.name).join(', ')}`,
+        message: `Please upload all required documents before continuing. Missing: ${missing.map(m => m.name).join(', ')}`,
       };
-    }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    for (const c of MANDATORY_CERTIFICATIONS) {
-      const doc = certificationsMap[c.key];
-      if (!doc.issueDate) {
-        const msg = `Issue Date is required for ${c.name}.`;
-        setCardErrors(prev => ({ ...prev, [c.key]: msg }));
-        return { valid: false, message: msg };
-      }
-      if (!doc.expiryDate) {
-        const msg = `Expiry Date is required for ${c.name}.`;
-        setCardErrors(prev => ({ ...prev, [c.key]: msg }));
-        return { valid: false, message: msg };
-      }
-      const issue = new Date(doc.issueDate);
-      const expiry = new Date(doc.expiryDate);
-      if (issue > new Date()) {
-        const msg = `Issue Date for ${c.name} cannot be in the future.`;
-        setCardErrors(prev => ({ ...prev, [c.key]: msg }));
-        return { valid: false, message: msg };
-      }
-      if (expiry <= issue) {
-        const msg = `Expiry Date must be after Issue Date for ${c.name}.`;
-        setCardErrors(prev => ({ ...prev, [c.key]: msg }));
-        return { valid: false, message: msg };
-      }
-      if (expiry < today) {
-        const msg = `Expiry Date for ${c.name} cannot be in the past (${doc.expiryDate}).`;
-        setCardErrors(prev => ({ ...prev, [c.key]: msg }));
-        return { valid: false, message: msg };
-      }
     }
     return { valid: true };
   };
@@ -486,16 +476,19 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
       } else if (currentStep === 2) {
         const val = validateStep2();
         if (!val.valid) {
-          setApiError(val.message || 'Please ensure all 5 mandatory certifications are uploaded with valid dates.');
+          setApiError(val.message || 'Please ensure all required certifications are uploaded with valid dates.');
           return;
         }
         setIsSaving(true);
-        const docsPayload = MANDATORY_CERTIFICATIONS.map(c => ({
-          category: c.key,
-          issueDate: certificationsMap[c.key]?.issueDate || '2023-01-01',
-          expiryDate: certificationsMap[c.key]?.expiryDate || '2028-01-01',
-        }));
-        await manufacturerRegistrationApi.saveStep2({ documents: docsPayload }, registrationCode);
+        const docsPayload = ORIGINAL_MANUFACTURER_DOCUMENTS
+          .filter(c => certificationsMap[c.key]?.uploaded)
+          .map(c => ({
+            category: c.key,
+          }));
+        await manufacturerRegistrationApi.saveStep2({
+          documents: docsPayload,
+          whoGmpApplicable,
+        }, registrationCode);
         setCurrentStep(3);
       } else if (currentStep === 3) {
         if (selectedCategoryIds.length === 0) {
@@ -573,62 +566,60 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
     return activeCode;
   };
 
+  // View uploaded document in new browser tab without redirecting to landing page
+  const handleViewDoc = async (docId?: string) => {
+    if (!docId) return;
+    try {
+      const activeCode = registrationCode || localStorage.getItem('fg_mfg_reg_code') || '';
+      const targetUrl = `/api/v1/manufacturer/documents/${docId}/download${activeCode ? `?registrationCode=${encodeURIComponent(activeCode)}` : ''}`;
+      const { blobUrl } = await adminVerificationApi.getDocumentBlob(targetUrl);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    } catch (err: any) {
+      setApiError(err.message || 'Failed to open document preview.');
+    }
+  };
+
   // Upload file directly to backend multipart API
   const uploadFileToBackend = async (key: string, name: string, file: File) => {
     setApiError(null);
     setCardErrors(prev => ({ ...prev, [key]: null }));
     setUploadingCategory(key);
     try {
+      // Validate file extension
+      const allowedExts = ['.pdf', '.png', '.jpg', '.jpeg'];
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      if (!allowedExts.includes(ext)) {
+        const msg = 'Invalid file format. Please upload a PDF or image file (.pdf, .png, .jpg, .jpeg).';
+        setCardErrors(prev => ({ ...prev, [key]: msg }));
+        setApiError(msg);
+        return;
+      }
+      // Validate file size (10 MB maximum)
+      if (file.size > 10 * 1024 * 1024) {
+        const msg = 'File size exceeds maximum permitted limit of 10MB.';
+        setCardErrors(prev => ({ ...prev, [key]: msg }));
+        setApiError(msg);
+        return;
+      }
+
       const activeCode = await getOrInitRegistrationCode();
-      const docState = certificationsMap[key] || { issueDate: '2023-04-15', expiryDate: '2028-04-14' };
-      const issueDate = docState.issueDate || '2023-04-15';
-      const expiryDate = docState.expiryDate || '2028-04-14';
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      if (new Date(issueDate) > new Date()) {
-        const msg = `Issue Date for ${name} cannot be in the future.`;
-        setCardErrors(prev => ({ ...prev, [key]: msg }));
-        setApiError(msg);
-        return;
-      }
-
-      if (new Date(expiryDate) <= new Date(issueDate)) {
-        const msg = `Expiry Date must be after Issue Date for ${name}.`;
-        setCardErrors(prev => ({ ...prev, [key]: msg }));
-        setApiError(msg);
-        return;
-      }
-
-      if (new Date(expiryDate) < today) {
-        const msg = `Certificate has expired on ${expiryDate}. A valid future expiry date is required for active ${name} certification before uploading.`;
-        setCardErrors(prev => ({ ...prev, [key]: msg }));
-        setApiError(msg);
-        return;
-      }
 
       const uploaded = await manufacturerRegistrationApi.uploadDocument(
         file,
         key,
         activeCode,
-        issueDate,
-        expiryDate,
       );
 
       setCertificationsMap(prev => ({
         ...prev,
         [key]: {
-          key,
-          name,
-          code: prev[key]?.code || 'CERT',
+          ...prev[key],
           id: uploaded.id,
           fileName: uploaded.fileName,
           uploaded: true,
-          issueDate: uploaded.issueDate || issueDate,
-          expiryDate: uploaded.expiryDate || expiryDate,
           documentCode: uploaded.documentCode,
           fileSize: uploaded.fileSize,
+          uploadedAt: uploaded.uploadedAt,
         }
       }));
       setCardErrors(prev => ({ ...prev, [key]: null }));
@@ -641,66 +632,17 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
     }
   };
 
-  // Opens native file picker to select a real PDF
+  // Opens native file picker to select a real PDF or permitted image
   const handleChooseFile = (key: string, name: string) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf,application/pdf';
+    input.accept = '.pdf,application/pdf,image/png,image/jpeg,image/jpg';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-        const msg = 'Only PDF files are accepted. Please select a valid .pdf document.';
-        setCardErrors(prev => ({ ...prev, [key]: msg }));
-        setApiError(msg);
-        return;
-      }
       await uploadFileToBackend(key, name, file);
     };
     input.click();
-  };
-
-  // Testing helper: 1-click valid PDF upload for this certification
-  const handleUploadSampleDoc = async (key: string, name: string) => {
-    const sample = new File(
-      [`%PDF-1.4\n% Sample ${name} verification certificate content for FactoryGrid\n%%EOF`],
-      `${name.replace(/\s+/g, '_')}_Certificate.pdf`,
-      { type: 'application/pdf' }
-    );
-    await uploadFileToBackend(key, name, sample);
-  };
-
-  // Testing helper: Fast-fill all 5 mandatory certifications
-  const handleUploadAllSamples = async () => {
-    setApiError(null);
-    setIsSaving(true);
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      for (const c of MANDATORY_CERTIFICATIONS) {
-        if (!certificationsMap[c.key]?.uploaded) {
-          const docState = certificationsMap[c.key];
-          if (docState?.expiryDate && new Date(docState.expiryDate) < today) {
-            const msg = `Cannot upload sample certs: ${c.name} has an expired date (${docState.expiryDate}). Please update it to a valid future expiry date first.`;
-            setCardErrors(prev => ({ ...prev, [c.key]: msg }));
-            setApiError(msg);
-            setIsSaving(false);
-            return;
-          }
-          const sample = new File(
-            [`%PDF-1.4\n% Sample ${c.name} verification certificate content for FactoryGrid\n%%EOF`],
-            `${c.name.replace(/\s+/g, '_')}_Certificate.pdf`,
-            { type: 'application/pdf' }
-          );
-          await uploadFileToBackend(c.key, c.name, sample);
-        }
-      }
-    } catch (err: any) {
-      setApiError(err.message || 'Failed to auto-upload some sample certifications');
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const handleRemoveDoc = async (key: string) => {
@@ -730,38 +672,26 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
     setCardErrors(prev => ({ ...prev, otherCert: null }));
     setUploadingCategory('otherCert');
     try {
+      const allowedExts = ['.pdf', '.png', '.jpg', '.jpeg'];
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      if (!allowedExts.includes(ext)) {
+        const msg = 'Invalid file format. Please upload a PDF or image file (.pdf, .png, .jpg, .jpeg).';
+        setCardErrors(prev => ({ ...prev, otherCert: msg }));
+        setApiError(msg);
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        const msg = 'File size exceeds maximum permitted limit of 10MB.';
+        setCardErrors(prev => ({ ...prev, otherCert: msg }));
+        setApiError(msg);
+        return;
+      }
+
       const activeCode = await getOrInitRegistrationCode();
-      const issueDate = newOtherIssueDate || '2023-01-15';
-      const expiryDate = newOtherExpiryDate || '2028-01-14';
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      if (new Date(issueDate) > new Date()) {
-        const msg = 'Issue Date for certificate cannot be in the future.';
-        setCardErrors(prev => ({ ...prev, otherCert: msg }));
-        setApiError(msg);
-        return;
-      }
-      if (new Date(expiryDate) <= new Date(issueDate)) {
-        const msg = 'Expiry Date must be after Issue Date.';
-        setCardErrors(prev => ({ ...prev, otherCert: msg }));
-        setApiError(msg);
-        return;
-      }
-      if (new Date(expiryDate) < today) {
-        const msg = `Expiry Date cannot be in the past (${expiryDate}).`;
-        setCardErrors(prev => ({ ...prev, otherCert: msg }));
-        setApiError(msg);
-        return;
-      }
-
       const uploaded = await manufacturerRegistrationApi.uploadDocument(
         file,
         'otherCert',
         activeCode,
-        issueDate,
-        expiryDate,
       );
 
       const title = newOtherCertName.trim() || 'Other Certificate';
@@ -774,10 +704,12 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
           id: uploaded.id,
           fileName: uploaded.fileName,
           uploaded: true,
-          issueDate: uploaded.issueDate || issueDate,
-          expiryDate: uploaded.expiryDate || expiryDate,
+          issueDate: '',
+          expiryDate: '',
           documentCode: uploaded.documentCode,
+          documentNumber: '',
           fileSize: uploaded.fileSize,
+          uploadedAt: uploaded.uploadedAt,
         }
       ]);
       setNewOtherCertName('');
@@ -793,29 +725,13 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   const handleChooseOtherFile = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf,application/pdf';
+    input.accept = '.pdf,application/pdf,image/png,image/jpeg,image/jpg';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-        const msg = 'Only PDF files are accepted. Please select a valid .pdf document.';
-        setCardErrors(prev => ({ ...prev, otherCert: msg }));
-        setApiError(msg);
-        return;
-      }
       await uploadOtherCertificate(file);
     };
     input.click();
-  };
-
-  const handleUploadSampleOtherDoc = async () => {
-    const title = newOtherCertName.trim() || 'Additional Facility Certification';
-    const sample = new File(
-      [`%PDF-1.4\n% Sample ${title} verification certificate content for FactoryGrid\n%%EOF`],
-      `${title.replace(/\s+/g, '_')}_Certificate.pdf`,
-      { type: 'application/pdf' }
-    );
-    await uploadOtherCertificate(sample);
   };
 
   const handleRemoveOtherDoc = async (id?: string, idx?: number) => {
@@ -846,21 +762,24 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
         registrationCode,
         password,
         confirmAccurate: true,
+        whoGmpApplicable,
       });
 
       submitManufacturerOnboarding({
         companyName: companyDetails.companyName,
         factoryDetails: `${companyDetails.facilityAddress}, ${companyDetails.city}, ${companyDetails.state} ${companyDetails.pincode}`,
         mfgCapacity: companyDetails.mfgCapacity || 'Not specified',
-        whoGmpNo: certificationsMap['whoGmpCert']?.code || 'WHO-GLP-2026-REG',
+        whoGmpNo: whoGmpApplicable
+          ? (certificationsMap['whoGmpCert']?.documentNumber || certificationsMap['whoGmpCert']?.code || 'WHO-GMP-CERTIFIED')
+          : 'N/A (Domestic Only)',
         factoryLocation: `${companyDetails.city}, ${companyDetails.state}`,
         gstin: '36AAACS9981F1Z2',
         pan: 'AAACS9981F',
-        mfgLicenseNo: certificationsMap['mfgLicense']?.code || 'MFG-FORM-25-28',
+        mfgLicenseNo: certificationsMap['mfgLicense']?.documentNumber || certificationsMap['mfgLicense']?.code || 'MFG-FORM-25-28',
         contactPerson: companyDetails.contactPerson,
         email: companyDetails.email,
         phone: companyDetails.phone,
-        targetMarkets: 'Domestic PCD & Exports (SE Asia, Africa)',
+        targetMarkets: whoGmpApplicable ? 'Domestic & Exports (WHO Pre-qualified, SE Asia, Africa)' : 'Domestic Schedule M Market',
         drugCategories: selectedCategoryIds.map(id => {
           const cat = categoriesList.find(c => c.id === id || c.categoryId === id);
           return cat ? cat.fullName : (SUPPORTED_MANUFACTURING_CATEGORIES.find(c => c.id === id)?.name || id);
@@ -870,7 +789,7 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
           name: certificationsMap[c.key]?.fileName || `${c.name}.pdf`,
           type: c.key,
           status: 'PENDING' as const,
-          url: '#'
+          url: `/api/v1/manufacturer/documents/${certificationsMap[c.key]?.id}/download?registrationCode=${encodeURIComponent(registrationCode)}`
         }))
       });
 
@@ -1009,26 +928,27 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   const handleModalCertUpload = (key: string, name: string) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf,application/pdf';
+    input.accept = '.pdf,application/pdf,image/png,image/jpeg,image/jpg';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
-      if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-        setMfgModalError('Only PDF files are accepted.');
+      const allowedExts = ['.pdf', '.png', '.jpg', '.jpeg'];
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      if (!allowedExts.includes(ext)) {
+        setMfgModalError('Only PDF or image files (.pdf, .png, .jpg, .jpeg) are accepted.');
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setMfgModalError('File size exceeds maximum permitted limit of 10MB.');
         return;
       }
       try {
         const activeCode = await getOrInitRegistrationCode();
-        const docState = draftCertificationsMap[key] || { issueDate: '2023-04-15', expiryDate: '2028-04-14' };
-        const issueDate = docState.issueDate || '2023-04-15';
-        const expiryDate = docState.expiryDate || '2028-04-14';
 
         const uploaded = await manufacturerRegistrationApi.uploadDocument(
           file,
           key,
           activeCode,
-          issueDate,
-          expiryDate
         );
 
         setDraftCertificationsMap(prev => ({
@@ -1038,10 +958,9 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
             id: uploaded.id,
             fileName: uploaded.fileName,
             uploaded: true,
-            issueDate: uploaded.issueDate || issueDate,
-            expiryDate: uploaded.expiryDate || expiryDate,
             documentCode: uploaded.documentCode,
-            fileSize: uploaded.fileSize
+            fileSize: uploaded.fileSize,
+            uploadedAt: uploaded.uploadedAt,
           }
         }));
       } catch (err: any) {
@@ -1065,38 +984,15 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
 
   const handleSaveMfgCertifications = async () => {
     setMfgModalError(null);
-    const missing = MANDATORY_CERTIFICATIONS.filter(c => !draftCertificationsMap[c.key]?.uploaded);
+    const isWhoGmpRequired = whoGmpApplicable !== false;
+    const requiredDocs = ORIGINAL_MANUFACTURER_DOCUMENTS.filter(c => {
+      if (c.key === 'whoGmpCert') return isWhoGmpRequired;
+      return c.isMandatory;
+    });
+    const missing = requiredDocs.filter(c => !draftCertificationsMap[c.key]?.uploaded);
     if (missing.length > 0) {
-      setMfgModalError(`Please ensure all 5 mandatory certifications are uploaded. Missing: ${missing.map(m => m.name).join(', ')}`);
+      setMfgModalError(`Please ensure all required documents are uploaded. Missing: ${missing.map(m => m.name).join(', ')}`);
       return;
-    }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    for (const c of MANDATORY_CERTIFICATIONS) {
-      const doc = draftCertificationsMap[c.key];
-      if (!doc?.issueDate) {
-        setMfgModalError(`Issue Date is required for ${c.name}.`);
-        return;
-      }
-      if (!doc?.expiryDate) {
-        setMfgModalError(`Expiry Date is required for ${c.name}.`);
-        return;
-      }
-      const issue = new Date(doc.issueDate);
-      const expiry = new Date(doc.expiryDate);
-      if (issue > new Date()) {
-        setMfgModalError(`Issue Date for ${c.name} cannot be in the future.`);
-        return;
-      }
-      if (expiry <= issue) {
-        setMfgModalError(`Expiry Date must be after Issue Date for ${c.name}.`);
-        return;
-      }
-      if (expiry < today) {
-        setMfgModalError(`Expiry Date for ${c.name} cannot be in the past (${doc.expiryDate}).`);
-        return;
-      }
     }
 
     setCertificationsMap({ ...draftCertificationsMap });
@@ -1104,17 +1000,20 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
 
     if (registrationCode) {
       try {
-        const docsPayload = MANDATORY_CERTIFICATIONS.map(c => ({
-          category: c.key,
-          issueDate: draftCertificationsMap[c.key]?.issueDate || '2023-01-01',
-          expiryDate: draftCertificationsMap[c.key]?.expiryDate || '2028-01-01',
-        }));
-        await manufacturerRegistrationApi.saveStep2({ documents: docsPayload }, registrationCode);
+        const docsPayload = ORIGINAL_MANUFACTURER_DOCUMENTS
+          .filter(c => draftCertificationsMap[c.key]?.uploaded)
+          .map(c => ({
+            category: c.key,
+          }));
+        await manufacturerRegistrationApi.saveStep2({
+          documents: docsPayload,
+          whoGmpApplicable,
+        }, registrationCode);
       } catch (err: any) {
         console.warn('Backend sync warning for mfg step 2:', err?.message);
       }
     }
-    handleCloseMfgModal();
+    setActiveMfgModal(null);
   };
 
   const handleSaveMfgCapabilities = async () => {
@@ -1653,172 +1552,153 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
             {/* STEP 2 — COMPLIANCE & CERTIFICATIONS */}
             {currentStep === 2 && (
               <div style={{ background: isPublicPage ? '#0F172A' : '#FFFFFF', border: isPublicPage ? '1px solid #1E293B' : '1px solid #E2E8F0', borderRadius: 14, padding: 28 }}>
-                <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                  <div>
-                    <h2 style={{ fontSize: 20, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A', margin: 0 }}>Manufacturing Compliance & Certifications</h2>
-                    <div style={{ fontSize: 12.5, color: isPublicPage ? '#94A3B8' : '#64748B', marginTop: 2 }}>
-                      Provide your manufacturing licenses and certifications for verification ({MANDATORY_CERTIFICATIONS.filter(c => certificationsMap[c.key]?.uploaded).length}/5 Mandatory Uploaded).
-                    </div>
+                <div style={{ marginBottom: 20 }}>
+                  <h2 style={{ fontSize: 20, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A', margin: 0 }}>Required Compliance Documents</h2>
+                  <div style={{ fontSize: 12.5, color: isPublicPage ? '#94A3B8' : '#64748B', marginTop: 3 }}>
+                    Please upload your required statutory manufacturing documents for compliance verification ({MANDATORY_CERTIFICATIONS.filter(c => certificationsMap[c.key]?.uploaded).length}/{MANDATORY_CERTIFICATIONS.length} Uploaded).
                   </div>
-                  {MANDATORY_CERTIFICATIONS.some(c => !certificationsMap[c.key]?.uploaded) && (
-                    <button
-                      type="button"
-                      onClick={handleUploadAllSamples}
-                      disabled={isSaving || !!uploadingCategory}
-                      style={{
-                        padding: '7px 14px',
-                        borderRadius: 8,
-                        background: 'rgba(20,184,166,0.12)',
-                        color: '#0D9488',
-                        border: '1px solid #99F6E4',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        cursor: (isSaving || !!uploadingCategory) ? 'wait' : 'pointer',
-                        opacity: (isSaving || !!uploadingCategory) ? 0.7 : 1,
-                      }}
-                    >
-                      ⚡ Fast Test: Upload All 5 Mandatory Sample Certs
-                    </button>
-                  )}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {/* The 5 Mandatory Certifications */}
-                  {MANDATORY_CERTIFICATIONS.map(c => {
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* The Mandatory & Statutory Document Cards */}
+                  {ORIGINAL_MANUFACTURER_DOCUMENTS.map(c => {
+                    const isRequired = c.key === 'whoGmpCert' ? (whoGmpApplicable !== false) : c.isMandatory;
                     const doc = certificationsMap[c.key] || {
-                      key: c.key, name: c.name, code: c.code, fileName: '', uploaded: false, issueDate: '', expiryDate: ''
+                      key: c.key, name: c.name, code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: ''
                     };
 
-                    const isExpiryInvalid = doc.issueDate && doc.expiryDate && new Date(doc.expiryDate) < new Date(doc.issueDate);
-                    const isExpiryInPast = doc.expiryDate && new Date(doc.expiryDate) < new Date();
-
                     return (
-                      <div key={c.key} style={{ background: isPublicPage ? '#1E293B' : '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 18 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                          <div>
-                            <div style={{ fontSize: 13.5, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A' }}>
-                              {c.name} <span style={{ color: '#DC2626', fontSize: 11 }}>(Required *)</span>
-                            </div>
-                            <div style={{ fontSize: 11, color: '#64748B' }}>Standard: {c.code}</div>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            {doc.uploaded ? (
-                              <>
-                                <span style={{ padding: '4px 12px', borderRadius: 999, background: '#DCFCE7', color: '#15803D', fontSize: 11.5, fontWeight: 700 }}>✓ Uploaded</span>
-                                <button type="button" onClick={() => handleRemoveDoc(c.key)} style={{ padding: '5px 10px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
-                                  Remove
-                                </button>
-                              </>
+                      <div
+                        key={c.key}
+                        id={`card-${c.key}`}
+                        style={{
+                          background: isPublicPage ? '#1E293B' : '#F8FAFC',
+                          border: cardErrors[c.key] ? '1px solid #EF4444' : (isPublicPage ? '1px solid #334155' : '1px solid #CBD5E1'),
+                          borderRadius: 10,
+                          padding: '16px 20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 14
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 220 }}>
+                          <div style={{ fontSize: 14.5, fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span>{c.name}</span>
+                            {isRequired ? (
+                              <span style={{ color: '#EF4444', fontSize: 11.5, fontWeight: 700 }}>(Required)</span>
                             ) : (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleChooseFile(c.key, c.name)}
-                                  disabled={uploadingCategory === c.key || isSaving}
-                                  style={{
-                                    padding: '6px 14px', borderRadius: 6,
-                                    background: '#14B8A6', color: '#FFF',
-                                    border: 'none', fontSize: 12, fontWeight: 700,
-                                    cursor: (uploadingCategory === c.key || isSaving) ? 'wait' : 'pointer',
-                                    opacity: (uploadingCategory === c.key || isSaving) ? 0.7 : 1,
-                                    display: 'flex', alignItems: 'center', gap: 6
-                                  }}
-                                >
-                                  <Upload size={13} /> {uploadingCategory === c.key ? 'Uploading...' : 'Upload Document'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleUploadSampleDoc(c.key, c.name)}
-                                  disabled={uploadingCategory === c.key || isSaving}
-                                  title="Upload valid test PDF for quick verification"
-                                  style={{
-                                    padding: '6px 10px', borderRadius: 6,
-                                    background: isPublicPage ? '#334155' : '#E2E8F0',
-                                    color: isPublicPage ? '#E2E8F0' : '#475569',
-                                    border: '1px solid #CBD5E1', fontSize: 11, fontWeight: 600,
-                                    cursor: (uploadingCategory === c.key || isSaving) ? 'wait' : 'pointer',
-                                    opacity: (uploadingCategory === c.key || isSaving) ? 0.7 : 1,
-                                  }}
-                                >
-                                  Sample PDF
-                                </button>
-                              </div>
+                              <span style={{ color: '#64748B', fontSize: 11.5, fontWeight: 600 }}>(Optional)</span>
                             )}
                           </div>
+
+                          {doc.uploaded ? (
+                            <div style={{ fontSize: 12, color: isPublicPage ? '#94A3B8' : '#475569', fontWeight: 500, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span style={{ color: isPublicPage ? '#F1F5F9' : '#0F172A', fontWeight: 600 }}>📄 {doc.fileName}</span>
+                              {doc.fileSize ? <span style={{ color: '#64748B', fontSize: 11 }}>({Math.round(doc.fileSize / 1024)} KB)</span> : null}
+                            </div>
+                          ) : null}
                         </div>
 
-                        {doc.uploaded && (
-                          <div style={{ fontSize: 12, color: '#16A34A', fontWeight: 600, marginBottom: 12, background: 'rgba(22,163,74,0.08)', padding: '6px 10px', borderRadius: 6 }}>
-                            📄 {doc.fileName} {doc.documentCode ? `(${doc.documentCode})` : ''}
-                          </div>
-                        )}
-
-                        {/* Issue & Expiry Date Inputs */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, paddingTop: 10, borderTop: isPublicPage ? '1px solid #334155' : '1px solid #E2E8F0' }}>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Issue Date *</label>
-                            <input
-                              type="date"
-                              required
-                              value={doc.issueDate}
-                              onChange={e => {
-                                setCardErrors(prev => ({ ...prev, [c.key]: null }));
-                                setCertificationsMap(prev => ({
-                                  ...prev,
-                                  [c.key]: { ...prev[c.key], issueDate: e.target.value }
-                                }));
-                              }}
-                              style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, outline: 'none', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
-                            />
-                          </div>
-
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Expiry Date *</label>
-                            <input
-                              type="date"
-                              required
-                              value={doc.expiryDate}
-                              onChange={e => {
-                                setCardErrors(prev => ({ ...prev, [c.key]: null }));
-                                setCertificationsMap(prev => ({
-                                  ...prev,
-                                  [c.key]: { ...prev[c.key], expiryDate: e.target.value }
-                                }));
-                              }}
-                              style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: (isExpiryInvalid || isExpiryInPast || cardErrors[c.key]) ? '1px solid #DC2626' : '1px solid #CBD5E1', fontSize: 12.5, outline: 'none', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
-                            />
-                          </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          {doc.uploaded ? (
+                            <>
+                              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#DCFCE7', color: '#15803D', fontSize: 11.5, fontWeight: 700 }}>
+                                ✓ Uploaded
+                              </span>
+                              <button
+                                type="button"
+                                id={`btn-view-${c.key}`}
+                                onClick={() => handleViewDoc(doc.id)}
+                                style={{
+                                  padding: '6px 12px',
+                                  borderRadius: 6,
+                                  background: isPublicPage ? '#334155' : '#E2E8F0',
+                                  color: isPublicPage ? '#E2E8F0' : '#1E293B',
+                                  border: isPublicPage ? '1px solid #475569' : '1px solid #CBD5E1',
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 5
+                                }}
+                              >
+                                <Eye size={13} /> View Document
+                              </button>
+                              <button
+                                type="button"
+                                id={`btn-replace-${c.key}`}
+                                onClick={() => handleChooseFile(c.key, c.name)}
+                                disabled={uploadingCategory === c.key || isSaving}
+                                style={{
+                                  padding: '6px 14px',
+                                  borderRadius: 6,
+                                  background: '#0D9488',
+                                  color: '#FFF',
+                                  border: 'none',
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  cursor: (uploadingCategory === c.key || isSaving) ? 'wait' : 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 5
+                                }}
+                              >
+                                <Upload size={13} /> {uploadingCategory === c.key ? 'Uploading...' : 'Replace'}
+                              </button>
+                              <button
+                                type="button"
+                                id={`btn-remove-${c.key}`}
+                                onClick={() => handleRemoveDoc(c.key)}
+                                style={{
+                                  padding: '6px 10px',
+                                  borderRadius: 6,
+                                  background: isPublicPage ? 'rgba(239,68,68,0.1)' : '#FEF2F2',
+                                  color: '#EF4444',
+                                  border: '1px solid #FECACA',
+                                  fontSize: 11.5,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span style={{ padding: '4px 10px', borderRadius: 999, background: isPublicPage ? 'rgba(148,163,184,0.12)' : '#F1F5F9', color: isPublicPage ? '#94A3B8' : '#64748B', fontSize: 11.5, fontWeight: 600 }}>
+                                Not Uploaded
+                              </span>
+                              <button
+                                type="button"
+                                id={`btn-upload-${c.key}`}
+                                onClick={() => handleChooseFile(c.key, c.name)}
+                                disabled={uploadingCategory === c.key || isSaving}
+                                style={{
+                                  padding: '7px 18px',
+                                  borderRadius: 6,
+                                  background: '#14B8A6',
+                                  color: '#FFF',
+                                  border: 'none',
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  cursor: (uploadingCategory === c.key || isSaving) ? 'wait' : 'pointer',
+                                  opacity: (uploadingCategory === c.key || isSaving) ? 0.7 : 1,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6
+                                }}
+                              >
+                                <Upload size={13} /> {uploadingCategory === c.key ? 'Uploading...' : 'Upload Document'}
+                              </button>
+                            </>
+                          )}
                         </div>
 
-                        {isExpiryInvalid && (
-                          <div style={{ fontSize: 11, color: '#EF4444', marginTop: 6, fontWeight: 700 }}>
-                            ⚠️ Expiry Date cannot be before Issue Date.
-                          </div>
-                        )}
-                        {!isExpiryInvalid && isExpiryInPast && (
-                          <div style={{ fontSize: 11.5, color: '#DC2626', marginTop: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, background: '#FEF2F2', padding: '6px 10px', borderRadius: 6, border: '1px solid #FECACA' }}>
-                            <span>⚠️ Expiry Date cannot be in the past ({doc.expiryDate}). A valid future date is required.</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCardErrors(prev => ({ ...prev, [c.key]: null }));
-                                setCertificationsMap(prev => ({
-                                  ...prev,
-                                  [c.key]: { ...prev[c.key], expiryDate: '2028-08-31' }
-                                }));
-                              }}
-                              style={{
-                                background: '#FFF', border: '1px solid #14B8A6', color: '#0D9488',
-                                borderRadius: 4, padding: '3px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer'
-                              }}
-                            >
-                              Set valid renewal date (31-08-2028)
-                            </button>
-                          </div>
-                        )}
                         {cardErrors[c.key] && (
-                          <div style={{ marginTop: 8, background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#B91C1C', padding: '8px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
+                          <div style={{ width: '100%', marginTop: 8, background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#B91C1C', padding: '6px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 600 }}>
                             ⚠️ {cardErrors[c.key]}
                           </div>
                         )}
@@ -1827,13 +1707,22 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                   })}
 
                   {/* Section for Other Certificates (Optional, Multiple Supported) */}
-                  <div style={{ background: isPublicPage ? '#1E293B' : '#F8FAFC', border: '1px solid #94A3B8', borderRadius: 10, padding: 18 }}>
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A' }}>
-                        Other Certificates <span style={{ color: '#64748B', fontSize: 11 }}>(Optional)</span>
+                  <div
+                    id="section-other-certificates"
+                    style={{
+                      background: isPublicPage ? '#1E293B' : '#F8FAFC',
+                      border: cardErrors['otherCert'] ? '1px solid #EF4444' : (isPublicPage ? '1px solid #334155' : '1px solid #CBD5E1'),
+                      borderRadius: 10,
+                      padding: '18px 20px',
+                    }}
+                  >
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>Other Certificates</span>
+                        <span style={{ color: '#64748B', fontSize: 11.5, fontWeight: 600 }}>(Optional)</span>
                       </div>
-                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
-                        Provide additional certificates (e.g. EU-GMP, HACCP, Halal, Factory Registration, ISO 14001) and upload supporting documents.
+                      <div style={{ fontSize: 12, color: isPublicPage ? '#94A3B8' : '#64748B', marginTop: 3 }}>
+                        Upload any additional statutory, quality or regulatory certificates (e.g. EU-GMP, HACCP, Halal, CE, ISO 14001).
                       </div>
                     </div>
 
@@ -1841,101 +1730,123 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                     {otherCertsList.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
                         {otherCertsList.map((doc, idx) => (
-                          <div key={doc.id || idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: isPublicPage ? '#0F172A' : '#FFF', borderRadius: 6, border: '1px solid #CBD5E1' }}>
+                          <div
+                            key={doc.id || idx}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              padding: '10px 14px',
+                              background: isPublicPage ? '#0F172A' : '#FFF',
+                              borderRadius: 8,
+                              border: isPublicPage ? '1px solid #334155' : '1px solid #E2E8F0',
+                              gap: 10
+                            }}
+                          >
                             <div>
-                              <div style={{ fontSize: 12.5, fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A' }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A' }}>
                                 ✓ {doc.name}
                               </div>
-                              <div style={{ fontSize: 11, color: '#16A34A', marginTop: 2 }}>
-                                📄 {doc.fileName} | Issue: {doc.issueDate || '—'} | Expiry: {doc.expiryDate || '—'}
+                              <div style={{ fontSize: 11.5, color: '#10B981', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span>📄 {doc.fileName}</span>
+                                {doc.fileSize ? <span style={{ color: '#64748B', fontSize: 11 }}>({Math.round(doc.fileSize / 1024)} KB)</span> : null}
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveOtherDoc(doc.id, idx)}
-                              style={{ padding: '4px 10px', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                            >
-                              Remove
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {doc.id && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewDoc(doc.id)}
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: 6,
+                                    background: isPublicPage ? '#334155' : '#E2E8F0',
+                                    color: isPublicPage ? '#E2E8F0' : '#1E293B',
+                                    border: isPublicPage ? '1px solid #475569' : '1px solid #CBD5E1',
+                                    fontSize: 11.5,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4
+                                  }}
+                                >
+                                  <Eye size={12} /> View Document
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveOtherDoc(doc.id, idx)}
+                                style={{
+                                  padding: '5px 10px',
+                                  borderRadius: 6,
+                                  background: isPublicPage ? 'rgba(239,68,68,0.1)' : '#FEF2F2',
+                                  color: '#EF4444',
+                                  border: '1px solid #FECACA',
+                                  fontSize: 11.5,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* Add New Other Certificate Form */}
-                    <div style={{ background: isPublicPage ? '#0F172A' : '#FFFFFF', padding: 14, borderRadius: 8, border: '1px dashed #CBD5E1', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Certificate Title / Name (Optional)</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. EU-GMP, Halal Certification, Factory Registration"
-                          value={newOtherCertName}
-                          onChange={e => setNewOtherCertName(e.target.value)}
-                          style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, outline: 'none', background: isPublicPage ? '#1E293B' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
-                        />
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Issue Date *</label>
-                          <input
-                            type="date"
-                            value={newOtherIssueDate}
-                            onChange={e => setNewOtherIssueDate(e.target.value)}
-                            style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, outline: 'none', background: isPublicPage ? '#1E293B' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Expiry Date *</label>
-                          <input
-                            type="date"
-                            value={newOtherExpiryDate}
-                            onChange={e => setNewOtherExpiryDate(e.target.value)}
-                            style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, outline: 'none', background: isPublicPage ? '#1E293B' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                        <button
-                          type="button"
-                          onClick={handleChooseOtherFile}
-                          disabled={uploadingCategory === 'otherCert' || isSaving}
-                          style={{
-                            padding: '6px 14px', borderRadius: 6,
-                            background: '#0D9488', color: '#FFF',
-                            border: 'none', fontSize: 12, fontWeight: 700,
-                            cursor: (uploadingCategory === 'otherCert' || isSaving) ? 'wait' : 'pointer',
-                            opacity: (uploadingCategory === 'otherCert' || isSaving) ? 0.7 : 1,
-                            display: 'flex', alignItems: 'center', gap: 6
-                          }}
-                        >
-                          <Upload size={13} /> {uploadingCategory === 'otherCert' ? 'Uploading...' : 'Upload Certificate'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleUploadSampleOtherDoc}
-                          disabled={uploadingCategory === 'otherCert' || isSaving}
-                          style={{
-                            padding: '6px 10px', borderRadius: 6,
-                            background: isPublicPage ? '#334155' : '#E2E8F0',
-                            color: isPublicPage ? '#E2E8F0' : '#475569',
-                            border: '1px solid #CBD5E1', fontSize: 11, fontWeight: 600,
-                            cursor: (uploadingCategory === 'otherCert' || isSaving) ? 'wait' : 'pointer',
-                            opacity: (uploadingCategory === 'otherCert' || isSaving) ? 0.7 : 1,
-                          }}
-                        >
-                          Upload Sample PDF
-                        </button>
-                      </div>
-
-                      {cardErrors['otherCert'] && (
-                        <div style={{ marginTop: 4, background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#B91C1C', padding: '6px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 600 }}>
-                          ⚠️ {cardErrors['otherCert']}
-                        </div>
-                      )}
+                    {/* Form to add another certificate */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        placeholder="Certificate Name (e.g. EU-GMP, Halal, HACCP, ISO 14001)"
+                        value={newOtherCertName}
+                        onChange={(e) => setNewOtherCertName(e.target.value)}
+                        style={{
+                          flex: 1,
+                          minWidth: 240,
+                          height: 38,
+                          padding: '0 12px',
+                          borderRadius: 6,
+                          border: isPublicPage ? '1px solid #334155' : '1px solid #CBD5E1',
+                          background: isPublicPage ? '#0F172A' : '#FFF',
+                          color: isPublicPage ? '#FFF' : '#0F172A',
+                          fontSize: 12.5,
+                          outline: 'none',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        id="btn-upload-otherCert"
+                        onClick={handleChooseOtherFile}
+                        disabled={uploadingCategory === 'otherCert' || isSaving}
+                        style={{
+                          height: 38,
+                          padding: '0 16px',
+                          borderRadius: 6,
+                          background: '#14B8A6',
+                          color: '#FFF',
+                          border: 'none',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: (uploadingCategory === 'otherCert' || isSaving) ? 'wait' : 'pointer',
+                          opacity: (uploadingCategory === 'otherCert' || isSaving) ? 0.7 : 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6
+                        }}
+                      >
+                        <Upload size={13} /> {uploadingCategory === 'otherCert' ? 'Uploading...' : 'Upload Document'}
+                      </button>
                     </div>
+
+                    {cardErrors['otherCert'] && (
+                      <div style={{ marginTop: 8, background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#B91C1C', padding: '6px 12px', borderRadius: 6, fontSize: 11.5, fontWeight: 600 }}>
+                        ⚠️ {cardErrors['otherCert']}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2522,27 +2433,51 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                   {/* Section 2: Certifications Summary */}
                   <div style={{ background: isPublicPage ? '#1E293B' : '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #CBD5E1', paddingBottom: 8, marginBottom: 10 }}>
-                      <span style={{ fontWeight: 800, fontSize: 13, color: isPublicPage ? '#FFF' : '#0F172A' }}>2. Compliance & Certifications ({MANDATORY_CERTIFICATIONS.filter(c => certificationsMap[c.key]?.uploaded).length}/5 Mandatory Certs Uploaded)</span>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: isPublicPage ? '#FFF' : '#0F172A' }}>
+                        2. Compliance & Documents ({MANDATORY_CERTIFICATIONS.filter(c => certificationsMap[c.key]?.uploaded).length}/{MANDATORY_CERTIFICATIONS.length} Uploaded)
+                      </span>
                       <button type="button" onClick={() => handleOpenMfgModal('certifications')} style={{ background: 'none', border: 'none', color: '#14B8A6', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Edit</button>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12 }}>
-                      {MANDATORY_CERTIFICATIONS.map(c => {
+                      {ORIGINAL_MANUFACTURER_DOCUMENTS.map(c => {
                         const doc = certificationsMap[c.key];
                         return (
-                          <div key={c.key} style={{ padding: '6px 8px', background: isPublicPage ? '#0F172A' : '#FFF', borderRadius: 6, border: '1px solid #CBD5E1' }}>
-                            <div style={{ fontWeight: 700 }}>✓ {c.name}</div>
-                            <div style={{ color: '#64748B', fontSize: 11, marginTop: 2 }}>
-                              Issue: {doc?.issueDate || '—'} | Expiry: <strong style={{ color: '#16A34A' }}>{doc?.expiryDate || '—'}</strong>
+                          <div key={c.key} style={{ padding: '8px 10px', background: isPublicPage ? '#0F172A' : '#FFF', borderRadius: 6, border: '1px solid #CBD5E1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <div style={{ fontWeight: 700 }}>✓ {c.name}</div>
+                              <div style={{ color: doc?.uploaded ? '#10B981' : '#64748B', fontSize: 11, marginTop: 2 }}>
+                                {doc?.uploaded ? `📄 ${doc.fileName || 'Uploaded'}` : 'Not Uploaded'}
+                              </div>
                             </div>
+                            {doc?.id && (
+                              <button
+                                type="button"
+                                onClick={() => handleViewDoc(doc.id)}
+                                style={{ background: 'none', border: 'none', color: '#14B8A6', cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}
+                              >
+                                <Eye size={12} /> View
+                              </button>
+                            )}
                           </div>
                         );
                       })}
                       {otherCertsList.map((doc, idx) => (
-                        <div key={doc.id || idx} style={{ padding: '6px 8px', background: isPublicPage ? '#0F172A' : '#FFF', borderRadius: 6, border: '1px solid #CBD5E1' }}>
-                          <div style={{ fontWeight: 700 }}>✓ {doc.name}</div>
-                          <div style={{ color: '#64748B', fontSize: 11, marginTop: 2 }}>
-                            Issue: {doc?.issueDate || '—'} | Expiry: <strong style={{ color: '#16A34A' }}>{doc?.expiryDate || '—'}</strong>
+                        <div key={doc.id || idx} style={{ padding: '8px 10px', background: isPublicPage ? '#0F172A' : '#FFF', borderRadius: 6, border: '1px solid #CBD5E1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontWeight: 700 }}>✓ {doc.name}</div>
+                            <div style={{ color: '#10B981', fontSize: 11, marginTop: 2 }}>
+                              📄 {doc.fileName || 'Uploaded'}
+                            </div>
                           </div>
+                          {doc?.id && (
+                            <button
+                              type="button"
+                              onClick={() => handleViewDoc(doc.id)}
+                              style={{ background: 'none', border: 'none', color: '#14B8A6', cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}
+                            >
+                              <Eye size={12} /> View
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2858,17 +2793,19 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
               {activeMfgModal === 'certifications' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div style={{ fontSize: 12, color: isPublicPage ? '#94A3B8' : '#64748B' }}>
-                    All 5 mandatory certifications must be uploaded with valid future expiry dates.
+                    All required statutory manufacturing documents must be uploaded.
                   </div>
-                  {MANDATORY_CERTIFICATIONS.map(c => {
+                  {ORIGINAL_MANUFACTURER_DOCUMENTS.map(c => {
+                    const isRequired = c.key === 'whoGmpCert' ? (whoGmpApplicable !== false) : c.isMandatory;
                     const doc = draftCertificationsMap[c.key] || {
                       key: c.key,
                       name: c.name,
                       code: c.code,
                       fileName: '',
                       uploaded: false,
-                      issueDate: '2023-01-01',
-                      expiryDate: '2028-01-01'
+                      issueDate: '',
+                      expiryDate: '',
+                      documentNumber: ''
                     };
                     return (
                       <div
@@ -2879,58 +2816,44 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                           background: isPublicPage ? '#1E293B' : '#F8FAFC',
                           border: isPublicPage ? '1px solid #334155' : '1px solid #CBD5E1',
                           display: 'flex',
-                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
                           gap: 10
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ fontSize: 13, fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A' }}>{c.name}</span>
-                            <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, background: '#14B8A6', color: '#FFF', borderRadius: 4, padding: '1px 6px' }}>{c.code}</span>
+                            {isRequired ? (
+                              <span style={{ color: '#EF4444', fontSize: 11, fontWeight: 700 }}>(Required)</span>
+                            ) : (
+                              <span style={{ color: '#64748B', fontSize: 11, fontWeight: 600 }}>(Optional)</span>
+                            )}
                           </div>
                           {doc.uploaded ? (
-                            <span style={{ fontSize: 11.5, color: '#10B981', fontWeight: 700 }}>✓ Uploaded: {doc.fileName}</span>
+                            <div style={{ fontSize: 11.5, color: '#10B981', fontWeight: 600, marginTop: 3 }}>
+                              ✓ Uploaded: {doc.fileName}
+                            </div>
                           ) : (
-                            <span style={{ fontSize: 11.5, color: '#DC2626', fontWeight: 700 }}>Pending Upload</span>
+                            <div style={{ fontSize: 11, color: isPublicPage ? '#94A3B8' : '#64748B', marginTop: 3 }}>
+                              Not Uploaded
+                            </div>
                           )}
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'flex-end' }}>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#64748B', marginBottom: 4 }}>Issue Date</label>
-                            <input
-                              type="date"
-                              value={doc.issueDate}
-                              onChange={e => setDraftCertificationsMap(prev => ({
-                                ...prev,
-                                [c.key]: { ...prev[c.key], issueDate: e.target.value }
-                              }))}
-                              style={{ width: '100%', height: 34, padding: '0 8px', borderRadius: 6, border: '1px solid #CBD5E1', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A', fontSize: 12 }}
-                            />
-                          </div>
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#64748B', marginBottom: 4 }}>Expiry Date</label>
-                            <input
-                              type="date"
-                              value={doc.expiryDate}
-                              onChange={e => setDraftCertificationsMap(prev => ({
-                                ...prev,
-                                [c.key]: { ...prev[c.key], expiryDate: e.target.value }
-                              }))}
-                              style={{ width: '100%', height: 34, padding: '0 8px', borderRadius: 6, border: '1px solid #CBD5E1', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A', fontSize: 12 }}
-                            />
-                          </div>
-                          <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          {doc.uploaded && doc.id && (
                             <button
                               type="button"
-                              onClick={() => handleModalCertUpload(c.key, c.name)}
+                              onClick={() => handleViewDoc(doc.id)}
                               style={{
                                 height: 34,
-                                padding: '0 12px',
+                                padding: '0 10px',
                                 borderRadius: 6,
-                                background: '#14B8A6',
-                                color: '#FFF',
-                                border: 'none',
+                                background: isPublicPage ? '#334155' : '#E2E8F0',
+                                color: isPublicPage ? '#E2E8F0' : '#1E293B',
+                                border: isPublicPage ? '1px solid #475569' : '1px solid #CBD5E1',
                                 fontWeight: 700,
                                 fontSize: 11.5,
                                 cursor: 'pointer',
@@ -2939,28 +2862,48 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                                 gap: 4
                               }}
                             >
-                              <Upload size={12} /> {doc.uploaded ? 'Replace' : 'Upload PDF'}
+                              <Eye size={12} /> View
                             </button>
-                            {doc.uploaded && (
-                              <button
-                                type="button"
-                                onClick={() => handleModalCertRemove(c.key)}
-                                style={{
-                                  height: 34,
-                                  padding: '0 8px',
-                                  borderRadius: 6,
-                                  background: 'none',
-                                  border: '1px solid #EF4444',
-                                  color: '#EF4444',
-                                  fontSize: 11.5,
-                                  fontWeight: 600,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleModalCertUpload(c.key, c.name)}
+                            style={{
+                              height: 34,
+                              padding: '0 14px',
+                              borderRadius: 6,
+                              background: '#14B8A6',
+                              color: '#FFF',
+                              border: 'none',
+                              fontWeight: 700,
+                              fontSize: 11.5,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 5
+                            }}
+                          >
+                            <Upload size={12} /> {doc.uploaded ? 'Replace' : 'Upload Document'}
+                          </button>
+                          {doc.uploaded && (
+                            <button
+                              type="button"
+                              onClick={() => handleModalCertRemove(c.key)}
+                              style={{
+                                height: 34,
+                                padding: '0 10px',
+                                borderRadius: 6,
+                                background: 'none',
+                                border: '1px solid #EF4444',
+                                color: '#EF4444',
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Remove
+                            </button>
+                          )}
                         </div>
                       </div>
                     );

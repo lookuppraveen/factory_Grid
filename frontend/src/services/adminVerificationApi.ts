@@ -188,10 +188,16 @@ export const adminVerificationApi = {
     });
   },
 
-  async approveCustomerVerification(idOrCode: string, customerCode?: string): Promise<CustomerVerificationRequest> {
+  async approveCustomerVerification(
+    idOrCode: string,
+    options?: { customerCode?: string; customerClassification?: 'REGULAR' | 'SPECIAL_PARTY'; remarks?: string } | string
+  ): Promise<CustomerVerificationRequest> {
+    const payload = typeof options === 'string'
+      ? { customerCode: options }
+      : (options || {});
     return request<CustomerVerificationRequest>(`${API_BASE}/api/v1/compliance/customer-verifications/${encodeURIComponent(idOrCode)}/approve`, {
       method: 'POST',
-      body: JSON.stringify({ customerCode }),
+      body: JSON.stringify(payload),
     });
   },
 
@@ -226,13 +232,14 @@ export const adminVerificationApi = {
 
   async updateCustomerClassification(
     idOrCode: string,
-    classification: 'REGULAR' | 'SPECIAL_PARTY'
+    classification: 'REGULAR' | 'SPECIAL_PARTY',
+    remarks?: string
   ): Promise<CustomerVerificationRequest> {
     return request<CustomerVerificationRequest>(
       `${API_BASE}/api/v1/compliance/customer-verifications/${encodeURIComponent(idOrCode)}/classification`,
       {
         method: 'POST',
-        body: JSON.stringify({ classification }),
+        body: JSON.stringify({ classification, remarks }),
       }
     );
   },
@@ -352,6 +359,29 @@ export const adminVerificationApi = {
       {
         method: 'POST',
         body: JSON.stringify({ decision, reason }),
+      }
+    );
+  },
+
+  async getAdminManufacturerDocuments(mfgId: string): Promise<any[]> {
+    return request<any[]>(
+      `${API_BASE}/api/v1/admin/manufacturers/${encodeURIComponent(mfgId)}/documents`,
+      {
+        method: 'GET',
+      }
+    );
+  },
+
+  async patchAdminManufacturerDocumentVerification(
+    mfgId: string,
+    docId: string,
+    payload: { status?: string; decision?: string; remarks?: string; reason?: string; adminRemarks?: string }
+  ): Promise<{ success: boolean; document: any; verificationStatus: string }> {
+    return request<{ success: boolean; document: any; verificationStatus: string }>(
+      `${API_BASE}/api/v1/admin/manufacturers/${encodeURIComponent(mfgId)}/documents/${encodeURIComponent(docId)}/verification`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
       }
     );
   },

@@ -5,6 +5,8 @@ import {
   Tag, Search, Eye, CheckCircle2, Clock, Building2, X, FileText,
   ShieldCheck, ChevronRight, Filter, AlertCircle, RefreshCw, Layers, Edit, Slash, Send, Info, DollarSign
 } from 'lucide-react';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 export const AdminQuoteMonitor: React.FC = () => {
   const { rfqs, quotes, manufacturers, customers, currentRole, addAuditLog } = useApp();
@@ -158,8 +160,24 @@ export const AdminQuoteMonitor: React.FC = () => {
       if (statusFilter === 'SELECTED') return matchSearch && item.isAwarded;
 
       return matchSearch;
+    }).sort((a, b) => {
+      // Latest record first (created_at DESC), secondary stable sort on rfqNumber DESC
+      const timeA = new Date((a.rfq as any).createdAt || (a.rfq as any).created_at || a.rfq.createdDate || 0).getTime();
+      const timeB = new Date((b.rfq as any).createdAt || (b.rfq as any).created_at || b.rfq.createdDate || 0).getTime();
+      if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+        return timeB - timeA;
+      }
+      return String(b.rfq.rfqNumber || b.rfq.id || '').localeCompare(String(a.rfq.rfqNumber || a.rfq.id || ''));
     });
   }, [monitoredRfqs, searchTerm, statusFilter]);
+
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredMonitoredRfqs.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, statusFilter]
+  });
+  const paginatedMonitoredRfqs = pagination.paginateItems(filteredMonitoredRfqs);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 48, background: '#F8FAFC', color: '#0F172A', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -271,7 +289,7 @@ export const AdminQuoteMonitor: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filteredMonitoredRfqs.map(({ rfq, responsesCount, lowestPrice, highestPrice, isAwarded, selectedMfgName }) => (
+              paginatedMonitoredRfqs.map(({ rfq, responsesCount, lowestPrice, highestPrice, isAwarded, selectedMfgName }) => (
                 <tr key={rfq.id} style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s' }} onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <td style={{ padding: '14px 16px', fontWeight: 800, color: '#7C3AED', fontFamily: 'monospace' }}>
                     {rfq.rfqNumber}
@@ -317,6 +335,7 @@ export const AdminQuoteMonitor: React.FC = () => {
           </tbody>
         </table>
       </div>
+      <PaginationControl {...pagination.paginationProps} itemName="quote records" />
 
       {/* ── 4. QUOTE DETAILS & ADMIN CONTROLS MODAL ───────────────────── */}
       {selectedRfqForView && (

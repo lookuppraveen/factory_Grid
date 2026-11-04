@@ -64,7 +64,30 @@ export class CustomerVerificationResponseDto {
 
 export class ApproveVerificationDto {
   @ApiPropertyOptional({ example: 'CUS000101', description: 'Generated customer code if custom' })
+  @IsOptional()
+  @IsString()
   customerCode?: string;
+
+  @ApiPropertyOptional({ enum: ['REGULAR', 'SPECIAL_PARTY'], example: 'REGULAR', description: 'Buyer classification' })
+  @IsOptional()
+  @IsString()
+  customerClassification?: 'REGULAR' | 'SPECIAL_PARTY';
+
+  @ApiPropertyOptional({ example: 'Verified compliance checks and approved for special terms', description: 'Approval notes / remarks' })
+  @IsOptional()
+  @IsString()
+  remarks?: string;
+}
+
+export class UpdateClassificationDto {
+  @ApiProperty({ enum: ['REGULAR', 'SPECIAL_PARTY'], example: 'SPECIAL_PARTY', description: 'Buyer classification' })
+  @IsString()
+  classification!: 'REGULAR' | 'SPECIAL_PARTY';
+
+  @ApiPropertyOptional({ example: 'Approved as special buyer after turnover audit', description: 'Audit notes / remarks' })
+  @IsOptional()
+  @IsString()
+  remarks?: string;
 }
 
 export class RejectVerificationDto {

@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { initiateRazorpayCheckout, verifyRazorpaySignature } from '../../services/razorpayService';
 import { EnterpriseMetricBar } from '../common/EnterpriseMetricBar';
+import { PaginationControl } from '../common/PaginationControl';
+import { usePagination } from '../../hooks/usePagination';
 
 // ─── Types & Interfaces ───────────────────────────────────────────────────────
 
@@ -1156,7 +1158,23 @@ export const InvoiceModule: React.FC<InvoiceModuleProps> = ({
     if (statusFilter === 'UNPAID') return inv.paidAmount === 0 && inv.balanceAmount > 0 && !isOverdue;
     if (statusFilter === 'OVERDUE') return isOverdue;
     return true;
+  }).sort((a, b) => {
+    // Latest record first (created_at DESC), secondary stable sort on invoiceNumber DESC
+    const timeA = new Date((a as any).createdAt || (a as any).created_at || a.invoiceDate || 0).getTime();
+    const timeB = new Date((b as any).createdAt || (b as any).created_at || b.invoiceDate || 0).getTime();
+    if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+      return timeB - timeA;
+    }
+    return String(b.invoiceNumber || b.id || '').localeCompare(String(a.invoiceNumber || a.id || ''));
   });
+
+  // Pagination Control
+  const pagination = usePagination({
+    totalItems: filteredInvoices.length,
+    initialPageSize: 10,
+    resetDependencies: [searchTerm, statusFilter]
+  });
+  const paginatedInvoices = pagination.paginateItems(filteredInvoices);
 
   // RAZORPAY CHECKOUT HANDLER (FOR BUYER)
   const handleTriggerRazorpay = async (inv: Invoice, e?: React.MouseEvent, customAmt?: number) => {
@@ -2264,7 +2282,7 @@ export const InvoiceModule: React.FC<InvoiceModuleProps> = ({
                   {filteredInvoices.length === 0 ? (
                     <tr><td colSpan={9} style={{ padding: '36px 16px', textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>No invoices found matching criteria.</td></tr>
                   ) : (
-                    filteredInvoices.map(inv => {
+                    paginatedInvoices.map(inv => {
                       const sym = getCurrencySymbol(inv.currency);
                       const isPaid = inv.balanceAmount === 0 && inv.totalAmount > 0;
                       const isPartial = inv.paidAmount > 0 && inv.balanceAmount > 0;
@@ -2506,6 +2524,7 @@ export const InvoiceModule: React.FC<InvoiceModuleProps> = ({
                   )}
                 </tbody>
               </table>
+              <PaginationControl {...pagination.paginationProps} itemName="invoices" />
             </div>
           </div>
         </>

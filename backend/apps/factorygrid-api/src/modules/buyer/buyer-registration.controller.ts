@@ -273,6 +273,15 @@ export class BuyerRegistrationController {
     return this.buyerService.getMyRegistration(Number(user.id));
   }
 
+  @Get('profile')
+  @ApiBearerAuth()
+  @Roles('BUYER', 'ROLE_BUYER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
+  @ApiOperation({ summary: 'Get authenticated buyer profile, registration, and compliance status' })
+  @ApiOkResponse({ description: 'Consolidated buyer profile and verification status' })
+  getBuyerProfile(@CurrentUser() user: AuthUser) {
+    return this.buyerService.getBuyerProfile(Number(user.id), user);
+  }
+
   @Get('registration/:code')
   @ApiBearerAuth()
   @Roles('ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER', 'BUYER', 'ROLE_BUYER')

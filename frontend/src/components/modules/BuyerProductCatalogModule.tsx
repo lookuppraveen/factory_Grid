@@ -1,11 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Product, Manufacturer, ManufacturerProductMapping } from '../../types';
 import { ViewModeToggle } from '../common/ViewModeToggle';
+import { catalogApi } from '../../services/catalogApi';
 import {
   Package, Search, Factory, CheckCircle2,
   Info, X, Layers, ShieldCheck, Eye,
-  RotateCcw, FileText, ChevronRight
+  RotateCcw, FileText, ChevronRight, AlertTriangle,
+  Lock, RotateCw, ExternalLink
 } from 'lucide-react';
 
 interface BuyerProductCatalogProps {
@@ -14,14 +16,56 @@ interface BuyerProductCatalogProps {
 
 export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ onNavigateTab }) => {
   const {
-    products,
+    products: contextProducts,
     categories,
     subCategories,
     subSubCategories,
     mappings,
     manufacturers,
-    setActiveTab
+    setActiveTab,
+    userProfile,
+    openProfileTab
   } = useApp();
+
+  // Live database fetching state
+  const [liveProducts, setLiveProducts] = useState<Product[] | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const fetchProducts = async (isManual = false) => {
+    if (isManual) setIsRefreshing(true);
+    else setIsLoading(true);
+    setApiError(null);
+    try {
+      const data = await catalogApi.listProducts();
+      if (Array.isArray(data) && data.length > 0) {
+        setLiveProducts(data);
+      }
+    } catch (err: any) {
+      console.warn('Could not fetch live products from backend:', err);
+      setApiError(err?.message || 'Failed to fetch formulations from database');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  // Prefer live products fetched from PostgreSQL database; fallback to context
+  const products = useMemo(() => {
+    if (liveProducts && liveProducts.length > 0) return liveProducts;
+    return contextProducts || [];
+  }, [liveProducts, contextProducts]);
+
+  // Determine if logged-in buyer is unapproved / pending / inactive
+  const isBuyerUnapproved = Boolean(
+    userProfile?.accountStatus &&
+    userProfile.accountStatus.toUpperCase() !== 'ACTIVE'
+  );
 
   const [displayMode, setDisplayMode] = useState<'TABLE' | 'CARD'>('TABLE');
 
@@ -233,12 +277,121 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
         </div>
 
         <div className="ent-command-bar-right" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => fetchProducts(true)}
+            disabled={isRefreshing || isLoading}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: 8,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#0F766E',
+              cursor: (isRefreshing || isLoading) ? 'not-allowed' : 'pointer',
+              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+              transition: 'all 0.15s ease'
+            }}
+            title="Refresh formulations and live catalog directly from PostgreSQL database"
+          >
+            <RotateCw size={14} style={{ animation: (isRefreshing || isLoading) ? 'spin 1s linear infinite' : 'none' }} />
+            <span>{isRefreshing ? 'Syncing...' : 'Sync Database'}</span>
+          </button>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 8, padding: '6px 14px' }}>
             <ShieldCheck size={16} style={{ color: '#16A34A' }} />
             <span style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>Read-Only Catalog</span>
           </div>
         </div>
       </div>
+
+      {/* ── Unapproved Buyer Statutory Restriction Banner ─────────── */}
+      {isBuyerUnapproved && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
+            border: '1px solid #FCD34D',
+            borderRadius: 12,
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 16,
+            boxShadow: '0 2px 6px rgba(217, 119, 6, 0.08)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                background: '#FDE68A',
+                border: '1px solid #F59E0B',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#B45309',
+                flexShrink: 0
+              }}
+            >
+              <AlertTriangle size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#92400E', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>Catalogue Read-Only Mode (Account Status: <strong>{userProfile?.accountStatus || 'PENDING_VERIFICATION'}</strong>)</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: '#FDE68A', color: '#78350F', border: '1px solid #F59E0B' }}>
+                  COMMERCIAL PROCUREMENT RESTRICTED
+                </span>
+              </div>
+              <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#B45309', lineHeight: 1.45 }}>
+                Your buyer account has not yet completed compliance verification. You can browse all standardized formulations freely, but floating RFQs, requesting contract quotes, and issuing purchase orders require platform administrator approval of your statutory GSTIN &amp; PAN documents.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (openProfileTab) {
+                openProfileTab('documents');
+              } else if (onNavigateTab) {
+                onNavigateTab('profile-documents');
+              } else {
+                setActiveTab('profile-documents');
+              }
+            }}
+            style={{
+              padding: '9px 16px',
+              borderRadius: 8,
+              background: '#D97706',
+              color: '#FFFFFF',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: 12.5,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 2px 4px rgba(217, 119, 6, 0.2)'
+            }}
+          >
+            <span>Review &amp; Re-upload Documents</span>
+            <ExternalLink size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* ── API Sync Notice / Fallback Status ─────────────────────── */}
+      {apiError && (
+        <div style={{ padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12, color: '#991B1B', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Info size={15} style={{ flexShrink: 0 }} />
+          <span>Note: {apiError}. Standard catalog loaded from cached registry.</span>
+        </div>
+      )}
 
       {/* ── Quick Stats Metrics Row ─────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
@@ -826,6 +979,18 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
                       {selectedProduct.uom || 'Units'}
                     </strong>
                   </div>
+                  <div>
+                    <span style={{ color: '#64748B' }}>Brand Name:</span>
+                    <strong style={{ color: '#0F172A', display: 'block', marginTop: 2 }}>
+                      {(selectedProduct as any).brand || (selectedProduct as any).brandNames?.[0] || 'Generic / Standard'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748B' }}>Commercial Status:</span>
+                    <strong style={{ color: (selectedProduct as any).isSellable !== false ? '#15803D' : '#94A3B8', display: 'block', marginTop: 2 }}>
+                      {(selectedProduct as any).isSellable !== false ? 'Commercial Formulation' : 'Non-Commercial / Pilot'}
+                    </strong>
+                  </div>
                   {selectedProduct.saltCombination && (
                     <div style={{ gridColumn: '1 / -1' }}>
                       <span style={{ color: '#64748B' }}>Salt Combination:</span>
@@ -876,6 +1041,27 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
                   </div>
                 </div>
               </div>
+
+              {/* DYNAMIC CATEGORY SPECIFICATIONS */}
+              {selectedProduct.attributes && typeof selectedProduct.attributes === 'object' && Object.keys(selectedProduct.attributes).length > 0 && (
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', marginBottom: 12, letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Layers size={14} /> CATEGORY SPECIFICATIONS & ATTRIBUTES
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                    {Object.entries(selectedProduct.attributes).map(([attrKey, attrVal]) => (
+                      <div key={attrKey} style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'capitalize', display: 'block' }}>
+                          {attrKey.replace(/^attr_/, '').replace(/_/g, ' ')}
+                        </span>
+                        <strong style={{ fontSize: 13, color: '#0F172A', display: 'block', marginTop: 2 }}>
+                          {String(attrVal) || '—'}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 3. MANUFACTURER / PRODUCT MAPPING (BUYER SAFE — NO MARGINS/INTERNAL PRICING) */}
               <div>
@@ -965,7 +1151,7 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
             </div>
 
             {/* Drawer Footer */}
-            <div style={{ padding: '16px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '16px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <button
                 onClick={() => setSelectedProduct(null)}
                 style={{ padding: '9px 18px', borderRadius: 8, background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#475569', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
@@ -973,24 +1159,52 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
                 Close
               </button>
 
-              <button
-                onClick={() => handleCreateRFQForProduct(selectedProduct)}
-                style={{
-                  padding: '9px 20px',
-                  borderRadius: 8,
-                  background: '#0F766E',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6
-                }}
-              >
-                <FileText size={15} /> Create RFQ for Formulation →
-              </button>
+              {isBuyerUnapproved ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ fontSize: 12, color: '#B45309', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Lock size={14} style={{ color: '#D97706' }} />
+                    <span>RFQ Floating Restricted ({userProfile?.accountStatus || 'Pending'})</span>
+                  </div>
+                  <button
+                    disabled
+                    title="Account approval required to create RFQs and commercial orders"
+                    style={{
+                      padding: '9px 18px',
+                      borderRadius: 8,
+                      background: '#F1F5F9',
+                      color: '#94A3B8',
+                      border: '1px solid #CBD5E1',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: 'not-allowed',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}
+                  >
+                    <Lock size={15} /> Create RFQ for Formulation
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleCreateRFQForProduct(selectedProduct)}
+                  style={{
+                    padding: '9px 20px',
+                    borderRadius: 8,
+                    background: '#0F766E',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <FileText size={15} /> Create RFQ for Formulation →
+                </button>
+              )}
             </div>
           </div>
         </div>

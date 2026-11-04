@@ -580,7 +580,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
     const isBuyerUnapproved = currentRole === 'BUYER' && userProfile?.accountStatus && userProfile.accountStatus.toUpperCase() !== 'ACTIVE';
     const isProtectedProcurementRoute = [
       'rfqs', 'quotes', 'orders', 'sub-orders', 'my-orders',
-      'buyer-catalog', 'buyer-product-catalog', 'buyer-tracking',
+      'buyer-tracking',
       'invoices', 'payment-history', 'buyer-advance-payments'
     ].includes(activeTab);
 
@@ -1298,64 +1298,98 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
               {!isMobile && <span>AI Copilot</span>}
             </button>
 
-            {/* Buyer Persona Quick Toggle (Visible only when exploring in unauthenticated demo mode) */}
-            {currentRole === 'BUYER' && !authUser && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  padding: '3px',
-                  background: 'var(--bg-subtle)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
-                  fontSize: 11,
-                }}
-              >
-                <button
-                  type="button"
-                  id="buyer-persona-normal-btn"
-                  onClick={() => setActiveBuyerAccount('NORMAL')}
+            {/* Buyer Classification Badge / Indicator */}
+            {currentRole === 'BUYER' && (
+              authUser ? (
+                <div
                   style={{
-                    padding: '3px 8px',
-                    borderRadius: 6,
-                    border: 'none',
-                    background: activeBuyerAccount === 'NORMAL' ? 'var(--bg-surface)' : 'transparent',
-                    color: activeBuyerAccount === 'NORMAL' ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                    fontWeight: activeBuyerAccount === 'NORMAL' ? 700 : 500,
-                    boxShadow: activeBuyerAccount === 'NORMAL' ? 'var(--shadow-subtle)' : 'none',
-                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 8,
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    background: activeBuyerAccount === 'SPECIAL_PARTY' ? '#ECFEFF' : '#F1F5F9',
+                    color: activeBuyerAccount === 'SPECIAL_PARTY' ? '#0E7490' : '#475569',
+                    border: `1px solid ${activeBuyerAccount === 'SPECIAL_PARTY' ? '#A5F3FC' : '#CBD5E1'}`,
+                  }}
+                  title={
+                    activeBuyerAccount === 'SPECIAL_PARTY'
+                      ? 'Verified Special Buyer: Authorized for pre-agreed pricing workflow'
+                      : 'Standard Regular Buyer: Competitive bidding workflow'
+                  }
+                >
+                  {activeBuyerAccount === 'SPECIAL_PARTY' ? (
+                    <>
+                      <Star size={12} fill="#0E7490" color="#0E7490" />
+                      <span>Special Buyer (Verified)</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={12} color="#0F766E" />
+                      <span>Standard Buyer (Verified)</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div
+                  style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 4,
+                    gap: 3,
+                    padding: '3px',
+                    background: 'var(--bg-subtle)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 8,
+                    fontSize: 11,
                   }}
-                  title="Apex Pharma PCD Franchise (Normal Bidding Flow)"
                 >
-                  Normal Buyer
-                </button>
-                <button
-                  type="button"
-                  id="buyer-persona-special-btn"
-                  onClick={() => setActiveBuyerAccount('SPECIAL_PARTY')}
-                  style={{
-                    padding: '3px 8px',
-                    borderRadius: 6,
-                    border: 'none',
-                    background: activeBuyerAccount === 'SPECIAL_PARTY' ? '#FEF3C7' : 'transparent',
-                    color: activeBuyerAccount === 'SPECIAL_PARTY' ? '#92400E' : 'var(--text-tertiary)',
-                    fontWeight: activeBuyerAccount === 'SPECIAL_PARTY' ? 700 : 500,
-                    boxShadow: activeBuyerAccount === 'SPECIAL_PARTY' ? '0 1px 2px rgba(217, 119, 6, 0.2)' : 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                  title="MediPlus Healthcare (Special Party Pre-Agreed Pricing)"
-                >
-                  <Star size={11} fill={activeBuyerAccount === 'SPECIAL_PARTY' ? '#D97706' : 'none'} color="#D97706" />
-                  Special Party Buyer
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    id="buyer-persona-normal-btn"
+                    onClick={() => setActiveBuyerAccount('NORMAL')}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: activeBuyerAccount === 'NORMAL' ? 'var(--bg-surface)' : 'transparent',
+                      color: activeBuyerAccount === 'NORMAL' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                      fontWeight: activeBuyerAccount === 'NORMAL' ? 700 : 500,
+                      boxShadow: activeBuyerAccount === 'NORMAL' ? 'var(--shadow-subtle)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                    title="Apex Pharma PCD Franchise (Normal Bidding Flow)"
+                  >
+                    Normal Buyer
+                  </button>
+                  <button
+                    type="button"
+                    id="buyer-persona-special-btn"
+                    onClick={() => setActiveBuyerAccount('SPECIAL_PARTY')}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: activeBuyerAccount === 'SPECIAL_PARTY' ? '#FEF3C7' : 'transparent',
+                      color: activeBuyerAccount === 'SPECIAL_PARTY' ? '#92400E' : 'var(--text-tertiary)',
+                      fontWeight: activeBuyerAccount === 'SPECIAL_PARTY' ? 700 : 500,
+                      boxShadow: activeBuyerAccount === 'SPECIAL_PARTY' ? '0 1px 2px rgba(217, 119, 6, 0.2)' : 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                    title="MediPlus Healthcare (Special Party Pre-Agreed Pricing)"
+                  >
+                    <Star size={11} fill={activeBuyerAccount === 'SPECIAL_PARTY' ? '#D97706' : 'none'} color="#D97706" />
+                    Special Party Buyer
+                  </button>
+                </div>
+              )
             )}
 
             {/* Enterprise Role Switcher */}
