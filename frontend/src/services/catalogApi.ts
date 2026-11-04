@@ -284,6 +284,12 @@ export const catalogApi = {
     });
   },
 
+  async deleteCategory(id: string): Promise<{ success: boolean; message: string }> {
+    return request<{ success: boolean; message: string }>(`${BASE}/categories/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
   // ── PRODUCT TYPE ATTRIBUTE ASSIGNMENTS (CANONICAL) ──
   async getProductTypeAttributes(productTypeId: string): Promise<ProductTypeAttribute[]> {
     return request<ProductTypeAttribute[]>(`${BASE}/product-types/${encodeURIComponent(productTypeId)}/attributes`, { method: 'GET' });

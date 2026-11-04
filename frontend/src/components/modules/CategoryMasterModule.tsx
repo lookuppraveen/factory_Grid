@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ProductType, Category, LifecycleStatus, ProductTypeAttributeDraft } from '../../types';
 import { catalogApi } from '../../services/catalogApi';
@@ -7,7 +7,8 @@ import { usePagination } from '../../hooks/usePagination';
 import {
   FolderTree, Layers, Search, Plus, Edit3, Trash2, CheckCircle2,
   AlertTriangle, X, Power, ChevronRight, ChevronDown,
-  Sparkles, Table, ListTree, Eye, Sliders, Tag, Check, RefreshCw
+  Sparkles, Table, ListTree, Eye, Sliders, Tag, Check, RefreshCw,
+  MoreVertical
 } from 'lucide-react';
 
 export const CategoryMasterModule: React.FC = () => {
@@ -49,6 +50,28 @@ export const CategoryMasterModule: React.FC = () => {
   // Filters for Product Type Master
   const [productTypeSearch, setProductTypeSearch] = useState('');
   const [ptStatusFilter, setPtStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+
+  // Single active row dropdown state for standardized Actions menu
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-actions-menu]')) {
+        setOpenActionMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenActionMenuId(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Expanded nodes for Hierarchy View
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set([
@@ -163,6 +186,7 @@ export const CategoryMasterModule: React.FC = () => {
     code?: string;
     name: string;
     details?: string;
+    referenceWarning?: string;
   } | null>(null);
 
   // ── FILTERED DATA: CATEGORY MASTER ──
@@ -897,70 +921,202 @@ export const CategoryMasterModule: React.FC = () => {
       </div>
 
       {/* ── Main Page Header Bar ── */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, padding: 22, boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(15, 118, 110, 0.1)', border: '1px solid rgba(15, 118, 110, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F766E' }}>
-            {activeMasterTab === 'PRODUCT_TYPE' ? <Layers size={22} /> : <FolderTree size={22} />}
+      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: '#F0FDFA', border: '1px solid #CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F766E' }}>
+            {activeMasterTab === 'PRODUCT_TYPE' ? <Layers size={18} /> : <FolderTree size={18} />}
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0F766E' }}>
-              PRODUCT MANAGEMENT MODEL (CLIENT ALIGNED)
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#0F766E' }}>
+              PRODUCT MANAGEMENT MODEL
             </div>
-            <h1 style={{ margin: '2px 0 0 0', fontSize: 22, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
+            <h1 style={{ margin: '2px 0 0 0', fontSize: 20, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
               {activeMasterTab === 'PRODUCT_TYPE' ? 'Product Type Master' : 'Category Master'}
             </h1>
-            <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
               {activeMasterTab === 'PRODUCT_TYPE'
-                ? 'Manage top-level classification product types (PRODUCT_TYPE table).'
-                : 'Canonical CATEGORY table (PRODUCT_TYPE → CATEGORY). Single entity holding category, sub-category, sub-sub-category.'}
+                ? 'Standard classification product types and their attribute configurations.'
+                : 'Canonical single CATEGORY entity for category, sub-category, and sub-sub-category hierarchy.'}
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Master Tab Switcher & Primary Action */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', background: '#F1F5F9', padding: 3, borderRadius: 8, border: '1px solid #E2E8F0' }}>
-            <button
-              onClick={() => setActiveMasterTab('PRODUCT_TYPE')}
-              style={{
-                padding: '7px 14px', borderRadius: 6, fontSize: 12.5, fontWeight: 700,
-                border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-                background: activeMasterTab === 'PRODUCT_TYPE' ? '#FFFFFF' : 'transparent',
-                color: activeMasterTab === 'PRODUCT_TYPE' ? '#0F172A' : '#64748B',
-                boxShadow: activeMasterTab === 'PRODUCT_TYPE' ? '0 1px 3px rgba(15,23,42,0.1)' : 'none'
-              }}
-            >
-              <Layers size={14} />
-              <span>Product Types ({productTypes.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveMasterTab('CATEGORY')}
-              style={{
-                padding: '7px 14px', borderRadius: 6, fontSize: 12.5, fontWeight: 700,
-                border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-                background: activeMasterTab === 'CATEGORY' ? '#FFFFFF' : 'transparent',
-                color: activeMasterTab === 'CATEGORY' ? '#0F766E' : '#64748B',
-                boxShadow: activeMasterTab === 'CATEGORY' ? '0 1px 3px rgba(15,23,42,0.1)' : 'none'
-              }}
-            >
-              <FolderTree size={14} />
-              <span>Category Master ({unifiedCategories.length})</span>
-            </button>
+      {/* ── Compact Statistics Strip (Replaces Large Dashboard Cards) ── */}
+      <div style={{
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: 8,
+        padding: '10px 16px',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 16, fontSize: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748B' }}>
+              PRODUCT TYPES:
+            </span>
+            <span style={{ fontWeight: 800, color: '#0F172A', fontFamily: 'monospace', fontSize: 13 }}>
+              {productTypes.length}
+            </span>
           </div>
+          <span style={{ color: '#CBD5E1' }}>•</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748B' }}>
+              CATEGORIES:
+            </span>
+            <span style={{ fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', fontSize: 13 }}>
+              {categoryStats.totalRecords}
+            </span>
+          </div>
+          <span style={{ color: '#CBD5E1' }}>•</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748B' }}>
+              ACTIVE:
+            </span>
+            <span style={{ fontWeight: 800, color: '#15803D', fontFamily: 'monospace', fontSize: 13 }}>
+              {categoryStats.activeRecords}
+            </span>
+          </div>
+          <span style={{ color: '#CBD5E1' }}>•</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748B' }}>
+              INACTIVE:
+            </span>
+            <span style={{ fontWeight: 800, color: '#DC2626', fontFamily: 'monospace', fontSize: 13 }}>
+              {categoryStats.inactiveRecords}
+            </span>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: '#64748B' }}>
+          Canonical Data Model: Single CATEGORY Table
+        </div>
+      </div>
 
+      {/* ── Professional Horizontal Navigation Tabs ── */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        borderBottom: '1px solid #E2E8F0',
+        paddingBottom: 0,
+        gap: 16,
+        flexWrap: 'wrap'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            type="button"
+            onClick={() => setActiveMasterTab('PRODUCT_TYPE')}
+            style={{
+              padding: '10px 16px',
+              fontSize: 13,
+              fontWeight: activeMasterTab === 'PRODUCT_TYPE' ? 700 : 500,
+              color: activeMasterTab === 'PRODUCT_TYPE' ? '#0F766E' : '#64748B',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeMasterTab === 'PRODUCT_TYPE' ? '2px solid #0F766E' : '2px solid transparent',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              transition: 'all 0.15s ease',
+              marginBottom: -1
+            }}
+          >
+            <Layers size={15} />
+            <span>Product Types</span>
+            <span style={{
+              fontSize: 11,
+              fontWeight: 700,
+              padding: '1px 7px',
+              borderRadius: 10,
+              background: activeMasterTab === 'PRODUCT_TYPE' ? '#CCFBF1' : '#F1F5F9',
+              color: activeMasterTab === 'PRODUCT_TYPE' ? '#0F766E' : '#64748B'
+            }}>
+              {productTypes.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveMasterTab('CATEGORY')}
+            style={{
+              padding: '10px 16px',
+              fontSize: 13,
+              fontWeight: activeMasterTab === 'CATEGORY' ? 700 : 500,
+              color: activeMasterTab === 'CATEGORY' ? '#0F766E' : '#64748B',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeMasterTab === 'CATEGORY' ? '2px solid #0F766E' : '2px solid transparent',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              transition: 'all 0.15s ease',
+              marginBottom: -1
+            }}
+          >
+            <FolderTree size={15} />
+            <span>Category Master</span>
+            <span style={{
+              fontSize: 11,
+              fontWeight: 700,
+              padding: '1px 7px',
+              borderRadius: 10,
+              background: activeMasterTab === 'CATEGORY' ? '#CCFBF1' : '#F1F5F9',
+              color: activeMasterTab === 'CATEGORY' ? '#0F766E' : '#64748B'
+            }}>
+              {unifiedCategories.length}
+            </span>
+          </button>
+        </div>
+
+        <div style={{ paddingBottom: 6 }}>
           {activeMasterTab === 'PRODUCT_TYPE' ? (
             <button
+              type="button"
               onClick={handleOpenAddPtModal}
-              style={{ padding: '9px 18px', borderRadius: 8, background: '#0F766E', color: '#FFFFFF', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(15,118,110,0.2)' }}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 6,
+                background: '#0F766E',
+                color: '#FFFFFF',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: 12.5,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 1px 2px rgba(15,118,110,0.15)'
+              }}
             >
-              <Plus size={16} /> Add Product Type
+              <Plus size={14} /> Add Product Type
             </button>
           ) : (
             <button
+              type="button"
               onClick={() => handleOpenAddCatModal()}
-              style={{ padding: '9px 18px', borderRadius: 8, background: '#0F766E', color: '#FFFFFF', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(15,118,110,0.2)' }}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 6,
+                background: '#0F766E',
+                color: '#FFFFFF',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: 12.5,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 1px 2px rgba(15,118,110,0.15)'
+              }}
             >
-              <Plus size={16} /> Add Category
+              <Plus size={14} /> Add Category
             </button>
           )}
         </div>
@@ -970,33 +1126,7 @@ export const CategoryMasterModule: React.FC = () => {
       {/* 1. PRODUCT TYPE MASTER TAB (SIMPLIFIED CANONICAL VIEW)                 */}
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {activeMasterTab === 'PRODUCT_TYPE' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Quick Metrics Bar */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>PRODUCT TYPES</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: '#0F172A', fontFamily: 'monospace', marginTop: 4 }}>{productTypes.length} Types</div>
-                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Top-level classification master</div>
-                </div>
-
-                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>TOTAL CATEGORY RECORDS</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', marginTop: 4 }}>{categoryStats.totalRecords} Records</div>
-                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>In canonical CATEGORY table</div>
-                </div>
-
-                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>ACTIVE RECORDS</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: '#15803D', fontFamily: 'monospace', marginTop: 4 }}>{categoryStats.activeRecords} Active</div>
-                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Available for product catalog</div>
-                </div>
-
-                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>TOTAL ATTRIBUTE MAPPINGS</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: '#2563EB', fontFamily: 'monospace', marginTop: 4 }}>{productTypeAttributes.length} Assigned</div>
-                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Across all Product Types</div>
-                </div>
-              </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
               {/* Search & Filter Toolbar */}
               <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -1130,54 +1260,173 @@ export const CategoryMasterModule: React.FC = () => {
                                 </span>
                               </td>
                               <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-                                  {/* View Action Button */}
+                                <div style={{ position: 'relative', display: 'inline-block' }} data-actions-menu={`pt_${ptId}`}>
                                   <button
                                     type="button"
-                                    onClick={(e) => handleOpenViewPtModal(pt, e)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenuId(openActionMenuId === `pt_${ptId}` ? null : `pt_${ptId}`);
+                                    }}
                                     style={{
-                                      padding: '6px 12px',
+                                      padding: '5px 9px',
                                       borderRadius: 6,
-                                      background: '#F0FDFA',
-                                      color: '#0F766E',
-                                      border: '1px solid #99F6E4',
-                                      fontWeight: 700,
+                                      background: openActionMenuId === `pt_${ptId}` ? '#F1F5F9' : '#FFFFFF',
+                                      border: '1px solid #CBD5E1',
+                                      color: '#334155',
                                       fontSize: 12,
+                                      fontWeight: 700,
                                       cursor: 'pointer',
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      gap: 5,
+                                      gap: 4,
                                       transition: 'all 0.15s ease'
                                     }}
-                                    title="View Product Type details, configured attributes, and categories"
+                                    title="Row Actions"
                                   >
-                                    <Eye size={13} />
-                                    <span>View</span>
+                                    <span>Actions</span>
+                                    <MoreVertical size={13} style={{ color: '#64748B' }} />
                                   </button>
 
-                                  {/* Edit Action Button */}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleOpenEditPtModal(pt, e)}
-                                    style={{
-                                      padding: '6px 12px',
-                                      borderRadius: 6,
-                                      background: '#FFFFFF',
-                                      color: '#0F766E',
-                                      border: '1px solid #CBD5E1',
-                                      fontWeight: 700,
-                                      fontSize: 12,
-                                      cursor: 'pointer',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 5,
-                                      transition: 'all 0.15s ease'
-                                    }}
-                                    title="Edit Product Type and configured attributes"
-                                  >
-                                    <Edit3 size={13} />
-                                    <span>Edit</span>
-                                  </button>
+                                  {openActionMenuId === `pt_${ptId}` && (
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        right: 0,
+                                        top: 'calc(100% + 4px)',
+                                        zIndex: 1000,
+                                        minWidth: 165,
+                                        background: '#FFFFFF',
+                                        border: '1px solid #E2E8F0',
+                                        borderRadius: 8,
+                                        boxShadow: '0 10px 25px -5px rgba(15,23,42,0.15), 0 8px 10px -6px rgba(15,23,42,0.1)',
+                                        padding: '4px 0',
+                                        textAlign: 'left'
+                                      }}
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          setOpenActionMenuId(null);
+                                          handleOpenViewPtModal(pt, e);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          padding: '7px 14px',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: '#334155',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      >
+                                        <Eye size={13} style={{ color: '#0F766E' }} />
+                                        <span>View Details</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          setOpenActionMenuId(null);
+                                          handleOpenEditPtModal(pt, e);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          padding: '7px 14px',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: '#334155',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      >
+                                        <Edit3 size={13} style={{ color: '#0F766E' }} />
+                                        <span>Edit</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenActionMenuId(null);
+                                          toggleProductTypeStatus(ptId);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          padding: '7px 14px',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: '#334155',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      >
+                                        <Power size={13} style={{ color: isActive ? '#D97706' : '#16A34A' }} />
+                                        <span>{isActive ? 'Deactivate' : 'Activate'}</span>
+                                      </button>
+
+                                      <div style={{ height: 1, background: '#F1F5F9', margin: '4px 0' }} />
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenActionMenuId(null);
+                                          const ptCategories = unifiedCategories.filter(c => c.product_type_id === ptId);
+                                          const ptAttrs = getProductTypeAttributes(ptId);
+                                          const isReferenced = ptCategories.length > 0 || ptAttrs.length > 0;
+                                          setDeleteConfirmTarget({
+                                            type: 'PRODUCT_TYPE',
+                                            id: ptId,
+                                            code: ptCode,
+                                            name: ptName,
+                                            details: `ID: ${ptId} | Code: ${ptCode} | Categories: ${catCount} | Attributes: ${attrCount}`,
+                                            referenceWarning: isReferenced
+                                              ? `This Product Type currently has ${ptCategories.length} categories and ${ptAttrs.length} attribute mappings assigned. To protect relational integrity, existing business rules prevent deletion of referenced Product Types. We recommend deactivating it instead.`
+                                              : undefined
+                                          });
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          padding: '7px 14px',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: '#DC2626',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      >
+                                        <Trash2 size={13} style={{ color: '#DC2626' }} />
+                                        <span>Delete</span>
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -1197,44 +1446,7 @@ export const CategoryMasterModule: React.FC = () => {
       {/* 2. CATEGORY MASTER TAB (CANONICAL CLIENT MODEL) */}
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {activeMasterTab === 'CATEGORY' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          
-          {/* Quick Metrics Bar */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>CATEGORY RECORDS</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', marginTop: 4 }}>
-                {filteredCategoryList.length} / {categoryStats.totalRecords}
-              </div>
-              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Total single CATEGORY records</div>
-            </div>
-
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>PRODUCT TYPE FILTER</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {categoryPtFilter === 'ALL' ? 'All Product Types' : (getPt(categoryPtFilter)?.product_type_name || categoryPtFilter)}
-              </div>
-              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
-                {categoryPtFilter === 'ALL' ? `${categoryStats.distinctPtCovered} types covered` : `Filtered by product_type_id`}
-              </div>
-            </div>
-
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>ACTIVE RECORDS</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#15803D', fontFamily: 'monospace', marginTop: 4 }}>
-                {categoryStats.activeRecords} Active
-              </div>
-              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Only active selectable for products</div>
-            </div>
-
-            <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>CATEGORY GROUPS</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#2563EB', fontFamily: 'monospace', marginTop: 4 }}>
-                {categoryStats.distinctCategories} Categories
-              </div>
-              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Visual groups from single model</div>
-            </div>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* Search, Filter & View Mode Toolbar */}
           <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -1466,45 +1678,168 @@ export const CategoryMasterModule: React.FC = () => {
 
                             {/* 12. Actions */}
                             <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
-                                <button
-                                  onClick={() => handleOpenViewCategory(cat)}
-                                  style={{ padding: '5px 8px', borderRadius: 5, background: '#FFFFFF', color: '#0F766E', border: '1px solid #99F6E4', cursor: 'pointer' }}
-                                  title="View Category Record"
-                                >
-                                  <Eye size={13} />
-                                </button>
+                                <div style={{ position: 'relative', display: 'inline-block' }} data-actions-menu={`cat_${catId}`}>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenuId(openActionMenuId === `cat_${catId}` ? null : `cat_${catId}`);
+                                    }}
+                                    style={{
+                                      padding: '5px 9px',
+                                      borderRadius: 6,
+                                      background: openActionMenuId === `cat_${catId}` ? '#F1F5F9' : '#FFFFFF',
+                                      border: '1px solid #CBD5E1',
+                                      color: '#334155',
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                    title="Row Actions"
+                                  >
+                                    <span>Actions</span>
+                                    <MoreVertical size={13} style={{ color: '#64748B' }} />
+                                  </button>
 
-                                <button
-                                  onClick={(e) => handleOpenEditCatModal(cat, e)}
-                                  style={{ padding: '5px 8px', borderRadius: 5, background: '#FFFFFF', color: '#475569', border: '1px solid #CBD5E1', cursor: 'pointer' }}
-                                  title="Edit Category Record"
-                                >
-                                  <Edit3 size={13} />
-                                </button>
+                                  {openActionMenuId === `cat_${catId}` && (
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        right: 0,
+                                        top: 'calc(100% + 4px)',
+                                        zIndex: 1000,
+                                        minWidth: 165,
+                                        background: '#FFFFFF',
+                                        border: '1px solid #E2E8F0',
+                                        borderRadius: 8,
+                                        boxShadow: '0 10px 25px -5px rgba(15,23,42,0.15), 0 8px 10px -6px rgba(15,23,42,0.1)',
+                                        padding: '4px 0',
+                                        textAlign: 'left'
+                                      }}
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenActionMenuId(null);
+                                          handleOpenViewCategory(cat);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          padding: '7px 14px',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: '#334155',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      >
+                                        <Eye size={13} style={{ color: '#0F766E' }} />
+                                        <span>View Details</span>
+                                      </button>
 
-                                <button
-                                  onClick={() => toggleUnifiedCategoryStatus(catId)}
-                                  style={{ padding: '5px 8px', borderRadius: 5, background: isActive ? '#FEF2F2' : '#F0FDF4', color: isActive ? '#DC2626' : '#16A34A', border: isActive ? '1px solid #FCA5A5' : '1px solid #86EFAC', cursor: 'pointer' }}
-                                  title={isActive ? 'Deactivate Category Record' : 'Activate Category Record'}
-                                >
-                                  <Power size={13} />
-                                </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          setOpenActionMenuId(null);
+                                          handleOpenEditCatModal(cat, e);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          padding: '7px 14px',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: '#334155',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      >
+                                        <Edit3 size={13} style={{ color: '#0F766E' }} />
+                                        <span>Edit</span>
+                                      </button>
 
-                                <button
-                                  onClick={() => setDeleteConfirmTarget({
-                                    type: 'CATEGORY',
-                                    id: catId,
-                                    code: catCode,
-                                    name: `${cat.category}${cat.sub_category ? ` → ${cat.sub_category}` : ''}${cat.sub_sub_category ? ` → ${cat.sub_sub_category}` : ''}`,
-                                    details: `ID: ${catId} | Code: ${catCode}`
-                                  })}
-                                  style={{ padding: '5px 8px', borderRadius: 5, background: '#FFFFFF', color: '#94A3B8', border: '1px solid #E2E8F0', cursor: 'pointer' }}
-                                  title="Delete Category Record"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenActionMenuId(null);
+                                          toggleUnifiedCategoryStatus(catId);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          padding: '7px 14px',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: '#334155',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      >
+                                        <Power size={13} style={{ color: isActive ? '#D97706' : '#16A34A' }} />
+                                        <span>{isActive ? 'Deactivate' : 'Activate'}</span>
+                                      </button>
+
+                                      <div style={{ height: 1, background: '#F1F5F9', margin: '4px 0' }} />
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenActionMenuId(null);
+                                          setDeleteConfirmTarget({
+                                            type: 'CATEGORY',
+                                            id: catId,
+                                            code: catCode,
+                                            name: `${cat.category}${cat.sub_category ? ` → ${cat.sub_category}` : ''}${cat.sub_sub_category ? ` → ${cat.sub_sub_category}` : ''}`,
+                                            details: `ID: ${catId} | Code: ${catCode}`
+                                          });
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          padding: '7px 14px',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: '#DC2626',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      >
+                                        <Trash2 size={13} style={{ color: '#DC2626' }} />
+                                        <span>Delete</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                             </td>
                           </tr>
                         );
@@ -1650,26 +1985,79 @@ export const CategoryMasterModule: React.FC = () => {
                                   {rec.category_code}
                                 </span>
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ position: 'relative', display: 'inline-block' }} data-actions-menu={`tree_dir_${rec.category_id || recIdx}`}>
                                 <button
-                                  onClick={() => handleOpenViewCategory(rec)}
-                                  style={{ padding: '3px 6px', borderRadius: 4, background: '#FFF', color: '#0F766E', border: '1px solid #99F6E4', cursor: 'pointer' }}
-                                  title="View Category Record"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const mId = `tree_dir_${rec.category_id || recIdx}`;
+                                    setOpenActionMenuId(openActionMenuId === mId ? null : mId);
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: 5,
+                                    background: '#FFFFFF',
+                                    border: '1px solid #CBD5E1',
+                                    color: '#334155',
+                                    fontSize: 11.5,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3
+                                  }}
+                                  title="Actions"
                                 >
-                                  <Eye size={11} />
+                                  <span>Actions</span>
+                                  <MoreVertical size={11} style={{ color: '#64748B' }} />
                                 </button>
-                                <button
-                                  onClick={(e) => handleOpenEditCatModal(rec, e)}
-                                  style={{ padding: '3px 6px', borderRadius: 4, background: '#FFF', color: '#475569', border: '1px solid #CBD5E1', cursor: 'pointer' }}
-                                >
-                                  <Edit3 size={12} />
-                                </button>
-                                <button
-                                  onClick={() => toggleUnifiedCategoryStatus(rec.category_id)}
-                                  style={{ padding: '3px 6px', borderRadius: 4, background: '#FFF', color: '#0F766E', border: '1px solid #CBD5E1', cursor: 'pointer' }}
-                                >
-                                  <Power size={12} />
-                                </button>
+
+                                {openActionMenuId === `tree_dir_${rec.category_id || recIdx}` && (
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      right: 0,
+                                      top: 'calc(100% + 2px)',
+                                      zIndex: 1000,
+                                      minWidth: 150,
+                                      background: '#FFFFFF',
+                                      border: '1px solid #E2E8F0',
+                                      borderRadius: 6,
+                                      boxShadow: '0 8px 20px -4px rgba(15,23,42,0.15)',
+                                      padding: '3px 0',
+                                      textAlign: 'left'
+                                    }}
+                                    onClick={e => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => { setOpenActionMenuId(null); handleOpenViewCategory(rec); }}
+                                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 11.5, fontWeight: 600, color: '#334155', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                                      onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                      <Eye size={12} style={{ color: '#0F766E' }} /> View Details
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { setOpenActionMenuId(null); handleOpenEditCatModal(rec, e); }}
+                                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 11.5, fontWeight: 600, color: '#334155', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                                      onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                      <Edit3 size={12} style={{ color: '#0F766E' }} /> Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setOpenActionMenuId(null); toggleUnifiedCategoryStatus(rec.category_id); }}
+                                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 11.5, fontWeight: 600, color: '#334155', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                                      onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                      <Power size={12} style={{ color: '#16A34A' }} /> Toggle Status
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1777,42 +2165,99 @@ export const CategoryMasterModule: React.FC = () => {
                                             )}
                                           </div>
 
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                            <button
-                                              onClick={() => handleOpenViewCategory(leaf)}
-                                              style={{ padding: '3px 6px', borderRadius: 4, background: '#FFF', color: '#0F766E', border: '1px solid #99F6E4', cursor: 'pointer' }}
-                                              title="View Category Record"
-                                            >
-                                              <Eye size={11} />
-                                            </button>
-                                            <button
-                                              onClick={(e) => handleOpenEditCatModal(leaf, e)}
-                                              style={{ padding: '3px 7px', borderRadius: 4, background: '#FFF', color: '#475569', border: '1px solid #CBD5E1', cursor: 'pointer' }}
-                                              title="Edit Category Record"
-                                            >
-                                              <Edit3 size={11} />
-                                            </button>
-                                            <button
-                                              onClick={() => toggleUnifiedCategoryStatus(leaf.category_id)}
-                                              style={{ padding: '3px 7px', borderRadius: 4, background: isActive ? '#FEF2F2' : '#F0FDF4', color: isActive ? '#DC2626' : '#16A34A', border: '1px solid #CBD5E1', cursor: 'pointer' }}
-                                              title={isActive ? 'Deactivate Record' : 'Activate Record'}
-                                            >
-                                              <Power size={11} />
-                                            </button>
-                                            <button
-                                              onClick={() => setDeleteConfirmTarget({
-                                                type: 'CATEGORY',
-                                                id: leaf.category_id,
-                                                code: leaf.category_code,
-                                                name: `${leaf.category} → ${leaf.sub_category || ''} → ${leaf.sub_sub_category || ''}`,
-                                                details: `ID: ${leaf.category_id} | Code: ${leaf.category_code}`
-                                              })}
-                                              style={{ padding: '3px 7px', borderRadius: 4, background: '#FFF', color: '#94A3B8', border: '1px solid #E2E8F0', cursor: 'pointer' }}
-                                              title="Delete Category Record"
-                                            >
-                                              <Trash2 size={11} />
-                                            </button>
-                                          </div>
+                                           <div style={{ position: 'relative', display: 'inline-block' }} data-actions-menu={`tree_leaf_${leaf.category_id || leafIdx}`}>
+                                             <button
+                                               type="button"
+                                               onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 const mId = `tree_leaf_${leaf.category_id || leafIdx}`;
+                                                 setOpenActionMenuId(openActionMenuId === mId ? null : mId);
+                                               }}
+                                               style={{
+                                                 padding: '4px 8px',
+                                                 borderRadius: 5,
+                                                 background: '#FFFFFF',
+                                                 border: '1px solid #CBD5E1',
+                                                 color: '#334155',
+                                                 fontSize: 11.5,
+                                                 fontWeight: 700,
+                                                 cursor: 'pointer',
+                                                 display: 'inline-flex',
+                                                 alignItems: 'center',
+                                                 gap: 3
+                                               }}
+                                               title="Actions"
+                                             >
+                                               <span>Actions</span>
+                                               <MoreVertical size={11} style={{ color: '#64748B' }} />
+                                             </button>
+
+                                             {openActionMenuId === `tree_leaf_${leaf.category_id || leafIdx}` && (
+                                               <div
+                                                 style={{
+                                                   position: 'absolute',
+                                                   right: 0,
+                                                   top: 'calc(100% + 2px)',
+                                                   zIndex: 1000,
+                                                   minWidth: 155,
+                                                   background: '#FFFFFF',
+                                                   border: '1px solid #E2E8F0',
+                                                   borderRadius: 6,
+                                                   boxShadow: '0 8px 20px -4px rgba(15,23,42,0.15)',
+                                                   padding: '3px 0',
+                                                   textAlign: 'left'
+                                                 }}
+                                                 onClick={e => e.stopPropagation()}
+                                               >
+                                                 <button
+                                                   type="button"
+                                                   onClick={() => { setOpenActionMenuId(null); handleOpenViewCategory(leaf); }}
+                                                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 11.5, fontWeight: 600, color: '#334155', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                                                   onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                 >
+                                                   <Eye size={12} style={{ color: '#0F766E' }} /> View Details
+                                                 </button>
+                                                 <button
+                                                   type="button"
+                                                   onClick={(e) => { setOpenActionMenuId(null); handleOpenEditCatModal(leaf, e); }}
+                                                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 11.5, fontWeight: 600, color: '#334155', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                                                   onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                 >
+                                                   <Edit3 size={12} style={{ color: '#0F766E' }} /> Edit
+                                                 </button>
+                                                 <button
+                                                   type="button"
+                                                   onClick={() => { setOpenActionMenuId(null); toggleUnifiedCategoryStatus(leaf.category_id); }}
+                                                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 11.5, fontWeight: 600, color: '#334155', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                                                   onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                 >
+                                                   <Power size={12} style={{ color: isActive ? '#D97706' : '#16A34A' }} /> {isActive ? 'Deactivate' : 'Activate'}
+                                                 </button>
+                                                 <div style={{ height: 1, background: '#F1F5F9', margin: '3px 0' }} />
+                                                 <button
+                                                   type="button"
+                                                   onClick={() => {
+                                                     setOpenActionMenuId(null);
+                                                     setDeleteConfirmTarget({
+                                                       type: 'CATEGORY',
+                                                       id: leaf.category_id,
+                                                       code: leaf.category_code,
+                                                       name: `${leaf.category} → ${leaf.sub_category || ''} → ${leaf.sub_sub_category || ''}`,
+                                                       details: `ID: ${leaf.category_id} | Code: ${leaf.category_code}`
+                                                     });
+                                                   }}
+                                                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 11.5, fontWeight: 600, color: '#DC2626', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                                                   onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
+                                                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                 >
+                                                   <Trash2 size={12} style={{ color: '#DC2626' }} /> Delete
+                                                 </button>
+                                               </div>
+                                             )}
+                                           </div>
                                         </div>
                                       );
                                     })}
@@ -3651,20 +4096,25 @@ export const CategoryMasterModule: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {deleteConfirmTarget && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10010, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setDeleteConfirmTarget(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 12, padding: 22, boxShadow: '0 20px 48px rgba(15,23,42,0.2)', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, color: '#DC2626' }}>
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Trash2 size={18} />
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 12, padding: 22, boxShadow: '0 20px 48px rgba(15,23,42,0.2)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <div style={{ width: 38, height: 38, borderRadius: '50%', background: deleteConfirmTarget.referenceWarning ? '#FEF3C7' : '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deleteConfirmTarget.referenceWarning ? '#D97706' : '#DC2626' }}>
+                {deleteConfirmTarget.referenceWarning ? <AlertTriangle size={20} /> : <Trash2 size={20} />}
               </div>
-              <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Confirm Deletion
-              </h3>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  {deleteConfirmTarget.referenceWarning ? 'Referenced Record Protection' : 'Confirm Deletion'}
+                </h3>
+                <div style={{ fontSize: 12, color: '#64748B', marginTop: 1 }}>
+                  {deleteConfirmTarget.type === 'PRODUCT_TYPE' ? 'Product Type Master' : 'Category Master'}
+                </div>
+              </div>
             </div>
 
-            <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.5, margin: '0 0 16px 0' }}>
+            <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.5, margin: '0 0 14px 0' }}>
               Are you sure you want to delete {deleteConfirmTarget.type === 'CATEGORY' ? 'Category record' : 'Product Type'}:
               <br />
-              <strong style={{ color: '#0F172A' }}>"{deleteConfirmTarget.name}"</strong>?
+              <strong style={{ color: '#0F172A', fontSize: 13.5 }}>"{deleteConfirmTarget.name}"</strong>?
               {deleteConfirmTarget.details && (
                 <div style={{ marginTop: 6, fontSize: 11.5, color: '#64748B', fontFamily: 'monospace' }}>
                   {deleteConfirmTarget.details}
@@ -3672,19 +4122,52 @@ export const CategoryMasterModule: React.FC = () => {
               )}
             </p>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            {deleteConfirmTarget.referenceWarning && (
+              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+                <strong>Protection Active:</strong> {deleteConfirmTarget.referenceWarning}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
               <button
+                type="button"
                 onClick={() => setDeleteConfirmTarget(null)}
                 style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#475569', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
               >
                 Cancel
               </button>
-              <button
-                onClick={handleConfirmDelete}
-                style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#DC2626', color: '#FFF', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
-              >
-                Delete
-              </button>
+
+              {deleteConfirmTarget.referenceWarning ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const target = deleteConfirmTarget;
+                    setDeleteConfirmTarget(null);
+                    try {
+                      if (target.type === 'PRODUCT_TYPE') {
+                        await toggleProductTypeStatus(target.id);
+                        showToast(`Deactivated Product Type "${target.name}" to preserve database relationships.`);
+                      } else {
+                        await toggleUnifiedCategoryStatus(target.id);
+                        showToast(`Deactivated Category "${target.name}" to preserve database relationships.`);
+                      }
+                    } catch (err: any) {
+                      showToast(err.message || 'Operation failed');
+                    }
+                  }}
+                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#D97706', color: '#FFF', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Deactivate Instead
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#DC2626', color: '#FFF', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Delete
+                </button>
+              )}
             </div>
           </div>
         </div>
