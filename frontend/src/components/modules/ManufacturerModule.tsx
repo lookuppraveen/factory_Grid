@@ -936,7 +936,7 @@ export const ManufacturerModule: React.FC = () => {
                               <span
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  openManufacturerProfile(mfg.id, 'PERFORMANCE');
+                                  handleOpenProfile(mfg);
                                 }}
                                 style={{ color: 'var(--c-warning)', fontWeight: 700, cursor: 'pointer', background: 'rgba(245, 158, 11, 0.1)', padding: '2px 6px', borderRadius: 4, border: '1px solid rgba(245, 158, 11, 0.2)', transition: 'all 120ms ease' }}
                                 title="Click to view detailed Ratings & Performance breakdown"

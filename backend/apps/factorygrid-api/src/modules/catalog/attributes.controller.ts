@@ -27,7 +27,7 @@ import {
   UpdateAttributeMasterDto,
 } from './dto/attribute-master.dto';
 
-@ApiTags('Attributes (Attribute Master)')
+@ApiTags('Product Catalog & Master Data')
 @Controller('attributes')
 export class AttributesController {
   constructor(private readonly service: CatalogService) {}

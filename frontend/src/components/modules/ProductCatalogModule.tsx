@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../../context/AppContext';
 import { catalogApi } from '../../services/catalogApi';
+import { BulkUploadModal } from './catalog/BulkUploadModal';
+import { AdminMapProductModal } from './catalog/AdminMapProductModal';
 import { Product, ManufacturerProductMapping, LifecycleStatus, AttributeMaster, ProductPrice, ProductTax, ProductUom, CustomerSegment } from '../../types';
 import { ManufacturerProductCatalogTab } from './ManufacturerProductCatalogTab';
 import { ViewModeToggle } from '../common/ViewModeToggle';
@@ -13,7 +15,7 @@ import {
   Star, Trash2,
   CheckCircle2, AlertCircle, Calendar, Hash, Tag,
   ArrowRight, ShieldCheck, ToggleLeft, ToggleRight, Sparkles,
-  DollarSign, Receipt, ChevronDown
+  DollarSign, Receipt, ChevronDown, FileSpreadsheet
 } from 'lucide-react';
 
 // Common dropdown options for LIST type attributes
@@ -82,11 +84,14 @@ export const ProductCatalogModule: React.FC = () => {
     updateProductMaster,
     toggleProductMasterStatus,
     refreshProducts,
+    refreshMappings,
     addAuditLog,
     setActiveTab
   } = useApp();
 
   const [displayMode, setDisplayMode] = useState<'TABLE' | 'CARD'>('TABLE');
+  const [isAdminBulkUploadOpen, setIsAdminBulkUploadOpen] = useState(false);
+  const [isAdminMapModalOpen, setIsAdminMapModalOpen] = useState(false);
 
   // Buyers may only view products — cannot edit or change status
   const canEditProducts = currentRole !== 'BUYER';
@@ -307,6 +312,21 @@ export const ProductCatalogModule: React.FC = () => {
     is_order_uom: true,
     is_active: true
   });
+
+  // Manufacturer Mapping Modal State (PRODUCT_MANUFACTURER)
+  const [isMappingModalOpen, setIsMappingModalOpen] = useState(false);
+  const [editingMapping, setEditingMapping] = useState<ManufacturerProductMapping | null>(null);
+  const [mappingFormData, setMappingFormData] = useState({
+    manufacturerId: '',
+    manufacturerProductCode: '',
+    manufacturerPartNumber: '',
+    manufacturerSku: '',
+    lifecycleStatus: 'ACTIVE' as LifecycleStatus,
+    effectiveFrom: '',
+    effectiveTo: '',
+    isPreferred: false
+  });
+  const [mappingFormError, setMappingFormError] = useState<string | null>(null);
 
   // Client-Aligned Form Data State (Strictly PRODUCT fields only)
   const [formData, setFormData] = useState({
@@ -1153,7 +1173,7 @@ export const ProductCatalogModule: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {currentRole === 'ADMIN' && (
             <button
               onClick={() => setActiveTab('category-master')}
@@ -1177,25 +1197,65 @@ export const ProductCatalogModule: React.FC = () => {
           )}
 
           {canEditProducts && (
-            <button
-              onClick={handleOpenAddModal}
-              style={{
-                padding: '10px 20px',
-                borderRadius: 8,
-                background: '#0F766E',
-                color: '#FFFFFF',
-                border: 'none',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
-              }}
-            >
-              <Plus size={16} /> + Add Product
-            </button>
+            <>
+              <button
+                onClick={handleOpenAddModal}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 8,
+                  background: '#0F766E',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
+                }}
+              >
+                <Plus size={16} /> + Create New Product (Manual)
+              </button>
+
+              <button
+                onClick={() => setIsAdminBulkUploadOpen(true)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 8,
+                  background: '#F0FDFA',
+                  color: '#0F766E',
+                  border: '1px solid #0F766E',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <FileSpreadsheet size={16} /> Bulk Upload (Excel/CSV)
+              </button>
+
+              <button
+                onClick={() => setIsAdminMapModalOpen(true)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 8,
+                  background: '#FFFFFF',
+                  color: '#334155',
+                  border: '1px solid #CBD5E1',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <Layers size={16} /> Map Existing Master Product
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -3108,18 +3168,18 @@ export const ProductCatalogModule: React.FC = () => {
 
               {/* ────────────────────────────────────────────────────────── */}
               {/* ────────────────────────────────────────────────────────── */}
-              {/* 1. PRODUCT HIERARCHY & BRAND */}
+              {/* 1. CLASSIFICATION HIERARCHY */}
               {/* ────────────────────────────────────────────────────────── */}
               <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Layers size={14} /> 1. DEPENDENT CATEGORY HIERARCHY (TYPE → CATEGORY → SUB-CATEGORY → SUB-SUB-CATEGORY)
+                  <Layers size={14} /> 1. CLASSIFICATION HIERARCHY
                 </div>
 
-                {/* Level 1: Product Type * */}
+                {/* Product Type * */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                      Level 1: Product Type *
+                      Product Type *
                     </label>
                     {formData.productTypeId && (
                       <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
@@ -3144,11 +3204,11 @@ export const ProductCatalogModule: React.FC = () => {
 
                 {/* Dependent Dropdowns Row: Category & Sub-Category */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  {/* Level 2: Category * */}
+                  {/* Category * */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                       <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Level 2: Category *
+                        Category *
                       </label>
                       <span style={{ fontSize: 11, color: '#64748B' }}>
                         {dependentL1Categories.length} available
@@ -3169,11 +3229,11 @@ export const ProductCatalogModule: React.FC = () => {
                     </select>
                   </div>
 
-                  {/* Level 3: Sub-Category * */}
+                  {/* Sub-Category * */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                       <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Level 3: Sub-Category *
+                        Sub-Category *
                       </label>
                       <span style={{ fontSize: 11, color: '#64748B' }}>
                         {dependentL2SubCategories.length} available
@@ -3197,11 +3257,11 @@ export const ProductCatalogModule: React.FC = () => {
 
                 {/* Dependent Dropdowns Row: Sub-Sub-Category & Brand */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  {/* Level 4: Sub-Sub-Category */}
+                  {/* Sub-Sub-Category */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                       <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Level 4: Sub-Sub-Category
+                        Sub-Sub-Category (Optional)
                       </label>
                       {formData.categoryId && (
                         <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
@@ -3214,7 +3274,7 @@ export const ProductCatalogModule: React.FC = () => {
                       onChange={e => handleSubSubCategoryChange(e.target.value)}
                       style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF' }}
                     >
-                      <option value="">-- {dependentL3SubSubCategories.length === 0 ? 'None (Direct Category Selection)' : 'Select Sub-Sub-Category'} --</option>
+                      <option value="">-- {dependentL3SubSubCategories.length === 0 ? 'None (Direct Category Selection)' : 'Select Sub-Sub-Category (Optional)'} --</option>
                       {dependentL3SubSubCategories.map(subSub => (
                         <option key={subSub} value={subSub}>
                           {subSub}
@@ -4281,6 +4341,127 @@ export const ProductCatalogModule: React.FC = () => {
         </div>
       )}
 
+      {/* ── Quick Add / Edit Manufacturer Mapping Modal (PRODUCT_MANUFACTURER) ── */}
+      {isMappingModalOpen && selectedProduct && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10006, background: 'rgba(15, 23, 42, 0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setIsMappingModalOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, background: '#FFFFFF', borderRadius: 12, border: '1px solid #CBD5E1', padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
+                  {editingMapping ? 'Edit Manufacturer Mapping' : 'Add Manufacturer Mapping'}
+                </h3>
+                <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                  Product: {selectedProduct.product_name || selectedProduct.name} ({selectedProduct.product_code || selectedProduct.code})
+                </div>
+              </div>
+              <button type="button" onClick={() => setIsMappingModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {mappingFormError && (
+              <div style={{ padding: '8px 12px', background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 6, color: '#DC2626', fontSize: 12, marginBottom: 14 }}>
+                {mappingFormError}
+              </div>
+            )}
+
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveMapping(); }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
+                    Manufacturer *
+                  </label>
+                  <select
+                    value={mappingFormData.manufacturerId}
+                    onChange={e => setMappingFormData({ ...mappingFormData, manufacturerId: e.target.value })}
+                    disabled={!!editingMapping}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13 }}
+                  >
+                    <option value="">Select Manufacturer</option>
+                    {(manufacturers || []).map(m => (
+                      <option key={m.id || m.manufacturer_id} value={m.id || m.manufacturer_id}>
+                        {m.companyName || m.name || m.manufacturer_name} ({m.code || m.manufacturer_code || ''})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
+                      Mfg Product Code
+                    </label>
+                    <input
+                      type="text"
+                      value={mappingFormData.manufacturerProductCode}
+                      onChange={e => setMappingFormData({ ...mappingFormData, manufacturerProductCode: e.target.value })}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
+                      Mfg Part Number
+                    </label>
+                    <input
+                      type="text"
+                      value={mappingFormData.manufacturerPartNumber}
+                      onChange={e => setMappingFormData({ ...mappingFormData, manufacturerPartNumber: e.target.value })}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13 }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
+                      Manufacturer SKU
+                    </label>
+                    <input
+                      type="text"
+                      value={mappingFormData.manufacturerSku}
+                      onChange={e => setMappingFormData({ ...mappingFormData, manufacturerSku: e.target.value })}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
+                      Lifecycle Status
+                    </label>
+                    <select
+                      value={mappingFormData.lifecycleStatus}
+                      onChange={e => setMappingFormData({ ...mappingFormData, lifecycleStatus: e.target.value as any })}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13 }}
+                    >
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="INACTIVE">INACTIVE</option>
+                    </select>
+                  </div>
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#334155', cursor: 'pointer', marginTop: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={mappingFormData.isPreferred}
+                    onChange={e => setMappingFormData({ ...mappingFormData, isPreferred: e.target.checked })}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  Mark as Preferred Manufacturer
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                <button type="button" onClick={() => setIsMappingModalOpen(false)} style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF' }}>
+                  Cancel
+                </button>
+                <button type="submit" style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFF', fontWeight: 700 }}>
+                  Save Mapping
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ── UNIFIED FIXED PORTAL FOR ACTIONS DROPDOWN (IMMUNE TO OVERFLOW CLIPPING) ── */}
       {openMenuProductId && menuAnchor && (() => {
         const activeProduct = products.find(p => p.id === openMenuProductId);
@@ -4413,7 +4594,33 @@ export const ProductCatalogModule: React.FC = () => {
         );
       })()}
 
-      {/* ── REAL-TIME FEEDBACK TOAST ────────────────────────── */}
+      
+      {/* ── Admin Bulk Upload Modal ── */}
+      <BulkUploadModal
+        isOpen={isAdminBulkUploadOpen}
+        onClose={() => setIsAdminBulkUploadOpen(false)}
+        onSuccess={() => {
+          setIsAdminBulkUploadOpen(false);
+          refreshProducts();
+          setFeedbackToast({ type: 'success', message: 'Master products successfully uploaded and synchronized with PostgreSQL database!' });
+        }}
+        type="admin"
+      />
+
+      {/* ── Admin Map Existing Master Product Modal ── */}
+      <AdminMapProductModal
+        isOpen={isAdminMapModalOpen}
+        onClose={() => setIsAdminMapModalOpen(false)}
+        onSuccess={() => {
+          setIsAdminMapModalOpen(false);
+          refreshProducts();
+          refreshMappings();
+          setFeedbackToast({ type: 'success', message: 'Master product successfully mapped to manufacturer!' });
+        }}
+        products={products}
+        manufacturers={manufacturers}
+      />
+{/* ── REAL-TIME FEEDBACK TOAST ────────────────────────── */}
       {feedbackToast && (
         <div style={{
           position: 'fixed',

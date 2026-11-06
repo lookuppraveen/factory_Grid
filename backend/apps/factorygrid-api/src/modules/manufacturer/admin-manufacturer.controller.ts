@@ -17,7 +17,7 @@ import { AuthUser, CurrentUser, Roles } from '@factorygrid/auth';
 import { ManufacturerVerificationPatchDto } from './dto/manufacturer-registration.dto';
 import { ManufacturerRegistrationService } from './manufacturer-registration.service';
 
-@ApiTags('Admin Manufacturer Document Verification')
+@ApiTags('Admin')
 @Controller(['admin/manufacturers', 'admin/manufacturer'])
 export class AdminManufacturerController {
   constructor(private readonly service: ManufacturerRegistrationService) {}

@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -6,15 +7,86 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateManufacturerProductDto {
-  @ApiProperty({ description: 'ID of existing product in master catalogue' })
+  @ApiPropertyOptional({ description: 'ID of existing product in master catalogue (if mapping existing product)' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  productId!: string;
+  productId?: string;
+
+  @ApiPropertyOptional({ description: 'Product Name (if creating a new formulation)' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ description: 'Product Code / SKU' })
+  @IsOptional()
+  @IsString()
+  productCode?: string;
+
+  @ApiPropertyOptional({ description: 'Category' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ description: 'Sub-Category' })
+  @IsOptional()
+  @IsString()
+  subCategory?: string;
+
+  @ApiPropertyOptional({ description: 'Sub-Sub-Category' })
+  @IsOptional()
+  @IsString()
+  subSubCategory?: string;
+
+  @ApiPropertyOptional({ description: 'Generic Name' })
+  @IsOptional()
+  @IsString()
+  genericName?: string;
+
+  @ApiPropertyOptional({ description: 'Salt Combination / Composition' })
+  @IsOptional()
+  @IsString()
+  saltCombination?: string;
+
+  @ApiPropertyOptional({ description: 'Strength' })
+  @IsOptional()
+  @IsString()
+  strength?: string;
+
+  @ApiPropertyOptional({ description: 'Dosage Form' })
+  @IsOptional()
+  @IsString()
+  dosageForm?: string;
+
+  @ApiPropertyOptional({ description: 'Packaging / Pack Size' })
+  @IsOptional()
+  @IsString()
+  packSize?: string;
+
+  @ApiPropertyOptional({ description: 'Base UOM' })
+  @IsOptional()
+  @IsString()
+  uom?: string;
+
+  @ApiPropertyOptional({ description: 'Base UOM' })
+  @IsOptional()
+  @IsString()
+  baseUom?: string;
+
+  @ApiPropertyOptional({ description: 'Product Description' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ description: 'Product Type ID (defaults to pt_med)' })
+  @IsOptional()
+  @IsString()
+  productTypeId?: string;
 
   @ApiPropertyOptional({ description: 'Manufacturer proprietary product code / catalog reference' })
   @IsOptional()
@@ -173,3 +245,102 @@ export class ManufacturerProductQueryDto {
   @Min(1)
   limit?: number;
 }
+
+export class ManufacturerProductBulkUploadItemDto {
+  @ApiPropertyOptional({ description: 'Row index for error reporting' })
+  @IsOptional()
+  row?: number;
+
+  @ApiPropertyOptional({ description: 'Product Code / SKU', example: 'PRD-AMX-500' })
+  @IsOptional()
+  @IsString()
+  productCode?: string;
+
+  @ApiPropertyOptional({ description: 'Product Name', example: 'Amoxicillin 500mg' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ description: 'Category Name', example: 'Drugs' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ description: 'Sub-Category', example: 'Tablets' })
+  @IsOptional()
+  @IsString()
+  subCategory?: string;
+
+  @ApiPropertyOptional({ description: 'Sub-Sub-Category', example: 'Film Coated Tablets' })
+  @IsOptional()
+  @IsString()
+  subSubCategory?: string;
+
+  @ApiPropertyOptional({ description: 'Product Type ID', default: 'pt_med' })
+  @IsOptional()
+  @IsString()
+  productTypeId?: string;
+
+  @ApiPropertyOptional({ description: 'Generic Molecule / Active Ingredient' })
+  @IsOptional()
+  @IsString()
+  genericName?: string;
+
+  @ApiPropertyOptional({ description: 'Dosage Form' })
+  @IsOptional()
+  @IsString()
+  dosageForm?: string;
+
+  @ApiPropertyOptional({ description: 'Strength' })
+  @IsOptional()
+  @IsString()
+  strength?: string;
+
+  @ApiPropertyOptional({ description: 'Pack Size' })
+  @IsOptional()
+  @IsString()
+  packSize?: string;
+
+  @ApiPropertyOptional({ description: 'Base UOM' })
+  @IsOptional()
+  @IsString()
+  baseUom?: string;
+
+  @ApiPropertyOptional({ description: 'Manufacturer proprietary product code / catalog reference' })
+  @IsOptional()
+  @IsString()
+  manufacturerProductCode?: string;
+
+  @ApiPropertyOptional({ description: 'Minimum Order Quantity', default: 1000 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  moq?: number;
+
+  @ApiPropertyOptional({ description: 'Production & dispatch lead time in days', default: 14 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  leadTimeDays?: number;
+
+  @ApiPropertyOptional({ description: 'Packaging and transport configuration details' })
+  @IsOptional()
+  @IsString()
+  packagingDetails?: string;
+
+  @ApiPropertyOptional({ description: 'Product Description' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+export class ManufacturerProductBulkUploadDto {
+  @ApiProperty({ description: 'Rows to bulk map and create', type: [ManufacturerProductBulkUploadItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ManufacturerProductBulkUploadItemDto)
+  rows!: ManufacturerProductBulkUploadItemDto[];
+}
+

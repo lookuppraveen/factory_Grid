@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CatalogController } from './catalog.controller';
 import { ProductsController } from './products.controller';
 import { CategoriesController } from './categories.controller';
+import { SubCategoriesController, SubSubCategoriesController } from './sub-categories.controller';
 import { AttributesController } from './attributes.controller';
 import { ProductTypesController } from './product-types.controller';
 import { CatalogService } from './catalog.service';
@@ -11,6 +12,8 @@ import { CatalogService } from './catalog.service';
     CatalogController,
     ProductsController,
     CategoriesController,
+    SubCategoriesController,
+    SubSubCategoriesController,
     AttributesController,
     ProductTypesController,
   ],

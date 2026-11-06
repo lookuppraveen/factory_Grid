@@ -1,4 +1,15 @@
 import {
+  BrandQueryDto,
+  CreateBrandDto,
+  UpdateBrandDto,
+  CreateAdminManufacturerDto,
+  UpdateAdminManufacturerDto,
+  ManufacturerQueryDto,
+  CreateProductManufacturerMappingDto,
+  UpdateProductManufacturerMappingDto,
+  ProductManufacturerMappingQueryDto,
+} from './dto/brand-mfg-mapping.dto';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -17,10 +28,25 @@ import {
 } from './dto/attribute-master.dto';
 import {
   CreateCatalogProductDto,
+  ProductBulkUploadDto,
+  ProductBulkUploadItemDto,
   ProductQueryDto,
   UpdateCatalogProductDto,
 } from './dto/catalog-product.dto';
 import { CreateCategoryDto, UpdateCategoryDto, CategoryQueryDto } from './dto/category-admin.dto';
+import {
+  CreateCustomerSegmentDto,
+  CreatePriceDto,
+  CreateProductTaxDto,
+  CreateProductUomDto,
+  ProductPriceQueryDto,
+  ProductTaxQueryDto,
+  ProductUomQueryDto,
+  UpdateCustomerSegmentDto,
+  UpdatePriceDto,
+  UpdateProductTaxDto,
+  UpdateProductUomDto,
+} from './dto/pricing-tax-uom.dto';
 import {
   BulkProductTypeAttributesDto,
   CreateProductTypeDto,
@@ -124,6 +150,8 @@ export class CatalogService {
           },
         },
         productPrices: true,
+        productTaxes: true,
+        productUoms: true,
       },
       orderBy: orderBy.length > 0 ? orderBy : [{ createdAt: 'desc' }, { productCode: 'asc' }],
       ...(isPaginated ? { skip, take } : {}),
@@ -304,6 +332,137 @@ export class CatalogService {
 
     return this.getProductById(created.id);
   }
+  async bulkUploadProducts(dto: ProductBulkUploadDto) {
+    const rows = dto.rows || [];
+    const totalRows = rows.length;
+    let successfulRows = 0;
+    let failedRows = 0;
+    let duplicateRows = 0;
+    const errors: Array<{ row: number; field: string; message: string }> = [];
+    const createdProducts: Array<any> = [];
+
+    const existingProducts = await this.prisma.catalogProduct.findMany({
+      select: { productCode: true },
+    });
+    const existingCodeSet = new Set(
+      existingProducts.map((p) => p.productCode.toUpperCase()),
+    );
+    const seenCodesInBatch = new Set<string>();
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 1;
+      let hasError = false;
+
+      if (!row.name || !row.name!.trim()) {
+        errors.push({
+          row: rowNum,
+          field: 'name',
+          message: 'Product Name is required.',
+        });
+        hasError = true;
+      }
+
+      if (!row.category || !row.category!.trim()) {
+        errors.push({
+          row: rowNum,
+          field: 'category',
+          message: 'Category is required.',
+        });
+        hasError = true;
+      }
+
+      let codeClean = row.productCode?.trim().toUpperCase();
+      if (!codeClean) {
+        codeClean = `PRD${Date.now()}${String(i + 1).padStart(3, '0')}`;
+      }
+
+      if (seenCodesInBatch.has(codeClean)) {
+        errors.push({
+          row: rowNum,
+          field: 'productCode',
+          message: `Duplicate Product Code "${codeClean}" in uploaded batch.`,
+        });
+        hasError = true;
+        duplicateRows++;
+      } else if (existingCodeSet.has(codeClean)) {
+        errors.push({
+          row: rowNum,
+          field: 'productCode',
+          message: `Product Code "${codeClean}" already exists in Master Catalog.`,
+        });
+        hasError = true;
+        duplicateRows++;
+      }
+
+      if (hasError) {
+        failedRows++;
+        continue;
+      }
+
+      seenCodesInBatch.add(codeClean);
+      existingCodeSet.add(codeClean);
+
+      try {
+        const targetId = `prd_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const effectiveSubCategory = row.subCategory?.trim() || null;
+        const effectiveSubSubCategory = row.subSubCategory?.trim() || null;
+        const effectiveProductTypeId = row.productTypeId?.trim() || 'pt_med';
+        const effectiveGenericName = row.genericName?.trim() || row.name!.trim();
+        const effectiveDosageForm = row.dosageForm?.trim() || effectiveSubCategory || 'Standard Form';
+        const effectiveBaseUom = row.baseUom?.trim() || 'Unit';
+        const effectivePackSize = row.packSize?.trim() || '10 x 10 Strip';
+        const effectivePackUom = 'Strip';
+
+        const created = await this.prisma.catalogProduct.create({
+          data: {
+            id: targetId,
+            productCode: codeClean,
+            name: row.name!.trim(),
+            genericName: effectiveGenericName,
+            dosageForm: effectiveDosageForm,
+            productTypeId: effectiveProductTypeId,
+            category: row.category!.trim(),
+            subCategory: effectiveSubCategory,
+            subSubCategory: effectiveSubSubCategory,
+            brand: row.brand?.trim() || null,
+            description: row.description?.trim() || null,
+            baseUom: effectiveBaseUom,
+            packSize: effectivePackSize,
+            packUom: effectivePackUom,
+            lifecycleStatus: 'ACTIVE',
+            isSellable: true,
+            active: true,
+          },
+        });
+
+        successfulRows++;
+        createdProducts.push({
+          id: created.id,
+          productCode: created.productCode,
+          name: created.name,
+          category: created.category,
+        });
+      } catch (err: any) {
+        failedRows++;
+        errors.push({
+          row: rowNum,
+          field: 'general',
+          message: err?.message || 'Database insert error.',
+        });
+      }
+    }
+
+    return {
+      totalRows,
+      successfulRows,
+      failedRows,
+      duplicateRows,
+      errors,
+      createdProducts,
+    };
+  }
+
 
   async updateProduct(id: string, dto: UpdateCatalogProductDto) {
     const existing = await this.prisma.catalogProduct.findFirst({
@@ -541,9 +700,107 @@ export class CatalogService {
     return this.getProductAttributes(product.id);
   }
 
-  // ===================================================================
+    // ===================================================================
   // PRODUCT PRICES (PRODUCT_PRICE)
   // ===================================================================
+
+  private mapPriceRecord(pr: any) {
+    return {
+      id: String(pr.id),
+      price_id: String(pr.id),
+      product_price_id: String(pr.id),
+      productPriceId: String(pr.id),
+      productId: pr.productId,
+      product_id: pr.productId,
+      productName: pr.product?.name || null,
+      productCode: pr.product?.productCode || null,
+      productManufacturerId: pr.productManufacturerId ? String(pr.productManufacturerId) : null,
+      product_manufacturer_id: pr.productManufacturerId ? String(pr.productManufacturerId) : null,
+      manufacturerName: pr.manufacturerProduct?.registration?.companyName || null,
+      customerSegmentId: pr.customerSegmentId || null,
+      customer_segment_id: pr.customerSegmentId || null,
+      customerSegmentName: pr.customerSegment?.segmentName || null,
+      priceType: pr.priceType || 'BASE',
+      price_type: pr.priceType || 'BASE',
+      currency: pr.currency || 'INR',
+      unitPrice: Number(pr.unitPrice),
+      unit_price: Number(pr.unitPrice),
+      minQuantity: pr.minQuantity ?? 1,
+      min_quantity: pr.minQuantity ?? 1,
+      minimum_quantity: pr.minQuantity ?? 1,
+      maxQuantity: pr.maxQuantity ?? null,
+      max_quantity: pr.maxQuantity ?? null,
+      maximum_quantity: pr.maxQuantity ?? null,
+      effectiveFrom: pr.effectiveFrom ? pr.effectiveFrom.toISOString().split('T')[0] : null,
+      effective_from: pr.effectiveFrom ? pr.effectiveFrom.toISOString().split('T')[0] : null,
+      effectiveTo: pr.effectiveTo ? pr.effectiveTo.toISOString().split('T')[0] : null,
+      effective_to: pr.effectiveTo ? pr.effectiveTo.toISOString().split('T')[0] : null,
+      priceStatus: pr.priceStatus || 'ACTIVE',
+      price_status: pr.priceStatus || 'ACTIVE',
+      createdAt: pr.createdAt.toISOString(),
+      created_at: pr.createdAt.toISOString(),
+      updatedAt: pr.updatedAt.toISOString(),
+      updated_at: pr.updatedAt.toISOString(),
+    };
+  }
+
+  async listAllProductPrices(query?: ProductPriceQueryDto) {
+    const where: Prisma.ProductPriceWhereInput = {};
+
+    if (query?.productId) {
+      where.OR = [
+        { productId: query.productId },
+        { product: { productCode: query.productId } },
+      ];
+    }
+
+    if (query?.manufacturerId) {
+      const mId = Number(query.manufacturerId);
+      if (!isNaN(mId)) {
+        where.productManufacturerId = BigInt(mId);
+      }
+    }
+
+    if (query?.customerSegmentId && query.customerSegmentId !== 'ALL') {
+      where.customerSegmentId = query.customerSegmentId;
+    }
+
+    if (query?.status && query.status !== 'ALL') {
+      where.priceStatus = query.status.toUpperCase();
+    }
+
+    if (query?.search?.trim()) {
+      const q = query.search.trim();
+      where.OR = [
+        { product: { name: { contains: q, mode: 'insensitive' } } },
+        { product: { productCode: { contains: q, mode: 'insensitive' } } },
+        { priceType: { contains: q, mode: 'insensitive' } },
+        { currency: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const isPaginated = (query as any)?.page !== undefined || (query as any)?.size !== undefined || (query as any)?.limit !== undefined;
+    const { pageIndex, pageSize, skip, take } = getPaginationParams(query as any);
+
+    const [totalElements, prices] = await Promise.all([
+      this.prisma.productPrice.count({ where }),
+      this.prisma.productPrice.findMany({
+        where,
+        include: {
+          product: true,
+          manufacturerProduct: {
+            include: { registration: true },
+          },
+          customerSegment: true,
+        },
+        orderBy: [{ minQuantity: 'asc' }, { id: 'desc' }],
+        ...(isPaginated ? { skip, take } : {}),
+      }),
+    ]);
+
+    const mapped = prices.map((pr) => this.mapPriceRecord(pr));
+    return createPageResponse(mapped, totalElements, pageIndex, isPaginated ? pageSize : totalElements || 1);
+  }
 
   async listProductPrices(productId: string) {
     const product = await this.prisma.catalogProduct.findFirst({
@@ -556,49 +813,45 @@ export class CatalogService {
     const prices = await this.prisma.productPrice.findMany({
       where: { productId: product.id },
       include: {
+        product: true,
         manufacturerProduct: {
           include: { registration: true },
         },
+        customerSegment: true,
       },
       orderBy: [{ minQuantity: 'asc' }, { id: 'asc' }],
     });
 
-    return prices.map((pr) => ({
-      id: String(pr.id),
-      price_id: String(pr.id),
-      productId: pr.productId,
-      product_id: pr.productId,
-      productManufacturerId: pr.productManufacturerId ? String(pr.productManufacturerId) : null,
-      product_manufacturer_id: pr.productManufacturerId ? String(pr.productManufacturerId) : null,
-      manufacturerName: pr.manufacturerProduct?.registration?.companyName || null,
-      customerSegmentId: pr.customerSegmentId,
-      customer_segment_id: pr.customerSegmentId,
-      priceType: pr.priceType,
-      price_type: pr.priceType,
-      currency: pr.currency,
-      unitPrice: Number(pr.unitPrice),
-      unit_price: Number(pr.unitPrice),
-      minQuantity: pr.minQuantity,
-      min_quantity: pr.minQuantity,
-      maxQuantity: pr.maxQuantity,
-      max_quantity: pr.maxQuantity,
-      effectiveFrom: pr.effectiveFrom ? pr.effectiveFrom.toISOString().split('T')[0] : null,
-      effective_from: pr.effectiveFrom ? pr.effectiveFrom.toISOString().split('T')[0] : null,
-      effectiveTo: pr.effectiveTo ? pr.effectiveTo.toISOString().split('T')[0] : null,
-      effective_to: pr.effectiveTo ? pr.effectiveTo.toISOString().split('T')[0] : null,
-      priceStatus: pr.priceStatus,
-      price_status: pr.priceStatus,
-      createdAt: pr.createdAt.toISOString(),
-      updatedAt: pr.updatedAt.toISOString(),
-    }));
+    return prices.map((pr) => this.mapPriceRecord(pr));
   }
 
-  async createProductPrice(dto: CreateProductPriceDto) {
+  async getProductPriceById(id: string) {
+    const price = await this.prisma.productPrice.findUnique({
+      where: { id: BigInt(id) },
+      include: {
+        product: true,
+        manufacturerProduct: {
+          include: { registration: true },
+        },
+        customerSegment: true,
+      },
+    });
+    if (!price) {
+      throw new NotFoundException(`Product price record "${id}" not found.`);
+    }
+    return this.mapPriceRecord(price);
+  }
+
+  async createProductPrice(dto: CreatePriceDto | CreateProductPriceDto) {
     const product = await this.prisma.catalogProduct.findFirst({
       where: { OR: [{ id: dto.productId }, { productCode: dto.productId }] },
     });
     if (!product) {
       throw new NotFoundException(`Product "${dto.productId}" not found.`);
+    }
+
+    if (dto.unitPrice <= 0) {
+      throw new BadRequestException('Unit price must be greater than zero.');
     }
 
     const created = await this.prisma.productPrice.create({
@@ -615,21 +868,599 @@ export class CatalogService {
         effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
         priceStatus: (dto.priceStatus || 'ACTIVE').toUpperCase(),
       },
+      include: {
+        product: true,
+        manufacturerProduct: {
+          include: { registration: true },
+        },
+        customerSegment: true,
+      },
     });
 
-    return {
-      id: String(created.id),
-      productId: created.productId,
-      unitPrice: Number(created.unitPrice),
-      currency: created.currency,
-      priceType: created.priceType,
-      minQuantity: created.minQuantity,
-      priceStatus: created.priceStatus,
-      createdAt: created.createdAt.toISOString(),
-    };
+    return this.mapPriceRecord(created);
+  }
+
+  async updateProductPrice(id: string, dto: UpdatePriceDto) {
+    const existing = await this.prisma.productPrice.findUnique({
+      where: { id: BigInt(id) },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product price "${id}" not found.`);
+    }
+
+    if (dto.unitPrice !== undefined && dto.unitPrice <= 0) {
+      throw new BadRequestException('Unit price must be greater than zero.');
+    }
+
+    const updated = await this.prisma.productPrice.update({
+      where: { id: BigInt(id) },
+      data: {
+        productManufacturerId: dto.productManufacturerId !== undefined
+          ? (dto.productManufacturerId ? BigInt(dto.productManufacturerId) : null)
+          : undefined,
+        customerSegmentId: dto.customerSegmentId !== undefined ? (dto.customerSegmentId || null) : undefined,
+        priceType: dto.priceType !== undefined ? dto.priceType : undefined,
+        currency: dto.currency !== undefined ? dto.currency : undefined,
+        unitPrice: dto.unitPrice !== undefined ? new Prisma.Decimal(dto.unitPrice) : undefined,
+        minQuantity: dto.minQuantity !== undefined ? dto.minQuantity : undefined,
+        maxQuantity: dto.maxQuantity !== undefined ? (dto.maxQuantity || null) : undefined,
+        effectiveFrom: dto.effectiveFrom !== undefined ? (dto.effectiveFrom ? new Date(dto.effectiveFrom) : null) : undefined,
+        effectiveTo: dto.effectiveTo !== undefined ? (dto.effectiveTo ? new Date(dto.effectiveTo) : null) : undefined,
+        priceStatus: dto.priceStatus ? dto.priceStatus.toUpperCase() : undefined,
+      },
+      include: {
+        product: true,
+        manufacturerProduct: {
+          include: { registration: true },
+        },
+        customerSegment: true,
+      },
+    });
+
+    return this.mapPriceRecord(updated);
+  }
+
+  async toggleProductPriceStatus(id: string) {
+    const existing = await this.prisma.productPrice.findUnique({
+      where: { id: BigInt(id) },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product price "${id}" not found.`);
+    }
+
+    const nextStatus = existing.priceStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    const updated = await this.prisma.productPrice.update({
+      where: { id: BigInt(id) },
+      data: { priceStatus: nextStatus },
+      include: {
+        product: true,
+        manufacturerProduct: {
+          include: { registration: true },
+        },
+        customerSegment: true,
+      },
+    });
+
+    return this.mapPriceRecord(updated);
+  }
+
+  async deleteProductPrice(id: string) {
+    const existing = await this.prisma.productPrice.findUnique({
+      where: { id: BigInt(id) },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product price "${id}" not found.`);
+    }
+
+    await this.prisma.productPrice.delete({
+      where: { id: BigInt(id) },
+    });
+
+    return { success: true, message: `Product price "${id}" deleted successfully.` };
   }
 
   // ===================================================================
+  // PRODUCT TAXES (PRODUCT_TAX)
+  // ===================================================================
+
+  private mapTaxRecord(tax: any) {
+    return {
+      id: String(tax.id),
+      tax_id: String(tax.id),
+      product_tax_id: String(tax.id),
+      productTaxId: String(tax.id),
+      productId: tax.productId,
+      product_id: tax.productId,
+      productName: tax.product?.name || null,
+      productCode: tax.product?.productCode || null,
+      taxCode: tax.taxCode,
+      tax_code: tax.taxCode,
+      taxRate: Number(tax.taxRate),
+      tax_rate: Number(tax.taxRate),
+      effectiveFrom: tax.effectiveFrom ? tax.effectiveFrom.toISOString().split('T')[0] : null,
+      effective_from: tax.effectiveFrom ? tax.effectiveFrom.toISOString().split('T')[0] : null,
+      effectiveTo: tax.effectiveTo ? tax.effectiveTo.toISOString().split('T')[0] : null,
+      effective_to: tax.effectiveTo ? tax.effectiveTo.toISOString().split('T')[0] : null,
+      status: tax.status || 'ACTIVE',
+      createdAt: tax.createdAt.toISOString(),
+      created_at: tax.createdAt.toISOString(),
+      updatedAt: tax.updatedAt.toISOString(),
+      updated_at: tax.updatedAt.toISOString(),
+    };
+  }
+
+  async listAllProductTaxes(query?: ProductTaxQueryDto) {
+    const where: Prisma.ProductTaxWhereInput = {};
+
+    if (query?.productId) {
+      where.OR = [
+        { productId: query.productId },
+        { product: { productCode: query.productId } },
+      ];
+    }
+
+    if (query?.status && query.status !== 'ALL') {
+      where.status = query.status.toUpperCase();
+    }
+
+    if (query?.search?.trim()) {
+      const q = query.search.trim();
+      where.OR = [
+        { taxCode: { contains: q, mode: 'insensitive' } },
+        { product: { name: { contains: q, mode: 'insensitive' } } },
+        { product: { productCode: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    const isPaginated = (query as any)?.page !== undefined || (query as any)?.size !== undefined || (query as any)?.limit !== undefined;
+    const { pageIndex, pageSize, skip, take } = getPaginationParams(query as any);
+
+    const [totalElements, taxes] = await Promise.all([
+      this.prisma.productTax.count({ where }),
+      this.prisma.productTax.findMany({
+        where,
+        include: { product: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        ...(isPaginated ? { skip, take } : {}),
+      }),
+    ]);
+
+    const mapped = taxes.map((t) => this.mapTaxRecord(t));
+    return createPageResponse(mapped, totalElements, pageIndex, isPaginated ? pageSize : totalElements || 1);
+  }
+
+  async listProductTaxes(productId: string) {
+    const product = await this.prisma.catalogProduct.findFirst({
+      where: { OR: [{ id: productId }, { productCode: productId }] },
+    });
+    if (!product) {
+      throw new NotFoundException(`Product "${productId}" not found.`);
+    }
+
+    const taxes = await this.prisma.productTax.findMany({
+      where: { productId: product.id },
+      include: { product: true },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    return taxes.map((t) => this.mapTaxRecord(t));
+  }
+
+  async getProductTaxById(id: string) {
+    const tax = await this.prisma.productTax.findUnique({
+      where: { id: BigInt(id) },
+      include: { product: true },
+    });
+    if (!tax) {
+      throw new NotFoundException(`Product tax record "${id}" not found.`);
+    }
+    return this.mapTaxRecord(tax);
+  }
+
+  async createProductTax(dto: CreateProductTaxDto) {
+    const product = await this.prisma.catalogProduct.findFirst({
+      where: { OR: [{ id: dto.productId }, { productCode: dto.productId }] },
+    });
+    if (!product) {
+      throw new NotFoundException(`Product "${dto.productId}" not found.`);
+    }
+
+    if (dto.taxRate < 0) {
+      throw new BadRequestException('Tax rate cannot be negative.');
+    }
+
+    const created = await this.prisma.productTax.create({
+      data: {
+        productId: product.id,
+        taxCode: dto.taxCode.trim(),
+        taxRate: new Prisma.Decimal(dto.taxRate),
+        effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : null,
+        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
+        status: (dto.status || 'ACTIVE').toUpperCase(),
+      },
+      include: { product: true },
+    });
+
+    return this.mapTaxRecord(created);
+  }
+
+  async updateProductTax(id: string, dto: UpdateProductTaxDto) {
+    const existing = await this.prisma.productTax.findUnique({
+      where: { id: BigInt(id) },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product tax record "${id}" not found.`);
+    }
+
+    if (dto.taxRate !== undefined && dto.taxRate < 0) {
+      throw new BadRequestException('Tax rate cannot be negative.');
+    }
+
+    const updated = await this.prisma.productTax.update({
+      where: { id: BigInt(id) },
+      data: {
+        taxCode: dto.taxCode !== undefined ? dto.taxCode.trim() : undefined,
+        taxRate: dto.taxRate !== undefined ? new Prisma.Decimal(dto.taxRate) : undefined,
+        effectiveFrom: dto.effectiveFrom !== undefined ? (dto.effectiveFrom ? new Date(dto.effectiveFrom) : null) : undefined,
+        effectiveTo: dto.effectiveTo !== undefined ? (dto.effectiveTo ? new Date(dto.effectiveTo) : null) : undefined,
+        status: dto.status ? dto.status.toUpperCase() : undefined,
+      },
+      include: { product: true },
+    });
+
+    return this.mapTaxRecord(updated);
+  }
+
+  async toggleProductTaxStatus(id: string) {
+    const existing = await this.prisma.productTax.findUnique({
+      where: { id: BigInt(id) },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product tax record "${id}" not found.`);
+    }
+
+    const nextStatus = existing.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    const updated = await this.prisma.productTax.update({
+      where: { id: BigInt(id) },
+      data: { status: nextStatus },
+      include: { product: true },
+    });
+
+    return this.mapTaxRecord(updated);
+  }
+
+  async deleteProductTax(id: string) {
+    const existing = await this.prisma.productTax.findUnique({
+      where: { id: BigInt(id) },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product tax record "${id}" not found.`);
+    }
+
+    await this.prisma.productTax.delete({
+      where: { id: BigInt(id) },
+    });
+
+    return { success: true, message: `Product tax record "${id}" deleted successfully.` };
+  }
+
+  // ===================================================================
+  // PRODUCT UOM (PRODUCT_UOM)
+  // ===================================================================
+
+  private mapUomRecord(uom: any) {
+    return {
+      id: String(uom.id),
+      uom_id: String(uom.id),
+      product_uom_id: String(uom.id),
+      productUomId: String(uom.id),
+      productId: uom.productId,
+      product_id: uom.productId,
+      productName: uom.product?.name || null,
+      productCode: uom.product?.productCode || null,
+      uom: uom.uom,
+      conversionFactor: Number(uom.conversionFactor),
+      conversion_factor: Number(uom.conversionFactor),
+      isBaseUom: Boolean(uom.isBaseUom),
+      is_base_uom: Boolean(uom.isBaseUom),
+      isOrderUom: Boolean(uom.isOrderUom),
+      is_order_uom: Boolean(uom.isOrderUom),
+      isActive: Boolean(uom.isActive),
+      is_active: Boolean(uom.isActive),
+      createdAt: uom.createdAt.toISOString(),
+      created_at: uom.createdAt.toISOString(),
+      updatedAt: uom.updatedAt.toISOString(),
+      updated_at: uom.updatedAt.toISOString(),
+    };
+  }
+
+  async listAllProductUoms(query?: ProductUomQueryDto) {
+    const where: Prisma.ProductUomWhereInput = {};
+
+    if (query?.productId) {
+      where.OR = [
+        { productId: query.productId },
+        { product: { productCode: query.productId } },
+      ];
+    }
+
+    if (query?.active !== undefined && query.active !== 'ALL') {
+      where.isActive = query.active === 'true' || query.active === 'ACTIVE';
+    }
+
+    if (query?.search?.trim()) {
+      const q = query.search.trim();
+      where.OR = [
+        { uom: { contains: q, mode: 'insensitive' } },
+        { product: { name: { contains: q, mode: 'insensitive' } } },
+        { product: { productCode: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    const isPaginated = (query as any)?.page !== undefined || (query as any)?.size !== undefined || (query as any)?.limit !== undefined;
+    const { pageIndex, pageSize, skip, take } = getPaginationParams(query as any);
+
+    const [totalElements, uoms] = await Promise.all([
+      this.prisma.productUom.count({ where }),
+      this.prisma.productUom.findMany({
+        where,
+        include: { product: true },
+        orderBy: [{ isBaseUom: 'desc' }, { uom: 'asc' }],
+        ...(isPaginated ? { skip, take } : {}),
+      }),
+    ]);
+
+    const mapped = uoms.map((u) => this.mapUomRecord(u));
+    return createPageResponse(mapped, totalElements, pageIndex, isPaginated ? pageSize : totalElements || 1);
+  }
+
+  async listProductUoms(productId: string) {
+    const product = await this.prisma.catalogProduct.findFirst({
+      where: { OR: [{ id: productId }, { productCode: productId }] },
+    });
+    if (!product) {
+      throw new NotFoundException(`Product "${productId}" not found.`);
+    }
+
+    const uoms = await this.prisma.productUom.findMany({
+      where: { productId: product.id },
+      include: { product: true },
+      orderBy: [{ isBaseUom: 'desc' }, { conversionFactor: 'asc' }],
+    });
+
+    return uoms.map((u) => this.mapUomRecord(u));
+  }
+
+  async getProductUomById(id: string) {
+    const uom = await this.prisma.productUom.findUnique({
+      where: { id: BigInt(id) },
+      include: { product: true },
+    });
+    if (!uom) {
+      throw new NotFoundException(`Product UOM record "${id}" not found.`);
+    }
+    return this.mapUomRecord(uom);
+  }
+
+  async createProductUom(dto: CreateProductUomDto) {
+    const product = await this.prisma.catalogProduct.findFirst({
+      where: { OR: [{ id: dto.productId }, { productCode: dto.productId }] },
+    });
+    if (!product) {
+      throw new NotFoundException(`Product "${dto.productId}" not found.`);
+    }
+
+    if (dto.conversionFactor <= 0) {
+      throw new BadRequestException('Conversion factor must be a positive number.');
+    }
+
+    const uomName = dto.uom.trim();
+
+    // Check duplicate UOM for this product
+    const existingDuplicate = await this.prisma.productUom.findFirst({
+      where: { productId: product.id, uom: { equals: uomName, mode: 'insensitive' } },
+    });
+    if (existingDuplicate) {
+      throw new ConflictException(`UOM "${uomName}" is already defined for product "${product.name}".`);
+    }
+
+    // Atomic transaction: if base UOM, unset base on any existing UOM for this product
+    const created = await this.prisma.$transaction(async (tx) => {
+      if (dto.isBaseUom) {
+        await tx.productUom.updateMany({
+          where: { productId: product.id, isBaseUom: true },
+          data: { isBaseUom: false },
+        });
+      }
+
+      return tx.productUom.create({
+        data: {
+          productId: product.id,
+          uom: uomName,
+          conversionFactor: new Prisma.Decimal(dto.conversionFactor),
+          isBaseUom: dto.isBaseUom ?? false,
+          isOrderUom: dto.isOrderUom ?? true,
+          isActive: dto.isActive ?? true,
+        },
+        include: { product: true },
+      });
+    });
+
+    return this.mapUomRecord(created);
+  }
+
+  async updateProductUom(id: string, dto: UpdateProductUomDto) {
+    const existing = await this.prisma.productUom.findUnique({
+      where: { id: BigInt(id) },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product UOM record "${id}" not found.`);
+    }
+
+    if (dto.conversionFactor !== undefined && dto.conversionFactor <= 0) {
+      throw new BadRequestException('Conversion factor must be a positive number.');
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (dto.isBaseUom) {
+        await tx.productUom.updateMany({
+          where: { productId: existing.productId, isBaseUom: true, id: { not: existing.id } },
+          data: { isBaseUom: false },
+        });
+      }
+
+      return tx.productUom.update({
+        where: { id: BigInt(id) },
+        data: {
+          uom: dto.uom !== undefined ? dto.uom.trim() : undefined,
+          conversionFactor: dto.conversionFactor !== undefined ? new Prisma.Decimal(dto.conversionFactor) : undefined,
+          isBaseUom: dto.isBaseUom !== undefined ? dto.isBaseUom : undefined,
+          isOrderUom: dto.isOrderUom !== undefined ? dto.isOrderUom : undefined,
+          isActive: dto.isActive !== undefined ? dto.isActive : undefined,
+        },
+        include: { product: true },
+      });
+    });
+
+    return this.mapUomRecord(updated);
+  }
+
+  async toggleProductUomStatus(id: string) {
+    const existing = await this.prisma.productUom.findUnique({
+      where: { id: BigInt(id) },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product UOM record "${id}" not found.`);
+    }
+
+    const updated = await this.prisma.productUom.update({
+      where: { id: BigInt(id) },
+      data: { isActive: !existing.isActive },
+      include: { product: true },
+    });
+
+    return this.mapUomRecord(updated);
+  }
+
+  async deleteProductUom(id: string) {
+    const existing = await this.prisma.productUom.findUnique({
+      where: { id: BigInt(id) },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product UOM record "${id}" not found.`);
+    }
+
+    await this.prisma.productUom.delete({
+      where: { id: BigInt(id) },
+    });
+
+    return { success: true, message: `Product UOM record "${id}" deleted successfully.` };
+  }
+
+  // ===================================================================
+  // CUSTOMER SEGMENTS (CUSTOMER_SEGMENT)
+  // ===================================================================
+
+  private mapSegmentRecord(seg: any) {
+    return {
+      id: seg.id,
+      customer_segment_id: seg.id,
+      customerSegmentId: seg.id,
+      segmentCode: seg.segmentCode,
+      segment_code: seg.segmentCode,
+      code: seg.segmentCode,
+      segmentName: seg.segmentName,
+      segment_name: seg.segmentName,
+      name: seg.segmentName,
+      description: seg.description || null,
+      lifecycleStatus: seg.lifecycleStatus || 'ACTIVE',
+      lifecycle_status: seg.lifecycleStatus || 'ACTIVE',
+      status: seg.lifecycleStatus === 'ACTIVE' ? 'Active' : 'Inactive',
+      is_active: seg.lifecycleStatus === 'ACTIVE',
+      createdAt: seg.createdAt.toISOString(),
+      created_at: seg.createdAt.toISOString(),
+      updatedAt: seg.updatedAt.toISOString(),
+      updated_at: seg.updatedAt.toISOString(),
+    };
+  }
+
+  async listCustomerSegments() {
+    const segments = await this.prisma.customerSegment.findMany({
+      orderBy: [{ segmentCode: 'asc' }],
+    });
+    return segments.map((s) => this.mapSegmentRecord(s));
+  }
+
+  async getCustomerSegmentById(id: string) {
+    const segment = await this.prisma.customerSegment.findUnique({
+      where: { id },
+    });
+    if (!segment) {
+      throw new NotFoundException(`Customer segment "${id}" not found.`);
+    }
+    return this.mapSegmentRecord(segment);
+  }
+
+  async createCustomerSegment(dto: CreateCustomerSegmentDto) {
+    const code = dto.segmentCode.trim().toUpperCase();
+    const existing = await this.prisma.customerSegment.findFirst({
+      where: { segmentCode: code },
+    });
+    if (existing) {
+      throw new ConflictException(`Customer segment with code "${code}" already exists.`);
+    }
+
+    const id = dto.id?.trim() || `seg_${code.toLowerCase()}`;
+    const created = await this.prisma.customerSegment.create({
+      data: {
+        id,
+        segmentCode: code,
+        segmentName: dto.segmentName.trim(),
+        description: dto.description?.trim() || null,
+        lifecycleStatus: (dto.lifecycleStatus || 'ACTIVE').toUpperCase(),
+      },
+    });
+
+    return this.mapSegmentRecord(created);
+  }
+
+  async updateCustomerSegment(id: string, dto: UpdateCustomerSegmentDto) {
+    const existing = await this.prisma.customerSegment.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Customer segment "${id}" not found.`);
+    }
+
+    const updated = await this.prisma.customerSegment.update({
+      where: { id },
+      data: {
+        segmentCode: dto.segmentCode ? dto.segmentCode.trim().toUpperCase() : undefined,
+        segmentName: dto.segmentName ? dto.segmentName.trim() : undefined,
+        description: dto.description !== undefined ? (dto.description?.trim() || null) : undefined,
+        lifecycleStatus: dto.lifecycleStatus ? dto.lifecycleStatus.toUpperCase() : undefined,
+      },
+    });
+
+    return this.mapSegmentRecord(updated);
+  }
+
+  async deleteCustomerSegment(id: string) {
+    const existing = await this.prisma.customerSegment.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Customer segment "${id}" not found.`);
+    }
+
+    await this.prisma.customerSegment.delete({
+      where: { id },
+    });
+
+    return { success: true, message: `Customer segment "${id}" deleted successfully.` };
+  }
+
+// ===================================================================
   // PRODUCT MANUFACTURER MAPPINGS (PRODUCT_MANUFACTURER)
   // ===================================================================
 
@@ -1366,84 +2197,255 @@ export class CatalogService {
     };
   }
 
-  async createCategory(dto: CreateCategoryDto) {
-    const rawCode = dto.categoryCode || dto.category_code || dto.code;
-    if (!rawCode || !rawCode.trim()) {
-      throw new BadRequestException('Category Code is required.');
+  async getCategoryHierarchyOptions(productTypeId?: string) {
+    const where: Prisma.CategoryWhereInput = {};
+    if (productTypeId && productTypeId !== 'ALL') {
+      where.productTypeId = productTypeId;
     }
-    const codeClean = rawCode.trim().toUpperCase();
+    const categories = await this.prisma.category.findMany({
+      where,
+      select: {
+        productTypeId: true,
+        category: true,
+        subCategory: true,
+        subSubCategory: true,
+      },
+      orderBy: [
+        { productTypeId: 'asc' },
+        { category: 'asc' },
+        { subCategory: 'asc' },
+        { subSubCategory: 'asc' },
+      ],
+    });
+
+    const result: Record<string, {
+      categories: string[];
+      subCategories: Record<string, string[]>;
+      subSubCategories: Record<string, Record<string, string[]>>;
+    }> = {};
+
+    for (const c of categories) {
+      const pt = c.productTypeId;
+      if (!result[pt]) {
+        result[pt] = { categories: [], subCategories: {}, subSubCategories: {} };
+      }
+      const cat = c.category.trim();
+      if (!result[pt].categories.includes(cat)) {
+        result[pt].categories.push(cat);
+      }
+      if (c.subCategory) {
+        const sub = c.subCategory.trim();
+        if (!result[pt].subCategories[cat]) {
+          result[pt].subCategories[cat] = [];
+        }
+        if (!result[pt].subCategories[cat].includes(sub)) {
+          result[pt].subCategories[cat].push(sub);
+        }
+        if (c.subSubCategory) {
+          const subSub = c.subSubCategory.trim();
+          if (!result[pt].subSubCategories[cat]) {
+            result[pt].subSubCategories[cat] = {};
+          }
+          if (!result[pt].subSubCategories[cat][sub]) {
+            result[pt].subSubCategories[cat][sub] = [];
+          }
+          if (!result[pt].subSubCategories[cat][sub].includes(subSub)) {
+            result[pt].subSubCategories[cat][sub].push(subSub);
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  async createCategory(dto: CreateCategoryDto) {
+    const ptId = (dto.productTypeId || dto.product_type_id || 'pt_med').trim();
+    const pt = await this.prisma.productType.findFirst({
+      where: {
+        OR: [{ id: ptId }, { productTypeCode: ptId.toUpperCase() }],
+      },
+    });
+    if (!pt) {
+      throw new BadRequestException(`Product Type "${ptId}" does not exist in database.`);
+    }
 
     const categoryName = (dto.category || dto.name || '').trim();
     if (!categoryName) {
       throw new BadRequestException('Category name is required.');
     }
 
-    const existing = await this.prisma.category.findFirst({
-      where: {
-        OR: [
-          { categoryCode: { equals: codeClean, mode: 'insensitive' } },
-          ...(dto.id ? [{ id: dto.id }] : []),
-        ],
-      },
-    });
-
-    if (existing) {
-      throw new ConflictException(`Category Code "${codeClean}" already exists.`);
-    }
-
-    const id = dto.id?.trim() || dto.category_id?.trim() || dto.categoryId?.trim() || `CAT${Date.now().toString().slice(-6)}`;
-    const categoryId = id;
-    const rawStatus = dto.lifecycleStatus || dto.lifecycle_status || dto.status;
-    const lifecycleStatus = rawStatus ? rawStatus.toUpperCase() : 'ACTIVE';
-    const productTypeId = (dto.productTypeId || dto.product_type_id || 'pt_med').trim();
     const subCategory = (dto.subCategory || dto.sub_category || '').trim() || null;
     const subSubCategory = (dto.subSubCategory || dto.sub_sub_category || '').trim() || null;
-    const displayOrder = dto.displayOrder ?? dto.display_order ?? 1;
 
-    const created = await this.prisma.category.create({
-      data: {
-        id,
-        categoryId,
-        productTypeId,
-        category: categoryName,
-        subCategory,
-        subSubCategory,
-        categoryCode: codeClean,
-        description: dto.description?.trim() || null,
-        lifecycleStatus,
-        displayOrder,
-      },
-    });
+    if (subSubCategory && !subCategory) {
+      throw new BadRequestException('Sub-Category is required when specifying a Sub-Sub-Category.');
+    }
 
-    // Also guarantee foreign key integrity for manufacturer capabilities in catalog_products
-    await this.prisma.catalogProduct.upsert({
-      where: { id },
-      update: {
-        category: created.category,
-        subCategory: created.subCategory,
-        subSubCategory: created.subSubCategory,
+    // Run inside database transaction with conflict check & deterministic code generation
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Authoritative Duplicate Hierarchy Check
+      const existingHierarchy = await tx.category.findFirst({
+        where: {
+          productTypeId: pt.id,
+          category: { equals: categoryName, mode: 'insensitive' },
+          subCategory: subCategory ? { equals: subCategory, mode: 'insensitive' } : null,
+          subSubCategory: subSubCategory ? { equals: subSubCategory, mode: 'insensitive' } : null,
+        },
+      });
+
+      if (existingHierarchy) {
+        throw new ConflictException(
+          'Category hierarchy already exists for the selected Product Type and placement.'
+        );
+      }
+
+      // 2. Deterministic Category Code Generation (100% Backend Controlled)
+      const toCodePart = (text: string, maxLen = 4): string => {
+        const words = text.trim().split(/[\s/&_-]+/).filter(Boolean);
+        if (words.length > 1) {
+          const initials = words.map((w) => w.replace(/[^A-Za-z0-9]/g, '')[0] || '').join('').toUpperCase();
+          if (initials.length >= 2) return initials.slice(0, maxLen);
+        }
+        const cleaned = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+        return cleaned.slice(0, Math.max(3, maxLen));
+      };
+
+      const ptPart = (pt.productTypeCode || 'CAT').replace(/[^A-Za-z0-9]/g, '').slice(0, 4).toUpperCase();
+      const catPart = toCodePart(categoryName);
+      const subPart = subCategory ? toCodePart(subCategory) : null;
+      const subSubPart = subSubCategory ? toCodePart(subSubCategory) : null;
+
+      // Deterministic hierarchy-aligned base slug
+      let baseCode = catPart;
+      if (subPart && subSubPart) {
+        baseCode = `${catPart}-${subPart}-${subSubPart}`;
+      } else if (subPart) {
+        baseCode = `${catPart}-${subPart}`;
+      }
+
+      // Ensure code is unique in PostgreSQL categories table
+      let candidateCode = baseCode;
+      const existingCode = await tx.category.findFirst({
+        where: { categoryCode: { equals: candidateCode, mode: 'insensitive' } },
+      });
+
+      if (existingCode) {
+        // First try prepending Product Type prefix
+        candidateCode = `${ptPart}-${baseCode}`;
+        const secondCheck = await tx.category.findFirst({
+          where: { categoryCode: { equals: candidateCode, mode: 'insensitive' } },
+        });
+
+        if (secondCheck) {
+          // If still collision, append sequential numeric counter
+          let seq = 1;
+          while (true) {
+            const seqCode = `${candidateCode}-${String(seq).padStart(2, '0')}`;
+            const exists = await tx.category.findFirst({
+              where: { categoryCode: { equals: seqCode, mode: 'insensitive' } },
+            });
+            if (!exists) {
+              candidateCode = seqCode;
+              break;
+            }
+            seq++;
+          }
+        }
+      }
+
+      // 3. Unique Category ID Generation (e.g. CAT039, CAT040...)
+      const allCategoryIds = await tx.category.findMany({
+        select: { categoryId: true },
+      });
+
+      let maxNum = 0;
+      for (const item of allCategoryIds) {
+        const match = (item.categoryId || '').match(/^CAT(\d+)$/i);
+        if (match) {
+          const n = parseInt(match[1], 10);
+          if (!isNaN(n) && n > maxNum) maxNum = n;
+        }
+      }
+
+      const nextNum = maxNum + 1;
+      const id = `CAT${String(nextNum).padStart(3, '0')}`;
+      const categoryId = id;
+
+      const rawStatus = dto.lifecycleStatus || dto.lifecycle_status || dto.status;
+      const lifecycleStatus = rawStatus ? rawStatus.toUpperCase() : 'ACTIVE';
+      const displayOrder = dto.displayOrder ?? dto.display_order ?? 1;
+
+      // 4. Atomic PostgreSQL Persistence
+      const created = await tx.category.create({
+        data: {
+          id,
+          categoryId,
+          productTypeId: pt.id,
+          category: categoryName,
+          subCategory,
+          subSubCategory,
+          categoryCode: candidateCode,
+          description: dto.description?.trim() || null,
+          lifecycleStatus,
+          displayOrder,
+        },
+      });
+
+      // 5. Upsert foreign key capability record in catalog_products
+      await tx.catalogProduct.upsert({
+        where: { id },
+        update: {
+          category: created.category,
+          subCategory: created.subCategory,
+          subSubCategory: created.subSubCategory,
+          productTypeId: created.productTypeId,
+          categoryId: created.id,
+          lifecycleStatus: created.lifecycleStatus,
+          active: created.lifecycleStatus === 'ACTIVE',
+        },
+        create: {
+          id,
+          productCode: candidateCode,
+          name: created.subSubCategory || created.subCategory || created.category,
+          genericName: [created.category, created.subCategory].filter(Boolean).join(' - ') || 'Manufacturing Capability',
+          dosageForm: created.subCategory || 'Standard',
+          category: created.category,
+          subCategory: created.subCategory,
+          subSubCategory: created.subSubCategory,
+          productTypeId: created.productTypeId,
+          categoryId: created.id,
+          packSize: 'Standard Batch',
+          lifecycleStatus: created.lifecycleStatus,
+          active: created.lifecycleStatus === 'ACTIVE',
+        },
+      });
+
+      return {
+        id: created.id,
+        category_id: created.categoryId,
+        categoryId: created.categoryId,
+        product_type_id: created.productTypeId,
         productTypeId: created.productTypeId,
-        categoryId: created.id,
+        category: created.category,
+        sub_category: created.subCategory,
+        subCategory: created.subCategory,
+        sub_sub_category: created.subSubCategory,
+        subSubCategory: created.subSubCategory,
+        category_code: created.categoryCode,
+        categoryCode: created.categoryCode,
+        description: created.description,
+        lifecycle_status: created.lifecycleStatus,
         lifecycleStatus: created.lifecycleStatus,
-        active: created.lifecycleStatus === 'ACTIVE',
-      },
-      create: {
-        id,
-        productCode: codeClean,
+        status: created.lifecycleStatus === 'ACTIVE' ? 'Active' : 'Inactive',
+        display_order: created.displayOrder,
+        displayOrder: created.displayOrder,
         name: created.subSubCategory || created.subCategory || created.category,
-        genericName: [created.category, created.subCategory].filter(Boolean).join(' - ') || 'Manufacturing Capability',
-        dosageForm: created.subCategory || 'Standard',
-        category: created.category,
-        subCategory: created.subCategory,
-        subSubCategory: created.subSubCategory,
-        productTypeId: created.productTypeId,
-        categoryId: created.id,
-        packSize: 'Standard Batch',
-        lifecycleStatus: created.lifecycleStatus,
-        active: created.lifecycleStatus === 'ACTIVE',
-      },
+        fullName: [created.category, created.subCategory, created.subSubCategory].filter(Boolean).join(' → '),
+        createdAt: created.createdAt.toISOString(),
+        updatedAt: created.updatedAt.toISOString(),
+      };
     });
-    return this.getCategoryById(created.id);
   }
 
   async updateCategory(id: string, dto: UpdateCategoryDto) {
@@ -1602,6 +2604,30 @@ export class CatalogService {
       ),
     );
   }
+
+  async getSubSubCategoriesBySubCategoryOnly(subCategoryOrId: string) {
+    const cats = await this.prisma.category.findMany({
+      where: {
+        OR: [
+          { subCategory: { equals: subCategoryOrId.trim(), mode: 'insensitive' } },
+          { id: subCategoryOrId.trim() },
+          { categoryId: subCategoryOrId.trim() },
+        ],
+        lifecycleStatus: 'ACTIVE',
+      },
+      select: { subSubCategory: true },
+      distinct: ['subSubCategory'],
+    });
+
+    return Array.from(
+      new Set(
+        cats
+          .map((c) => c.subSubCategory?.trim())
+          .filter((s) => Boolean(s)),
+      ),
+    );
+  }
+
 
   // ===================================================================
   // PRODUCT TYPE ATTRIBUTE ASSIGNMENTS (PRODUCT_TYPE_ATTRIBUTE)
@@ -2223,6 +3249,50 @@ export class CatalogService {
         attribute_value: pa.attributeValue,
       })),
 
+      // Relational taxes list
+      taxes: (p.productTaxes || []).map((t: any) => ({
+        id: String(t.id),
+        product_tax_id: String(t.id),
+        productTaxId: String(t.id),
+        productId: t.productId,
+        product_id: t.productId,
+        taxCode: t.taxCode,
+        tax_code: t.taxCode,
+        taxRate: Number(t.taxRate),
+        tax_rate: Number(t.taxRate),
+        effectiveFrom: t.effectiveFrom ? t.effectiveFrom.toISOString().split('T')[0] : null,
+        effective_from: t.effectiveFrom ? t.effectiveFrom.toISOString().split('T')[0] : null,
+        effectiveTo: t.effectiveTo ? t.effectiveTo.toISOString().split('T')[0] : null,
+        effective_to: t.effectiveTo ? t.effectiveTo.toISOString().split('T')[0] : null,
+        status: t.status,
+        createdAt: t.createdAt.toISOString(),
+        created_at: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+        updated_at: t.updatedAt.toISOString(),
+      })),
+
+      // Relational UOMs list
+      uoms: (p.productUoms || []).map((u: any) => ({
+        id: String(u.id),
+        product_uom_id: String(u.id),
+        productUomId: String(u.id),
+        productId: u.productId,
+        product_id: u.productId,
+        uom: u.uom,
+        conversionFactor: Number(u.conversionFactor),
+        conversion_factor: Number(u.conversionFactor),
+        isBaseUom: Boolean(u.isBaseUom),
+        is_base_uom: Boolean(u.isBaseUom),
+        isOrderUom: Boolean(u.isOrderUom),
+        is_order_uom: Boolean(u.isOrderUom),
+        isActive: Boolean(u.isActive),
+        is_active: Boolean(u.isActive),
+        createdAt: u.createdAt.toISOString(),
+        created_at: u.createdAt.toISOString(),
+        updatedAt: u.updatedAt.toISOString(),
+        updated_at: u.updatedAt.toISOString(),
+      })),
+
       // Relational prices list
       prices: (p.productPrices || []).map((pr: any) => ({
         id: String(pr.id),
@@ -2289,4 +3359,652 @@ export class CatalogService {
         })),
     };
   }
+
+  // ===================================================================
+  // BRAND MASTER (BRAND)
+  // ===================================================================
+
+  async listBrands(query: BrandQueryDto) {
+    const where: any = {};
+    if (query.q && query.q.trim()) {
+      const q = query.q.trim();
+      where.OR = [
+        { brandName: { contains: q, mode: 'insensitive' } },
+        { brandCode: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    if (query.status && query.status.toUpperCase() !== 'ALL') {
+      where.lifecycleStatus = query.status.toUpperCase();
+    }
+
+    const brands = await this.prisma.brand.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: query.size || 100,
+      skip: (query.page || 0) * (query.size || 100),
+    });
+
+    return brands.map((b) => ({
+      brand_id: b.brandId,
+      brand_code: b.brandCode,
+      brand_name: b.brandName,
+      description: b.description || '',
+      lifecycle_status: b.lifecycleStatus,
+      created_at: b.createdAt.toISOString().split('T')[0],
+      updated_at: b.updatedAt.toISOString().split('T')[0],
+      id: b.id,
+      code: b.brandCode,
+      name: b.brandName,
+      status: b.lifecycleStatus,
+    }));
+  }
+
+  async getBrandById(id: string) {
+    const brand = await this.prisma.brand.findFirst({
+      where: { OR: [{ id }, { brandId: id }, { brandCode: id }] },
+    });
+    if (!brand) {
+      throw new NotFoundException(`Brand "${id}" not found.`);
+    }
+    return {
+      brand_id: brand.brandId,
+      brand_code: brand.brandCode,
+      brand_name: brand.brandName,
+      description: brand.description || '',
+      lifecycle_status: brand.lifecycleStatus,
+      created_at: brand.createdAt.toISOString().split('T')[0],
+      updated_at: brand.updatedAt.toISOString().split('T')[0],
+      id: brand.id,
+      code: brand.brandCode,
+      name: brand.brandName,
+      status: brand.lifecycleStatus,
+    };
+  }
+
+  async createBrand(dto: CreateBrandDto) {
+    const cleanCode = dto.brandCode.trim().toUpperCase();
+    const cleanName = dto.brandName.trim();
+
+    const existing = await this.prisma.brand.findFirst({
+      where: {
+        OR: [
+          { brandCode: cleanCode },
+          { brandName: { equals: cleanName, mode: 'insensitive' } },
+        ],
+      },
+    });
+    if (existing) {
+      throw new ConflictException(`Brand with code "${cleanCode}" or name "${cleanName}" already exists.`);
+    }
+
+    const brandId = 'brd_' + cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '') + '_' + Date.now().toString(36);
+    const created = await this.prisma.brand.create({
+      data: {
+        id: brandId,
+        brandId,
+        brandCode: cleanCode,
+        brandName: cleanName,
+        description: dto.description ? dto.description.trim() : null,
+        lifecycleStatus: (dto.lifecycleStatus || 'ACTIVE').toUpperCase(),
+      },
+    });
+
+    return {
+      brand_id: created.brandId,
+      brand_code: created.brandCode,
+      brand_name: created.brandName,
+      description: created.description || '',
+      lifecycle_status: created.lifecycleStatus,
+      created_at: created.createdAt.toISOString().split('T')[0],
+      updated_at: created.updatedAt.toISOString().split('T')[0],
+      id: created.id,
+      code: created.brandCode,
+      name: created.brandName,
+      status: created.lifecycleStatus,
+    };
+  }
+
+  async updateBrand(id: string, dto: UpdateBrandDto) {
+    const brand = await this.prisma.brand.findFirst({
+      where: { OR: [{ id }, { brandId: id }, { brandCode: id }] },
+    });
+    if (!brand) {
+      throw new NotFoundException(`Brand "${id}" not found.`);
+    }
+
+    if (dto.brandCode && dto.brandCode.trim().toUpperCase() !== brand.brandCode) {
+      const conflict = await this.prisma.brand.findFirst({
+        where: { brandCode: dto.brandCode.trim().toUpperCase(), id: { not: brand.id } },
+      });
+      if (conflict) {
+        throw new ConflictException(`Brand Code "${dto.brandCode}" is already taken.`);
+      }
+    }
+
+    const updated = await this.prisma.brand.update({
+      where: { id: brand.id },
+      data: {
+        brandCode: dto.brandCode ? dto.brandCode.trim().toUpperCase() : undefined,
+        brandName: dto.brandName ? dto.brandName.trim() : undefined,
+        description: dto.description !== undefined ? dto.description?.trim() : undefined,
+        lifecycleStatus: dto.lifecycleStatus ? dto.lifecycleStatus.toUpperCase() : undefined,
+        updatedAt: new Date(),
+      },
+    });
+
+    return {
+      brand_id: updated.brandId,
+      brand_code: updated.brandCode,
+      brand_name: updated.brandName,
+      description: updated.description || '',
+      lifecycle_status: updated.lifecycleStatus,
+      created_at: updated.createdAt.toISOString().split('T')[0],
+      updated_at: updated.updatedAt.toISOString().split('T')[0],
+      id: updated.id,
+      code: updated.brandCode,
+      name: updated.brandName,
+      status: updated.lifecycleStatus,
+    };
+  }
+
+  async toggleBrandStatus(id: string) {
+    const brand = await this.prisma.brand.findFirst({
+      where: { OR: [{ id }, { brandId: id }, { brandCode: id }] },
+    });
+    if (!brand) {
+      throw new NotFoundException(`Brand "${id}" not found.`);
+    }
+
+    const nextStatus = brand.lifecycleStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    const updated = await this.prisma.brand.update({
+      where: { id: brand.id },
+      data: { lifecycleStatus: nextStatus, updatedAt: new Date() },
+    });
+
+    return {
+      brand_id: updated.brandId,
+      brand_code: updated.brandCode,
+      brand_name: updated.brandName,
+      description: updated.description || '',
+      lifecycle_status: updated.lifecycleStatus,
+      created_at: updated.createdAt.toISOString().split('T')[0],
+      updated_at: updated.updatedAt.toISOString().split('T')[0],
+      id: updated.id,
+      code: updated.brandCode,
+      name: updated.brandName,
+      status: updated.lifecycleStatus,
+    };
+  }
+
+  async deleteBrand(id: string) {
+    const brand = await this.prisma.brand.findFirst({
+      where: { OR: [{ id }, { brandId: id }, { brandCode: id }] },
+    });
+    if (!brand) {
+      throw new NotFoundException(`Brand "${id}" not found.`);
+    }
+
+    // Check usage in catalog products
+    const productCount = await this.prisma.catalogProduct.count({
+      where: { OR: [{ brandId: brand.brandId }, { brand: brand.brandName }] },
+    });
+    if (productCount > 0) {
+      throw new BadRequestException(`Cannot delete brand "${brand.brandName}": it is referenced by ${productCount} products in Catalog Master.`);
+    }
+
+    await this.prisma.brand.delete({ where: { id: brand.id } });
+    return { success: true, message: `Brand "${brand.brandName}" deleted successfully.` };
+  }
+
+  // ===================================================================
+  // MANUFACTURER MASTER (MANUFACTURER / ManufacturerRegistration)
+  // ===================================================================
+
+  async listAdminManufacturers(query: ManufacturerQueryDto) {
+    const where: any = {};
+    if (query.q && query.q.trim()) {
+      const q = query.q.trim();
+      where.OR = [
+        { companyName: { contains: q, mode: 'insensitive' } },
+        { manufacturerCode: { contains: q, mode: 'insensitive' } },
+        { registrationCode: { contains: q, mode: 'insensitive' } },
+        { city: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    if (query.status && query.status.toUpperCase() !== 'ALL') {
+      const st = query.status.toUpperCase();
+      where.OR = [
+        { lifecycleStatus: st },
+        { status: st === 'ACTIVE' ? 'APPROVED' : 'REJECTED' },
+      ];
+    }
+
+    const mfgs = await this.prisma.manufacturerRegistration.findMany({
+      where,
+      orderBy: { id: 'desc' },
+      take: query.size || 100,
+      skip: (query.page || 0) * (query.size || 100),
+    });
+
+    return mfgs.map((m) => this.mapAdminManufacturer(m));
+  }
+
+  async getAdminManufacturerById(id: string) {
+    const mfg = await this.findManufacturerByIdOrCode(id);
+    if (!mfg) {
+      throw new NotFoundException(`Manufacturer "${id}" not found.`);
+    }
+    return this.mapAdminManufacturer(mfg);
+  }
+
+  async createAdminManufacturer(dto: CreateAdminManufacturerDto) {
+    const cleanCode = (dto.manufacturerCode || 'MFG' + String(Date.now()).slice(-6)).toUpperCase().trim();
+    const regCode = 'REG-MFG-' + Math.random().toString(36).substring(2, 10).toUpperCase() + Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    const created = await this.prisma.manufacturerRegistration.create({
+      data: {
+        registrationCode: regCode,
+        manufacturerCode: cleanCode,
+        companyName: dto.companyName.trim(),
+        facilityAddress: dto.facilityAddress?.trim() || 'Industrial Estate',
+        city: dto.city?.trim() || 'Plant City',
+        state: dto.state?.trim() || 'State',
+        pincode: dto.pincode?.trim() || '110001',
+        contactPerson: dto.contactPerson?.trim() || 'Authorized Plant Head',
+        designation: dto.designation?.trim() || 'Director of Operations',
+        email: dto.email?.trim() || `mfg_${Date.now()}@factorygrid.in`,
+        phone: dto.phone?.trim() || '+91 98000 00000',
+        mfgCapacity: dto.mfgCapacity?.trim() || 'High Volume cGMP Facility',
+        description: dto.description?.trim() || 'Certified pharmaceutical manufacturing facility and contract manufacturing organization.',
+        lifecycleStatus: (dto.lifecycleStatus || 'ACTIVE').toUpperCase(),
+        status: 'APPROVED',
+        currentStep: 4,
+        whoGmpApplicable: true,
+        effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : new Date(),
+        discontinuedOn: dto.discontinuedOn ? new Date(dto.discontinuedOn) : null,
+      },
+    });
+
+    return this.mapAdminManufacturer(created);
+  }
+
+  async updateAdminManufacturer(id: string, dto: UpdateAdminManufacturerDto) {
+    const mfg = await this.findManufacturerByIdOrCode(id);
+    if (!mfg) {
+      throw new NotFoundException(`Manufacturer "${id}" not found.`);
+    }
+
+    const updated = await this.prisma.manufacturerRegistration.update({
+      where: { id: mfg.id },
+      data: {
+        companyName: dto.companyName !== undefined ? dto.companyName.trim() : undefined,
+        manufacturerCode: dto.manufacturerCode !== undefined ? dto.manufacturerCode.trim().toUpperCase() : undefined,
+        facilityAddress: dto.facilityAddress !== undefined ? dto.facilityAddress.trim() : undefined,
+        city: dto.city !== undefined ? dto.city.trim() : undefined,
+        state: dto.state !== undefined ? dto.state.trim() : undefined,
+        pincode: dto.pincode !== undefined ? dto.pincode.trim() : undefined,
+        contactPerson: dto.contactPerson !== undefined ? dto.contactPerson.trim() : undefined,
+        designation: dto.designation !== undefined ? dto.designation.trim() : undefined,
+        email: dto.email !== undefined ? dto.email.trim() : undefined,
+        phone: dto.phone !== undefined ? dto.phone.trim() : undefined,
+        mfgCapacity: dto.mfgCapacity !== undefined ? dto.mfgCapacity.trim() : undefined,
+        description: dto.description !== undefined ? dto.description.trim() : undefined,
+        lifecycleStatus: dto.lifecycleStatus !== undefined ? dto.lifecycleStatus.toUpperCase() : undefined,
+        effectiveFrom: dto.effectiveFrom !== undefined ? (dto.effectiveFrom ? new Date(dto.effectiveFrom) : null) : undefined,
+        discontinuedOn: dto.discontinuedOn !== undefined ? (dto.discontinuedOn ? new Date(dto.discontinuedOn) : null) : undefined,
+        updatedAt: new Date(),
+      },
+    });
+
+    return this.mapAdminManufacturer(updated);
+  }
+
+  async toggleAdminManufacturerStatus(id: string) {
+    const mfg = await this.findManufacturerByIdOrCode(id);
+    if (!mfg) {
+      throw new NotFoundException(`Manufacturer "${id}" not found.`);
+    }
+
+    const currStatus = mfg.lifecycleStatus || (mfg.status === 'APPROVED' ? 'ACTIVE' : 'INACTIVE');
+    const nextStatus = currStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+
+    const updated = await this.prisma.manufacturerRegistration.update({
+      where: { id: mfg.id },
+      data: {
+        lifecycleStatus: nextStatus,
+        status: nextStatus === 'ACTIVE' ? 'APPROVED' : 'REJECTED',
+        updatedAt: new Date(),
+      },
+    });
+
+    return this.mapAdminManufacturer(updated);
+  }
+
+  async deleteAdminManufacturer(id: string) {
+    const mfg = await this.findManufacturerByIdOrCode(id);
+    if (!mfg) {
+      throw new NotFoundException(`Manufacturer "${id}" not found.`);
+    }
+
+    const mappingCount = await this.prisma.manufacturerProduct.count({
+      where: { registrationId: mfg.id },
+    });
+    if (mappingCount > 0) {
+      throw new BadRequestException(`Cannot delete manufacturer "${mfg.companyName}": it has ${mappingCount} active product mappings. Deactivate or reassign mappings first.`);
+    }
+
+    await this.prisma.manufacturerRegistration.delete({ where: { id: mfg.id } });
+    return { success: true, message: `Manufacturer "${mfg.companyName}" deleted successfully.` };
+  }
+
+  private async findManufacturerByIdOrCode(id: string) {
+    try {
+      const numId = BigInt(id);
+      const byId = await this.prisma.manufacturerRegistration.findUnique({ where: { id: numId } });
+      if (byId) return byId;
+    } catch {}
+
+    return this.prisma.manufacturerRegistration.findFirst({
+      where: {
+        OR: [
+          { registrationCode: id },
+          { manufacturerCode: id },
+        ],
+      },
+    });
+  }
+
+  private mapAdminManufacturer(m: any) {
+    const strId = String(m.id);
+    const code = m.manufacturerCode || m.registrationCode;
+    const isAct = (m.lifecycleStatus || (m.status === 'APPROVED' ? 'ACTIVE' : 'INACTIVE')) === 'ACTIVE';
+
+    return {
+      manufacturer_id: strId,
+      manufacturer_code: code,
+      manufacturer_name: m.companyName,
+      description: m.description || 'Certified pharmaceutical manufacturing facility and contract manufacturing organization.',
+      lifecycle_status: isAct ? 'ACTIVE' : 'INACTIVE',
+      effective_from: m.effectiveFrom ? m.effectiveFrom.toISOString().split('T')[0] : (m.createdAt ? m.createdAt.toISOString().split('T')[0] : '2025-01-01'),
+      discontinued_on: m.discontinuedOn ? m.discontinuedOn.toISOString().split('T')[0] : null,
+      created_at: m.createdAt ? m.createdAt.toISOString().split('T')[0] : '2025-01-01',
+      updated_at: m.updatedAt ? m.updatedAt.toISOString().split('T')[0] : '2026-08-01',
+
+      // Backward compatibility aliases for UI and marketplace
+      id: strId,
+      code,
+      companyName: m.companyName,
+      name: m.companyName,
+      facilityAddress: m.facilityAddress || '',
+      city: m.city || 'Plant Location',
+      state: m.state || 'State',
+      pincode: m.pincode || '',
+      contactPerson: m.contactPerson || 'Authorized Plant Head',
+      designation: m.designation || 'Plant Manager',
+      email: m.email || '',
+      phone: m.phone || '',
+      mfgCapacity: m.mfgCapacity || 'High Volume cGMP Facility',
+      mfgLicenseNo: 'ML-FORM-25',
+      gstin: '02AAAAA0000A1Z5',
+      pan: 'AAAAA0000A',
+      status: isAct ? 'ACTIVE' : 'INACTIVE',
+      complianceStatus: m.status === 'APPROVED' ? 'APPROVED' : 'PENDING',
+      rating: 4.5,
+      activeSubOrders: 0,
+    };
+  }
+
+  // ===================================================================
+  // PRODUCT MANUFACTURER MAPPINGS (PRODUCT_MANUFACTURER) - ADMIN
+  // ===================================================================
+
+  async listAdminProductManufacturerMappings(query: ProductManufacturerMappingQueryDto) {
+    const where: any = {};
+
+    if (query.productId) {
+      where.productId = query.productId;
+    }
+    if (query.manufacturerId) {
+      try {
+        where.registrationId = BigInt(query.manufacturerId);
+      } catch {}
+    }
+    if (query.status && query.status.toUpperCase() !== 'ALL') {
+      where.lifecycleStatus = query.status.toUpperCase();
+    }
+    if (query.preferredOnly) {
+      where.isPreferred = true;
+    }
+
+    const mappings = await this.prisma.manufacturerProduct.findMany({
+      where,
+      include: {
+        registration: true,
+        product: true,
+      },
+      orderBy: [{ isPreferred: 'desc' }, { id: 'desc' }],
+      take: query.size || 100,
+      skip: (query.page || 0) * (query.size || 100),
+    });
+
+    let mapped = mappings.map((mp) => this.mapProductManufacturerItem(mp));
+
+    if (query.q && query.q.trim()) {
+      const q = query.q.trim().toLowerCase();
+      mapped = mapped.filter((item) =>
+        item.productName.toLowerCase().includes(q) ||
+        item.manufacturerName.toLowerCase().includes(q) ||
+        item.manufacturer_product_code.toLowerCase().includes(q) ||
+        item.productId.toLowerCase().includes(q)
+      );
+    }
+
+    return mapped;
+  }
+
+  async getAdminProductManufacturerMappingById(id: string) {
+    const numId = BigInt(id);
+    const mp = await this.prisma.manufacturerProduct.findUnique({
+      where: { id: numId },
+      include: { registration: true, product: true },
+    });
+    if (!mp) {
+      throw new NotFoundException(`Product-Manufacturer Mapping with ID "${id}" not found.`);
+    }
+    return this.mapProductManufacturerItem(mp);
+  }
+
+  async createAdminProductManufacturerMapping(dto: CreateProductManufacturerMappingDto) {
+    const product = await this.prisma.catalogProduct.findFirst({
+      where: { OR: [{ id: dto.productId }, { productCode: dto.productId }] },
+    });
+    if (!product) {
+      throw new NotFoundException(`Product "${dto.productId}" not found.`);
+    }
+
+    const mfg = await this.findManufacturerByIdOrCode(dto.manufacturerId);
+    if (!mfg) {
+      throw new NotFoundException(`Manufacturer "${dto.manufacturerId}" not found.`);
+    }
+
+    if (dto.isPreferred) {
+      await this.prisma.manufacturerProduct.updateMany({
+        where: { productId: product.id },
+        data: { isPreferred: false },
+      });
+    }
+
+    const created = await this.prisma.manufacturerProduct.upsert({
+      where: {
+        registrationId_productId: {
+          registrationId: mfg.id,
+          productId: product.id,
+        },
+      },
+      update: {
+        manufacturerProductCode: dto.manufacturerProductCode || undefined,
+        manufacturerPartNumber: dto.manufacturerPartNumber || undefined,
+        manufacturerSku: dto.manufacturerSku || undefined,
+        moq: dto.moq !== undefined ? dto.moq : undefined,
+        leadTimeDays: dto.leadTimeDays !== undefined ? dto.leadTimeDays : undefined,
+        lifecycleStatus: dto.lifecycleStatus ? dto.lifecycleStatus.toUpperCase() : 'ACTIVE',
+        isPreferred: dto.isPreferred !== undefined ? dto.isPreferred : undefined,
+        packagingDetails: dto.packagingDetails || undefined,
+        effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : undefined,
+        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : undefined,
+        updatedAt: new Date(),
+      },
+      create: {
+        registrationId: mfg.id,
+        productId: product.id,
+        manufacturerProductCode: dto.manufacturerProductCode || null,
+        manufacturerPartNumber: dto.manufacturerPartNumber || null,
+        manufacturerSku: dto.manufacturerSku || null,
+        moq: dto.moq || 100,
+        leadTimeDays: dto.leadTimeDays || 14,
+        lifecycleStatus: dto.lifecycleStatus ? dto.lifecycleStatus.toUpperCase() : 'ACTIVE',
+        isPreferred: dto.isPreferred || false,
+        packagingDetails: dto.packagingDetails || 'Standard Export Shipper',
+        effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : new Date(),
+        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
+      },
+      include: {
+        registration: true,
+        product: true,
+      },
+    });
+
+    return this.mapProductManufacturerItem(created);
+  }
+
+  async updateAdminProductManufacturerMapping(id: string, dto: UpdateProductManufacturerMappingDto) {
+    const numId = BigInt(id);
+    const existing = await this.prisma.manufacturerProduct.findUnique({
+      where: { id: numId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Product-Manufacturer Mapping with ID "${id}" not found.`);
+    }
+
+    if (dto.isPreferred) {
+      await this.prisma.manufacturerProduct.updateMany({
+        where: { productId: existing.productId, id: { not: numId } },
+        data: { isPreferred: false },
+      });
+    }
+
+    const updated = await this.prisma.manufacturerProduct.update({
+      where: { id: numId },
+      data: {
+        manufacturerProductCode: dto.manufacturerProductCode !== undefined ? dto.manufacturerProductCode : undefined,
+        manufacturerPartNumber: dto.manufacturerPartNumber !== undefined ? dto.manufacturerPartNumber : undefined,
+        manufacturerSku: dto.manufacturerSku !== undefined ? dto.manufacturerSku : undefined,
+        moq: dto.moq !== undefined ? dto.moq : undefined,
+        leadTimeDays: dto.leadTimeDays !== undefined ? dto.leadTimeDays : undefined,
+        lifecycleStatus: dto.lifecycleStatus ? dto.lifecycleStatus.toUpperCase() : undefined,
+        isPreferred: dto.isPreferred !== undefined ? dto.isPreferred : undefined,
+        packagingDetails: dto.packagingDetails !== undefined ? dto.packagingDetails : undefined,
+        effectiveFrom: dto.effectiveFrom !== undefined ? (dto.effectiveFrom ? new Date(dto.effectiveFrom) : null) : undefined,
+        effectiveTo: dto.effectiveTo !== undefined ? (dto.effectiveTo ? new Date(dto.effectiveTo) : null) : undefined,
+        updatedAt: new Date(),
+      },
+      include: {
+        registration: true,
+        product: true,
+      },
+    });
+
+    return this.mapProductManufacturerItem(updated);
+  }
+
+  async setPreferredManufacturerMapping(id: string) {
+    const numId = BigInt(id);
+    const mapping = await this.prisma.manufacturerProduct.findUnique({
+      where: { id: numId },
+    });
+    if (!mapping) {
+      throw new NotFoundException(`Product-Manufacturer Mapping with ID "${id}" not found.`);
+    }
+
+    // Unset all other preferred mappings for this product
+    await this.prisma.manufacturerProduct.updateMany({
+      where: { productId: mapping.productId },
+      data: { isPreferred: false },
+    });
+
+    const updated = await this.prisma.manufacturerProduct.update({
+      where: { id: numId },
+      data: { isPreferred: true, updatedAt: new Date() },
+      include: { registration: true, product: true },
+    });
+
+    return this.mapProductManufacturerItem(updated);
+  }
+
+  async toggleAdminProductManufacturerMappingStatus(id: string) {
+    const numId = BigInt(id);
+    const mapping = await this.prisma.manufacturerProduct.findUnique({
+      where: { id: numId },
+    });
+    if (!mapping) {
+      throw new NotFoundException(`Product-Manufacturer Mapping with ID "${id}" not found.`);
+    }
+
+    const nextStatus = mapping.lifecycleStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    const updated = await this.prisma.manufacturerProduct.update({
+      where: { id: numId },
+      data: { lifecycleStatus: nextStatus, updatedAt: new Date() },
+      include: { registration: true, product: true },
+    });
+
+    return this.mapProductManufacturerItem(updated);
+  }
+
+  async deleteAdminProductManufacturerMapping(id: string) {
+    const numId = BigInt(id);
+    await this.prisma.manufacturerProduct.delete({ where: { id: numId } });
+    return { success: true, message: 'Mapping deleted successfully.' };
+  }
+
+  private mapProductManufacturerItem(mp: any) {
+    const strId = String(mp.id);
+    const regId = String(mp.registrationId);
+    const mfgCode = mp.registration?.manufacturerCode || mp.registration?.registrationCode || '';
+    const mfgName = mp.registration?.companyName || 'Verified Manufacturer';
+    const prdName = mp.product?.name || mp.productId;
+
+    return {
+      product_manufacturer_id: strId,
+      id: strId,
+      product_id: mp.productId,
+      productId: mp.productId,
+      productName: prdName,
+      manufacturer_id: regId,
+      manufacturerId: regId,
+      manufacturer_code: mfgCode,
+      manufacturerCode: mfgCode,
+      manufacturer_name: mfgName,
+      manufacturerName: mfgName,
+      manufacturer_product_code: mp.manufacturerProductCode || '',
+      mfgProductCode: mp.manufacturerProductCode || '',
+      manufacturer_part_number: mp.manufacturerPartNumber || '',
+      manufacturer_sku: mp.manufacturerSku || '',
+      moq: mp.moq ?? 100,
+      standardLeadTimeDays: mp.leadTimeDays ?? 14,
+      lifecycle_status: mp.lifecycleStatus || 'ACTIVE',
+      status: mp.lifecycleStatus === 'INACTIVE' ? 'Inactive' : 'Active',
+      effective_from: mp.effectiveFrom ? mp.effectiveFrom.toISOString().split('T')[0] : (mp.createdAt ? mp.createdAt.toISOString().split('T')[0] : '2025-01-01'),
+      effectiveFrom: mp.effectiveFrom ? mp.effectiveFrom.toISOString().split('T')[0] : (mp.createdAt ? mp.createdAt.toISOString().split('T')[0] : '2025-01-01'),
+      effective_to: mp.effectiveTo ? mp.effectiveTo.toISOString().split('T')[0] : null,
+      effectiveTo: mp.effectiveTo ? mp.effectiveTo.toISOString().split('T')[0] : null,
+      is_preferred: mp.isPreferred || false,
+      isPreferred: mp.isPreferred || false,
+      packaging: mp.packagingDetails || 'Standard Export Shipper',
+      created_at: mp.createdAt ? mp.createdAt.toISOString() : new Date().toISOString(),
+      updated_at: mp.updatedAt ? mp.updatedAt.toISOString() : new Date().toISOString(),
+    };
+  }
+
 }

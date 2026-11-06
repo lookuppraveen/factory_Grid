@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
-  Tag, Search, Plus, Filter, Edit2, Trash2, X, AlertTriangle,
-  Package, Factory, Users, DollarSign, Calendar, Eye, Power,
-  Clock, Hash, ArrowRight, Layers, CheckCircle2, ChevronRight
+  Tag, Search, Plus, Edit3, Trash2, X, AlertTriangle,
+  Package, Users, Calendar, Eye, Power, MoreVertical,
+  CheckCircle2, DollarSign, Building2, RefreshCw, Layers
 } from 'lucide-react';
 import { ProductPrice } from '../../types';
 import { PaginationControl } from '../common/PaginationControl';
@@ -19,13 +19,16 @@ export const ProductPriceModule: React.FC = () => {
     addProductPrice,
     updateProductPrice,
     removeProductPrice,
-    addAuditLog,
-    currentRole,
-    productTypes,
-    unifiedCategories
+    toggleProductPriceStatus,
+    refreshProductPrices,
+    currentRole
   } = useApp();
 
-  const canEdit = currentRole === 'ADMIN' || true; // ensure administrative pricing actions
+  // Role permissions
+  const isAdmin = currentRole === 'ADMIN' || (currentRole as any) === 'ROLE_ADMIN';
+  const isManufacturer = currentRole === 'MANUFACTURER';
+  const isBuyer = currentRole === 'BUYER';
+  const canEdit = isAdmin || isManufacturer;
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,216 +36,102 @@ export const ProductPriceModule: React.FC = () => {
   const [selectedSegmentId, setSelectedSegmentId] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
 
+  // Single active row dropdown state for standardized Actions menu
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+
+  // Outside click listener for action menu
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-actions-menu]')) {
+        setOpenActionMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenActionMenuId(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
-  const [editingCreatedAt, setEditingCreatedAt] = useState<string | null>(null);
+  const [editingPrice, setEditingPrice] = useState<ProductPrice | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // View Details Modal State
   const [selectedPriceForDetail, setSelectedPriceForDetail] = useState<ProductPrice | null>(null);
 
-  // Hierarchy Selection Context for Modal (Selection context only - NOT stored in PRODUCT_PRICE)
-  const [modalProductTypeId, setModalProductTypeId] = useState<string>('');
-  const [modalCategory, setModalCategory] = useState<string>('');
-  const [modalSubCategory, setModalSubCategory] = useState<string>('');
-  const [modalSubSubCategory, setModalSubSubCategory] = useState<string>('');
+  // Delete Confirmation State
+  const [deleteTarget, setDeleteTarget] = useState<ProductPrice | null>(null);
+
+  // Toast Notification State
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const [formData, setFormData] = useState({
     product_id: '',
-    product_manufacturer_id: '' as string | null,
+    product_manufacturer_id: '' as string,
     customer_segment_id: '',
-    price_type: 'FIXED' as 'FIXED' | 'TIERED' | 'CONTRACT' | 'LIST',
+    price_type: 'TIERED' as 'FIXED' | 'TIERED' | 'CONTRACT' | 'LIST' | 'BASE',
     currency: 'INR',
     unit_price: 10,
-    minimum_quantity: 100,
+    minimum_quantity: 1,
     maximum_quantity: '' as number | string,
     effective_from: new Date().toISOString().split('T')[0],
     effective_to: '',
     price_status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'DRAFT'
   });
 
-  // Available Categories in Modal (Filtered by selected Product Type)
-  const modalCategories = useMemo(() => {
-    if (!modalProductTypeId) return [];
-    const catSet = new Set<string>();
-    (unifiedCategories || []).forEach(c => {
-      if (
-        c.product_type_id === modalProductTypeId &&
-        (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active') &&
-        c.category
-      ) {
-        catSet.add(c.category);
-      }
-    });
-    return Array.from(catSet).sort();
-  }, [unifiedCategories, modalProductTypeId]);
-
-  // Available Sub-Categories in Modal (Filtered by selected Product Type & Category)
-  const modalSubCategories = useMemo(() => {
-    if (!modalProductTypeId || !modalCategory) return [];
-    const subSet = new Set<string>();
-    (unifiedCategories || []).forEach(c => {
-      if (
-        c.product_type_id === modalProductTypeId &&
-        c.category === modalCategory &&
-        (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active') &&
-        c.sub_category
-      ) {
-        subSet.add(c.sub_category);
-      }
-    });
-    return Array.from(subSet).sort();
-  }, [unifiedCategories, modalProductTypeId, modalCategory]);
-
-  // Available Sub-Sub-Categories in Modal (Filtered by Product Type, Category, and Sub-Category)
-  const modalSubSubCategories = useMemo(() => {
-    if (!modalProductTypeId || !modalCategory || !modalSubCategory) return [];
-    const subSubSet = new Set<string>();
-    (unifiedCategories || []).forEach(c => {
-      if (
-        c.product_type_id === modalProductTypeId &&
-        c.category === modalCategory &&
-        c.sub_category === modalSubCategory &&
-        (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active') &&
-        c.sub_sub_category
-      ) {
-        subSubSet.add(c.sub_sub_category);
-      }
-    });
-    return Array.from(subSubSet).sort();
-  }, [unifiedCategories, modalProductTypeId, modalCategory, modalSubCategory]);
-
-  // Available Products in Modal (Filtered by selected Product Type, Category, Sub-Category, and Sub-Sub-Category)
-  const modalAvailableProducts = useMemo(() => {
-    if (!modalProductTypeId || !modalCategory) return [];
-    if (modalSubCategories.length > 0 && !modalSubCategory) return [];
-    if (modalSubSubCategories.length > 0 && !modalSubSubCategory) return [];
-
-    return (products || []).filter(p => {
-      const catRecord = (unifiedCategories || []).find(c =>
-        c.category_id === (p.category_id || p.categoryId) ||
-        c.id === (p.category_id || p.categoryId)
-      );
-
-      // Verify Product Type
-      const prdPtId = p.product_type_id || p.productTypeId || catRecord?.product_type_id;
-      if (prdPtId && prdPtId !== modalProductTypeId) return false;
-
-      // Verify Category
-      const prdCat = catRecord?.category || p.category;
-      if (prdCat && prdCat !== modalCategory) return false;
-
-      // Verify Sub-Category
-      if (modalSubCategory) {
-        const prdSub = catRecord?.sub_category || p.subCategory || (p as any).sub_category;
-        if (prdSub && prdSub !== modalSubCategory) return false;
-      }
-
-      // Verify Sub-Sub-Category
-      if (modalSubSubCategory) {
-        const prdSubSub = catRecord?.sub_sub_category || p.subSubCategory || (p as any).sub_sub_category;
-        if (prdSubSub && prdSubSub !== modalSubSubCategory) return false;
-      }
-
-      return true;
-    });
-  }, [products, unifiedCategories, modalProductTypeId, modalCategory, modalSubCategory, modalSubSubCategory, modalSubCategories.length, modalSubSubCategories.length]);
-
-  // Mapped manufacturers for the selected product in modal
-  const modalAvailableMappings = useMemo(() => {
-    if (!formData.product_id) return [];
-    return (mappings || []).filter(m => m.productId === formData.product_id || m.product_id === formData.product_id);
-  }, [mappings, formData.product_id]);
-
   // Resolvers
   const getProductRecord = (pid: string) => {
-    return (products || []).find(p => p.id === pid || p.product_id === pid || p.code === pid);
+    return (products || []).find(p => p.id === pid || p.product_id === pid || p.code === pid || (p as any).productCode === pid);
   };
 
-  const getProductDetails = (productId: string) => {
-    const prd = getProductRecord(productId);
-    const catRecord = (unifiedCategories || []).find(c =>
-      c.category_id === (prd?.category_id || prd?.categoryId) ||
-      c.id === (prd?.category_id || prd?.categoryId)
-    );
-
-    const ptId = prd?.product_type_id || prd?.productTypeId || catRecord?.product_type_id;
-    const pt = (productTypes || []).find(t => t.product_type_id === ptId || t.id === ptId);
-    const ptName = pt?.product_type_name || pt?.name || ptId || '—';
-
-    const catName = catRecord?.category || prd?.category || '—';
-    const subCatName = catRecord?.sub_category || prd?.subCategory || (prd as any)?.sub_category || '—';
-    const subSubCatName = catRecord?.sub_sub_category || prd?.subSubCategory || (prd as any)?.sub_sub_category || '—';
-
-    return {
-      prd,
-      productName: prd?.product_name || prd?.name || productId,
-      productCode: prd?.product_code || prd?.code || productId,
-      productId: prd?.product_id || prd?.id || productId,
-      productTypeName: ptName,
-      categoryName: catName,
-      subCategoryName: subCatName,
-      subSubCategoryName: subSubCatName
-    };
+  const getSegmentRecord = (segId?: string | null) => {
+    if (!segId) return null;
+    return (customerSegments || []).find(s => s.customer_segment_id === segId || s.id === segId || s.segment_code === segId);
   };
 
-  const getManufacturerMappingDetails = (pmId?: string | null) => {
-    if (!pmId) return null;
-    const map = (mappings || []).find(m =>
-      m.product_manufacturer_id === pmId ||
-      m.id === pmId ||
-      m.manufacturer_id === pmId ||
-      m.manufacturerId === pmId
-    );
-    const mfg = (manufacturers || []).find(m =>
-      m.manufacturer_id === (map?.manufacturer_id || map?.manufacturerId || pmId) ||
-      m.id === (map?.manufacturer_id || map?.manufacturerId || pmId)
-    );
-    return {
-      map,
-      manufacturerName: mfg?.manufacturer_name || mfg?.companyName || mfg?.name || map?.manufacturer_name || map?.manufacturerName || pmId,
-      manufacturerCode: mfg?.manufacturer_code || (mfg as any)?.code || map?.manufacturer_code || map?.manufacturerCode || '',
-      mfgProductCode: map?.manufacturer_product_code || map?.mfgProductCode || '',
-      pmId
-    };
+  const getManufacturerMappingName = (pmId?: string | number | null) => {
+    if (!pmId) return 'All Manufacturers (Global)';
+    const strId = String(pmId);
+    const map = (mappings || []).find(m => String(m.id) === strId || String(m.product_manufacturer_id) === strId);
+    if (map) {
+      const mfg = (manufacturers || []).find(m => m.id === map.manufacturer_id || m.id === (map as any).registrationId);
+      return mfg?.companyName || mfg?.name || map.manufacturer_name || `Mapping #${strId}`;
+    }
+    return `Mapping #${strId}`;
   };
 
-  const getSegmentDetails = (segmentId: string) => {
-    const seg = (customerSegments || []).find(s =>
-      s.customer_segment_id === segmentId || s.id === segmentId
-    );
-    return {
-      seg,
-      segmentName: seg?.segment_name || seg?.name || segmentId,
-      segmentCode: seg?.segment_code || seg?.code || ''
-    };
-  };
-
-  // Status Badge Helper
-  const getStatusBadge = (status?: string) => {
-    const st = (status || 'ACTIVE').toUpperCase();
-    switch (st) {
-      case 'ACTIVE':
-        return { label: 'ACTIVE', bg: '#DCFCE7', color: '#15803D', border: '#86EFAC' };
-      case 'INACTIVE':
-        return { label: 'INACTIVE', bg: '#FEE2E2', color: '#B91C1C', border: '#FCA5A5' };
-      case 'EXPIRED':
-        return { label: 'EXPIRED', bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' };
-      case 'DRAFT':
-        return { label: 'DRAFT', bg: '#F1F5F9', color: '#475569', border: '#CBD5E1' };
-      default:
-        return { label: st, bg: '#F1F5F9', color: '#64748B', border: '#CBD5E1' };
+  const formatMasterDate = (dateStr?: string | null): string => {
+    if (!dateStr) return '—';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
     }
   };
 
-  // KPI Stats
+  // KPI Statistics
   const stats = useMemo(() => {
     const total = (productPrices || []).length;
-    const active = (productPrices || []).filter(p => (p.price_status || (p as any).status || 'ACTIVE') === 'ACTIVE').length;
+    const active = (productPrices || []).filter(p => (p.price_status || (p as any).status || 'ACTIVE').toUpperCase() === 'ACTIVE').length;
+    const inactive = total - active;
     const uniqueProducts = new Set((productPrices || []).map(p => p.product_id || (p as any).productId)).size;
-    const uniqueSegments = new Set((productPrices || []).map(p => p.customer_segment_id || (p as any).customerSegmentId)).size;
-    return { total, active, uniqueProducts, uniqueSegments };
+    const uniqueSegments = new Set((productPrices || []).filter(p => p.customer_segment_id || (p as any).customerSegmentId).map(p => p.customer_segment_id || (p as any).customerSegmentId)).size;
+    return { total, active, inactive, uniqueProducts, uniqueSegments };
   }, [productPrices]);
 
   // Filtered List
@@ -251,12 +140,13 @@ export const ProductPriceModule: React.FC = () => {
       const q = searchTerm.toLowerCase().trim();
       const prd = getProductRecord(prc.product_id || (prc as any).productId || '');
       const prdName = (prd?.product_name || prd?.name || '').toLowerCase();
-      const prdCode = (prd?.product_code || prd?.code || '').toLowerCase();
+      const prdCode = (prd?.product_code || prd?.code || (prd as any)?.productCode || '').toLowerCase();
       const prdId = (prd?.product_id || prd?.id || prc.product_id || '').toLowerCase();
-      const segInfo = getSegmentDetails(prc.customer_segment_id || (prc as any).customerSegmentId || '');
-      const segName = segInfo.segmentName.toLowerCase();
-      const segCode = segInfo.segmentCode.toLowerCase();
-      const priceId = (prc.product_price_id || (prc as any).id || '').toLowerCase();
+      const seg = getSegmentRecord(prc.customer_segment_id || (prc as any).customerSegmentId);
+      const segName = (seg?.segment_name || seg?.name || '').toLowerCase();
+      const segCode = (seg?.segment_code || seg?.code || '').toLowerCase();
+      const priceId = String(prc.product_price_id || (prc as any).id || '').toLowerCase();
+      const priceType = String(prc.price_type || (prc as any).priceType || '').toLowerCase();
 
       const matchesSearch =
         q === '' ||
@@ -265,19 +155,29 @@ export const ProductPriceModule: React.FC = () => {
         prdCode.includes(q) ||
         prdId.includes(q) ||
         segName.includes(q) ||
-        segCode.includes(q);
+        segCode.includes(q) ||
+        priceType.includes(q);
 
-      const matchesPrd = selectedProductId === 'ALL' || (prc.product_id || (prc as any).productId) === selectedProductId;
-      const matchesSeg = selectedSegmentId === 'ALL' || (prc.customer_segment_id || (prc as any).customerSegmentId) === selectedSegmentId;
-      const statusVal = prc.price_status || (prc as any).status || 'ACTIVE';
+      const prdKey = prc.product_id || (prc as any).productId;
+      const matchesPrd = selectedProductId === 'ALL' || prdKey === selectedProductId;
+      const segKey = prc.customer_segment_id || (prc as any).customerSegmentId;
+      const matchesSeg = selectedSegmentId === 'ALL' || segKey === selectedSegmentId;
+      const statusVal = (prc.price_status || (prc as any).status || 'ACTIVE').toUpperCase();
+      const matchesStatus = selectedStatus === 'ALL' || statusVal === selectedStatus;
+
+      // Buyer isolation: buyers see only active prices
+      if (isBuyer && statusVal !== 'ACTIVE') {
+        return false;
+      }
+
       return matchesSearch && matchesPrd && matchesSeg && matchesStatus;
     }).sort((a, b) => {
       const dateA = new Date(a.created_at || (a as any).createdAt || 0).getTime();
       const dateB = new Date(b.created_at || (b as any).createdAt || 0).getTime();
       if (dateB !== dateA) return dateB - dateA;
-      return (b.product_price_id || (b as any).id || '').localeCompare(a.product_price_id || (a as any).id || '');
+      return String(b.product_price_id || (b as any).id || '').localeCompare(String(a.product_price_id || (a as any).id || ''));
     });
-  }, [productPrices, products, customerSegments, searchTerm, selectedProductId, selectedSegmentId, selectedStatus]);
+  }, [productPrices, products, customerSegments, searchTerm, selectedProductId, selectedSegmentId, selectedStatus, isBuyer]);
 
   const {
     paginatedItems: paginatedPrices,
@@ -288,1495 +188,830 @@ export const ProductPriceModule: React.FC = () => {
     resetDeps: [searchTerm, selectedProductId, selectedSegmentId, selectedStatus]
   });
 
-  // Handlers
-  const handleOpenAddModal = (defaultProductId?: string) => {
-    setEditingPriceId(null);
-    setEditingCreatedAt(null);
-    const firstSeg = customerSegments[0]?.customer_segment_id || customerSegments[0]?.id || '';
+  // Modal Handlers
+  const handleOpenAddModal = () => {
+    setEditingPrice(null);
+    const firstPrd = products && products.length > 0 ? (products[0].id || products[0].product_id) : '';
+    const firstSeg = customerSegments && customerSegments.length > 0 ? (customerSegments[0].customer_segment_id || customerSegments[0].id) : '';
 
-    if (defaultProductId) {
-      const prd = getProductRecord(defaultProductId);
-      const catRecord = (unifiedCategories || []).find(c =>
-        c.category_id === (prd?.category_id || prd?.categoryId) ||
-        c.id === (prd?.category_id || prd?.categoryId)
-      );
-      setModalProductTypeId(prd?.product_type_id || prd?.productTypeId || catRecord?.product_type_id || '');
-      setModalCategory(catRecord?.category || prd?.category || '');
-      setModalSubCategory(catRecord?.sub_category || prd?.subCategory || (prd as any)?.sub_category || '');
-      setModalSubSubCategory(catRecord?.sub_sub_category || prd?.subSubCategory || (prd as any)?.sub_sub_category || '');
-      setFormData({
-        product_id: defaultProductId,
-        product_manufacturer_id: null,
-        customer_segment_id: firstSeg,
-        price_type: 'FIXED',
-        currency: 'INR',
-        unit_price: 15.00,
-        minimum_quantity: 100,
-        maximum_quantity: '',
-        effective_from: new Date().toISOString().split('T')[0],
-        effective_to: '',
-        price_status: 'ACTIVE'
-      });
-    } else {
-      setModalProductTypeId('');
-      setModalCategory('');
-      setModalSubCategory('');
-      setModalSubSubCategory('');
-      setFormData({
-        product_id: '',
-        product_manufacturer_id: null,
-        customer_segment_id: firstSeg,
-        price_type: 'FIXED',
-        currency: 'INR',
-        unit_price: 15.00,
-        minimum_quantity: 100,
-        maximum_quantity: '',
-        effective_from: new Date().toISOString().split('T')[0],
-        effective_to: '',
-        price_status: 'ACTIVE'
-      });
-    }
+    setFormData({
+      product_id: firstPrd || '',
+      product_manufacturer_id: '',
+      customer_segment_id: firstSeg || '',
+      price_type: 'TIERED',
+      currency: 'INR',
+      unit_price: 10,
+      minimum_quantity: 1,
+      maximum_quantity: '',
+      effective_from: new Date().toISOString().split('T')[0],
+      effective_to: '',
+      price_status: 'ACTIVE'
+    });
     setFormError(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (prc: ProductPrice) => {
-    const priceId = prc.product_price_id || prc.id || '';
-    setEditingPriceId(priceId);
-    setEditingCreatedAt(prc.created_at || '2025-01-01');
-
-    const pId = prc.product_id || (prc as any).productId || '';
-    const prd = getProductRecord(pId);
-    const catRecord = (unifiedCategories || []).find(c =>
-      c.category_id === (prd?.category_id || prd?.categoryId) ||
-      c.id === (prd?.category_id || prd?.categoryId)
-    );
-
-    const ptId = prd?.product_type_id || prd?.productTypeId || catRecord?.product_type_id || (productTypes[0]?.product_type_id || '');
-    const catName = catRecord?.category || prd?.category || '';
-    const subCatName = catRecord?.sub_category || prd?.subCategory || (prd as any)?.sub_category || '';
-    const subSubCatName = catRecord?.sub_sub_category || prd?.subSubCategory || (prd as any)?.sub_sub_category || '';
-
-    setModalProductTypeId(ptId);
-    setModalCategory(catName);
-    setModalSubCategory(subCatName);
-    setModalSubSubCategory(subSubCatName);
-
+    setEditingPrice(prc);
     setFormData({
-      product_id: pId,
-      product_manufacturer_id: prc.product_manufacturer_id || (prc as any).productManufacturerId || null,
+      product_id: prc.product_id || (prc as any).productId || '',
+      product_manufacturer_id: prc.product_manufacturer_id ? String(prc.product_manufacturer_id) : ((prc as any).productManufacturerId ? String((prc as any).productManufacturerId) : ''),
       customer_segment_id: prc.customer_segment_id || (prc as any).customerSegmentId || '',
-      price_type: prc.price_type || 'FIXED',
+      price_type: (prc.price_type || (prc as any).priceType || 'TIERED') as any,
       currency: prc.currency || 'INR',
-      unit_price: prc.unit_price ?? (prc as any).unitPrice ?? 0,
-      minimum_quantity: prc.minimum_quantity ?? (prc as any).minQuantity ?? 1,
+      unit_price: Number(prc.unit_price ?? (prc as any).unitPrice ?? 10),
+      minimum_quantity: Number(prc.minimum_quantity ?? (prc as any).minQuantity ?? 1),
       maximum_quantity: prc.maximum_quantity ?? (prc as any).maxQuantity ?? '',
-      effective_from: prc.effective_from || (prc as any).effectiveFrom || '2025-01-01',
-      effective_to: prc.effective_to || (prc as any).effectiveTo || '',
-      price_status: (prc.price_status || (prc as any).status || 'ACTIVE') as any
+      effective_from: prc.effective_from ? prc.effective_from.split('T')[0] : ((prc as any).effectiveFrom ? (prc as any).effectiveFrom.split('T')[0] : ''),
+      effective_to: prc.effective_to ? prc.effective_to.split('T')[0] : ((prc as any).effectiveTo ? (prc as any).effectiveTo.split('T')[0] : ''),
+      price_status: ((prc.price_status || (prc as any).status || 'ACTIVE').toUpperCase()) as any
     });
     setFormError(null);
     setIsModalOpen(true);
   };
 
-  const handleOpenViewModal = (prc: ProductPrice) => {
-    setSelectedPriceForDetail(prc);
-  };
-
-  const handleToggleStatus = (prc: ProductPrice) => {
-    const priceId = prc.product_price_id || prc.id || '';
-    const current = (prc.price_status || (prc as any).status || 'ACTIVE').toUpperCase();
-    const nextStatus = current === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    const nowIso = new Date().toISOString().split('T')[0];
-
-    updateProductPrice(priceId, {
-      price_status: nextStatus as any,
-      status: nextStatus,
-      updated_at: nowIso
-    });
-
-    addAuditLog('TOGGLE_PRODUCT_PRICE_STATUS', `Toggled price status for record ${priceId} to ${nextStatus}`);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSavePrice = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
 
-    if (!modalProductTypeId) {
-      setFormError('Product Type is mandatory.');
-      return;
-    }
-    if (!modalCategory) {
-      setFormError('Category is mandatory.');
-      return;
-    }
-    if (modalSubCategories.length > 0 && !modalSubCategory) {
-      setFormError('Sub-Category is mandatory for the selected category.');
-      return;
-    }
-    if (modalSubSubCategories.length > 0 && !modalSubSubCategory) {
-      setFormError('Sub-Sub-Category is mandatory for the selected sub-category.');
-      return;
-    }
     if (!formData.product_id) {
-      setFormError('Product is mandatory.');
-      return;
-    }
-    if (!formData.customer_segment_id) {
-      setFormError('Customer Segment is mandatory.');
-      return;
-    }
-    if (!formData.price_type) {
-      setFormError('Price Type is mandatory.');
-      return;
-    }
-    if (!formData.currency) {
-      setFormError('Currency is mandatory.');
-      return;
-    }
-    if (formData.unit_price <= 0) {
-      setFormError('Unit Price must be greater than 0.');
-      return;
-    }
-    if (formData.minimum_quantity < 1) {
-      setFormError('Minimum Quantity must be at least 1.');
-      return;
-    }
-    if (!formData.effective_from) {
-      setFormError('Effective From date is mandatory.');
-      return;
-    }
-    if (formData.effectiveFrom && formData.effective_to && formData.effective_to < formData.effective_from) {
-      setFormError('Effective To date cannot be earlier than Effective From date.');
-      return;
-    }
-    if (!formData.price_status) {
-      setFormError('Price Status is mandatory.');
+      setFormError('Please select a valid product.');
       return;
     }
 
-    // Validate that the product belongs to the selected hierarchy
-    const selectedPrd = getProductRecord(formData.product_id);
-    if (!selectedPrd) {
-      setFormError('Selected Product is invalid.');
+    if (Number(formData.unit_price) <= 0) {
+      setFormError('Unit price must be greater than zero.');
       return;
     }
 
-    // Validate Product Manufacturer if selected
-    if (formData.product_manufacturer_id) {
-      const isValidMfg = modalAvailableMappings.some(m =>
-        m.product_manufacturer_id === formData.product_manufacturer_id ||
-        m.id === formData.product_manufacturer_id ||
-        m.manufacturer_id === formData.product_manufacturer_id ||
-        m.manufacturerId === formData.product_manufacturer_id
-      );
-      if (!isValidMfg) {
-        setFormError('Selected Product Manufacturer is not mapped to this product.');
-        return;
+    if (Number(formData.minimum_quantity) < 1) {
+      setFormError('Minimum quantity must be at least 1.');
+      return;
+    }
+
+    if (formData.maximum_quantity && Number(formData.maximum_quantity) < Number(formData.minimum_quantity)) {
+      setFormError('Maximum quantity cannot be less than minimum quantity.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (editingPrice) {
+        const pId = editingPrice.product_price_id || editingPrice.id!;
+        await updateProductPrice(pId, {
+          product_manufacturer_id: formData.product_manufacturer_id ? formData.product_manufacturer_id : null,
+          customer_segment_id: formData.customer_segment_id || null as any,
+          price_type: formData.price_type,
+          currency: formData.currency,
+          unit_price: Number(formData.unit_price),
+          minimum_quantity: Number(formData.minimum_quantity),
+          maximum_quantity: formData.maximum_quantity ? Number(formData.maximum_quantity) : null,
+          effective_from: formData.effective_from || null,
+          effective_to: formData.effective_to || null,
+          price_status: formData.price_status
+        });
+        showToast(`Successfully updated price rule #${pId}`);
+      } else {
+        const created = await addProductPrice({
+          product_id: formData.product_id,
+          product_price_id: '',
+          customer_segment_id: formData.customer_segment_id,
+          product_manufacturer_id: formData.product_manufacturer_id ? formData.product_manufacturer_id : null,
+          price_type: formData.price_type,
+          currency: formData.currency,
+          unit_price: Number(formData.unit_price),
+          minimum_quantity: Number(formData.minimum_quantity),
+          maximum_quantity: formData.maximum_quantity ? Number(formData.maximum_quantity) : null,
+          effective_from: formData.effective_from || new Date().toISOString().split('T')[0],
+          effective_to: formData.effective_to || null,
+          price_status: formData.price_status,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        } as any);
+        const newId = (created as any)?.product_price_id || (created as any)?.id || 'new';
+        showToast(`Created price rule #${newId} for ₹${Number(formData.unit_price).toFixed(2)}`);
       }
-    }
-
-    const nowIso = new Date().toISOString().split('T')[0];
-    const maxQtyNum = formData.maximum_quantity ? Number(formData.maximum_quantity) : null;
-
-    if (editingPriceId) {
-      updateProductPrice(editingPriceId, {
-        product_id: formData.product_id,
-        product_manufacturer_id: formData.product_manufacturer_id || null,
-        customer_segment_id: formData.customer_segment_id,
-        price_type: formData.price_type,
-        currency: formData.currency,
-        unit_price: Number(formData.unit_price),
-        minimum_quantity: Number(formData.minimum_quantity),
-        maximum_quantity: maxQtyNum,
-        effective_from: formData.effective_from,
-        effective_to: formData.effective_to || null,
-        price_status: formData.price_status,
-        updated_at: nowIso,
-        // compatibility aliases
-        productId: formData.product_id,
-        unitPrice: Number(formData.unit_price),
-        minQuantity: Number(formData.minimum_quantity),
-        maxQuantity: maxQtyNum,
-        status: formData.price_status
-      });
-      addAuditLog('UPDATE_PRODUCT_PRICE', `Updated price record ${editingPriceId} for product ${formData.product_id}`);
-    } else {
-      const newPriceId = `prc_${Date.now()}`;
-      const newPrice: ProductPrice = {
-        product_price_id: newPriceId,
-        product_id: formData.product_id,
-        product_manufacturer_id: formData.product_manufacturer_id || null,
-        customer_segment_id: formData.customer_segment_id,
-        price_type: formData.price_type,
-        currency: formData.currency,
-        unit_price: Number(formData.unit_price),
-        minimum_quantity: Number(formData.minimum_quantity),
-        maximum_quantity: maxQtyNum,
-        effective_from: formData.effective_from,
-        effective_to: formData.effective_to || null,
-        price_status: formData.price_status,
-        created_at: nowIso,
-        updated_at: nowIso,
-        // compatibility aliases
-        id: newPriceId,
-        productId: formData.product_id,
-        unitPrice: Number(formData.unit_price),
-        minQuantity: Number(formData.minimum_quantity),
-        maxQuantity: maxQtyNum,
-        status: formData.price_status
-      };
-      addProductPrice(newPrice);
-      addAuditLog('ADD_PRODUCT_PRICE', `Created new price record ${newPriceId} for product ${formData.product_id}`);
+      setIsModalOpen(false);
       resetPage();
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to save price rule to PostgreSQL database.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (prc: ProductPrice) => {
-    const id = prc.product_price_id || prc.id || '';
-    if (window.confirm('Are you sure you want to remove this product price record?\n\nThis removes the price rule only. The product and customer segment records remain unaffected.')) {
-      removeProductPrice(id);
-      addAuditLog('DELETE_PRODUCT_PRICE', `Removed product price record ${id}`);
+  const handleToggleStatus = async (prc: ProductPrice) => {
+    const id = prc.product_price_id || prc.id!;
+    try {
+      if (toggleProductPriceStatus) {
+        await toggleProductPriceStatus(id);
+      } else {
+        const next = (prc.price_status || (prc as any).status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+        await updateProductPrice(id, { price_status: next as any });
+      }
+      showToast(`Toggled status for price rule #${id}`);
+    } catch (err: any) {
+      showToast(`Error: ${err.message || 'Failed to toggle status'}`);
+    }
+  };
+
+  const handleDeletePrice = async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.product_price_id || deleteTarget.id!;
+    try {
+      await removeProductPrice(id);
+      showToast(`Deleted price rule #${id}`);
+      setDeleteTarget(null);
+    } catch (err: any) {
+      showToast(`Error: ${err.message || 'Failed to delete record'}`);
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 48 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minHeight: '100%' }}>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: 24,
+          right: 24,
+          zIndex: 9999,
+          background: '#0F172A',
+          color: '#FFFFFF',
+          padding: '12px 20px',
+          borderRadius: 8,
+          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontSize: 13,
+          fontWeight: 600
+        }}>
+          <CheckCircle2 size={16} style={{ color: '#10B981' }} />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
-      {/* ── Enterprise Header ────────────────────────────────────── */}
+      {/* ── Page Header ───────────────────────────────────────────── */}
       <div style={{
-        background: '#FFFFFF',
-        border: '1px solid #E2E8F0',
-        borderRadius: 12,
-        padding: 24,
-        boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         flexWrap: 'wrap',
         gap: 16
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            background: 'rgba(15, 118, 110, 0.10)',
-            border: '1px solid rgba(15, 118, 110, 0.25)',
+            width: 44,
+            height: 44,
+            borderRadius: 10,
+            background: '#F0FDFA',
+            border: '1px solid #CCFBF1',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            flexShrink: 0
+            color: '#0F766E'
           }}>
-            <Tag size={26} style={{ color: '#0F766E' }} />
+            <DollarSign size={22} />
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0F766E' }}>
-              PRICING &amp; COMMERCIAL MANAGEMENT · ENTITY: PRODUCT_PRICE
-            </div>
-            <h1 style={{ margin: '2px 0 0 0', fontSize: 24, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
               Product Price Management
             </h1>
-            <p style={{ margin: '3px 0 0 0', fontSize: 13, color: '#475569', fontWeight: 500 }}>
-              Segment-specific, tiered, and manufacturer-linked commercial pricing rules mapped directly to approved client data model.
+            <p style={{ margin: '3px 0 0 0', fontSize: 13, color: '#64748B', fontWeight: 500 }}>
+              Segment-specific, tiered, and manufacturer commercial pricing rules linked to the central product catalog.
             </p>
           </div>
         </div>
 
-        {canEdit && (
-          <button
-            onClick={() => handleOpenAddModal()}
-            style={{
-              padding: '10px 20px',
-              borderRadius: 8,
-              background: '#0F766E',
-              color: '#FFFFFF',
-              border: 'none',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
-            }}
-          >
-            <Plus size={16} /> Add Product Price
-          </button>
-        )}
-      </div>
-
-      {/* ── KPI Stat Summary Cards ───────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Total Price Rules</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#0F172A', marginTop: 4 }}>{stats.total}</div>
-          <div style={{ fontSize: 11.5, color: '#0F766E', marginTop: 2, fontWeight: 600 }}>PRODUCT_PRICE records</div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Active Prices</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#15803D', marginTop: 4 }}>{stats.active}</div>
-          <div style={{ fontSize: 11.5, color: '#475569', marginTop: 2 }}>Commercial rates in effect</div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Products Priced</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#0F766E', marginTop: 4 }}>{stats.uniqueProducts}</div>
-          <div style={{ fontSize: 11.5, color: '#475569', marginTop: 2 }}>Unique central catalog products</div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Segments Covered</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#1D4ED8', marginTop: 4 }}>{stats.uniqueSegments}</div>
-          <div style={{ fontSize: 11.5, color: '#475569', marginTop: 2 }}>Customer segment channels</div>
-        </div>
-      </div>
-
-      {/* ── Search & Multi-Filter Controls Bar ────────────────────── */}
-      <div style={{
-        padding: 18,
-        background: '#FFFFFF',
-        borderRadius: 12,
-        border: '1px solid #E2E8F0',
-        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14
-      }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-          {/* Search Box */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            background: '#F8FAFC',
-            border: '1px solid #CBD5E1',
-            borderRadius: 8,
-            padding: '10px 14px',
-            flex: '1 1 280px'
-          }}>
-            <Search size={16} style={{ color: '#64748B', flexShrink: 0 }} />
-            <input
-              type="text"
-              placeholder="Search by price ID, product name/code/ID, customer segment..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              style={{ border: 'none', padding: 0, background: 'transparent', width: '100%', fontSize: 13.5, color: '#0F172A', outline: 'none' }}
-            />
-            {searchTerm && (
-              <button onClick={() => setSearchTerm('')} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 0 }}>
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          {/* Filter by Product */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#0F766E' }}>Product:</span>
-            <select
-              value={selectedProductId}
-              onChange={e => setSelectedProductId(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                fontSize: 12.5,
-                background: selectedProductId !== 'ALL' ? '#F0FDFA' : '#FFFFFF',
-                border: selectedProductId !== 'ALL' ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
-                borderRadius: 6,
-                color: '#0F172A',
-                fontWeight: 600,
-                cursor: 'pointer',
-                maxWidth: 220
-              }}
-            >
-              <option value="ALL">All Products ({(products || []).length})</option>
-              {(products || []).map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.product_code || p.code} · {p.product_name || p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Filter by Customer Segment */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Segment:</span>
-            <select
-              value={selectedSegmentId}
-              onChange={e => setSelectedSegmentId(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                fontSize: 12.5,
-                background: selectedSegmentId !== 'ALL' ? '#F0FDFA' : '#FFFFFF',
-                border: selectedSegmentId !== 'ALL' ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
-                borderRadius: 6,
-                color: '#0F172A',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              <option value="ALL">All Customer Segments ({(customerSegments || []).length})</option>
-              {(customerSegments || []).map(s => (
-                <option key={s.customer_segment_id || s.id} value={s.customer_segment_id || s.id}>
-                  {s.segment_name || s.name} ({s.segment_code || s.code})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Filter by Status */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Status:</span>
-            <select
-              value={selectedStatus}
-              onChange={e => setSelectedStatus(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                fontSize: 12.5,
-                background: selectedStatus !== 'ALL' ? '#F0FDFA' : '#FFFFFF',
-                border: selectedStatus !== 'ALL' ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
-                borderRadius: 6,
-                color: '#0F172A',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="INACTIVE">INACTIVE</option>
-              <option value="EXPIRED">EXPIRED</option>
-              <option value="DRAFT">DRAFT</option>
-            </select>
-          </div>
-
-          {(searchTerm || selectedProductId !== 'ALL' || selectedSegmentId !== 'ALL' || selectedStatus !== 'ALL') && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {canEdit && (
             <button
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedProductId('ALL');
-                setSelectedSegmentId('ALL');
-                setSelectedStatus('ALL');
-              }}
+              onClick={handleOpenAddModal}
               style={{
-                background: 'none',
+                padding: '9px 16px',
+                borderRadius: 8,
+                background: '#0F766E',
+                color: '#FFFFFF',
                 border: 'none',
-                color: '#DC2626',
-                fontSize: 12,
                 fontWeight: 700,
+                fontSize: 13,
                 cursor: 'pointer',
-                padding: '4px 8px'
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
               }}
             >
-              Reset Filters
+              <Plus size={15} /> Add Price Rule
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Compact Statistics Row ─────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
+            <Tag size={17} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Total Rules</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#0F172A' }}>{stats.total}</div>
+          </div>
+        </div>
+
+        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F0FDF4', border: '1px solid #DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#15803D' }}>
+            <CheckCircle2 size={17} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Active Prices</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#15803D' }}>{stats.active}</div>
+          </div>
+        </div>
+
+        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#FEF2F2', border: '1px solid #FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B91C1C' }}>
+            <AlertTriangle size={17} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Inactive Rules</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#B91C1C' }}>{stats.inactive}</div>
+          </div>
+        </div>
+
+        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F0FDFA', border: '1px solid #CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F766E' }}>
+            <Package size={17} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Products Priced</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#0F766E' }}>{stats.uniqueProducts}</div>
+          </div>
+        </div>
+
+        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1D4ED8' }}>
+            <Users size={17} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Segments</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#1D4ED8' }}>{stats.uniqueSegments}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Search & Filter Strip ──────────────────────────────────── */}
+      <div style={{
+        padding: '12px 16px',
+        background: '#FFFFFF',
+        borderRadius: 8,
+        border: '1px solid #E2E8F0',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 12,
+        alignItems: 'center'
+      }}>
+        {/* Search */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          background: '#F8FAFC',
+          border: '1px solid #CBD5E1',
+          borderRadius: 6,
+          padding: '6px 12px',
+          flex: '1 1 240px'
+        }}>
+          <Search size={14} style={{ color: '#64748B', flexShrink: 0 }} />
+          <input
+            type="text"
+            placeholder="Search price ID, product, segment, currency..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            style={{ border: 'none', padding: 0, background: 'transparent', width: '100%', fontSize: 12.5, color: '#0F172A', outline: 'none' }}
+          />
+          {searchTerm && (
+            <button onClick={() => setSearchTerm('')} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 0 }}>
+              <X size={13} />
             </button>
           )}
         </div>
 
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: 12,
-          color: '#64748B',
-          paddingTop: 10,
-          borderTop: '1px solid #F1F5F9'
-        }}>
-          <div>
-            Entity Schema: <code>PRODUCT_PRICE</code> (product_id, product_manufacturer_id, customer_segment_id, price_type, currency, unit_price, min_qty, max_qty, effective_from/to, price_status, created_at, updated_at)
-          </div>
-          <div>
-            Showing <strong style={{ color: '#0F766E' }}>{filteredPrices.length}</strong> of {productPrices.length} price rules
-          </div>
+        {/* Product Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Product:</span>
+          <select
+            value={selectedProductId}
+            onChange={e => setSelectedProductId(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', fontSize: 12, color: '#0F172A', outline: 'none', maxWidth: 180 }}
+          >
+            <option value="ALL">All Products</option>
+            {(products || []).map(p => {
+              const pid = p.id || p.product_id;
+              const name = p.name || p.product_name || pid;
+              return <option key={pid} value={pid}>{name}</option>;
+            })}
+          </select>
+        </div>
+
+        {/* Segment Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Segment:</span>
+          <select
+            value={selectedSegmentId}
+            onChange={e => setSelectedSegmentId(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', fontSize: 12, color: '#0F172A', outline: 'none', maxWidth: 170 }}
+          >
+            <option value="ALL">All Segments</option>
+            {(customerSegments || []).map(s => {
+              const sid = s.customer_segment_id || s.id;
+              const sname = s.segment_name || s.name || sid;
+              return <option key={sid} value={sid}>{sname}</option>;
+            })}
+          </select>
+        </div>
+
+        {/* Status Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Status:</span>
+          <select
+            value={selectedStatus}
+            onChange={e => setSelectedStatus(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', fontSize: 12, color: '#0F172A', outline: 'none' }}
+          >
+            <option value="ALL">All Status</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="INACTIVE">INACTIVE</option>
+            <option value="EXPIRED">EXPIRED</option>
+            <option value="DRAFT">DRAFT</option>
+          </select>
         </div>
       </div>
 
-      {/* ── PRODUCT_PRICE Table ───────────────────────────────────── */}
-      <div style={{ background: '#FFFFFF', borderRadius: 12, border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)', overflowX: 'auto' }}>
-        <table style={{ width: '100%', minWidth: 1680, borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 190 }}>
-                PRODUCT
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>
-                PRODUCT ID
-              </th>
-              <th style={{ padding: '12px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 180 }}>
-                PRODUCT MANUFACTURER
-              </th>
-              <th style={{ padding: '12px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 160 }}>
-                CUSTOMER SEGMENT
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>
-                PRICE TYPE
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 85 }}>
-                CURRENCY
-              </th>
-              <th style={{ padding: '12px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#0F766E', width: 120 }}>
-                UNIT PRICE
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95 }}>
-                MIN QTY
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95 }}>
-                MAX QTY
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>
-                EFFECTIVE FROM
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>
-                EFFECTIVE TO
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>
-                PRICE STATUS
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>
-                CREATED AT
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>
-                UPDATED AT
-              </th>
-              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', textAlign: 'right', width: 160 }}>
-                ACTIONS
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredPrices.length === 0 ? (
-              <tr>
-                <td colSpan={15} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
-                  <Tag size={36} style={{ color: '#94A3B8', display: 'block', margin: '0 auto 10px' }} />
-                  <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No product price records found.</div>
-                  <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 18 }}>
-                    Create commercial price rules for catalog products across target customer segments.
-                  </div>
-                  {canEdit && (
-                    <button
-                      onClick={() => handleOpenAddModal()}
-                      style={{ padding: '9px 18px', borderRadius: 8, background: '#0F766E', color: '#FFF', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-                    >
-                      + Add Product Price
-                    </button>
-                  )}
-                </td>
+      {/* ── Enterprise Data Table ──────────────────────────────────── */}
+      <div style={{
+        background: '#FFFFFF',
+        borderRadius: 8,
+        border: '1px solid #E2E8F0',
+        overflow: 'hidden',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.03)'
+      }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', width: 90 }}>ID</th>
+                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Product</th>
+                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Customer Segment</th>
+                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Manufacturer</th>
+                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Type</th>
+                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'right' }}>Unit Price</th>
+                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center' }}>Tier Qty</th>
+                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Validity</th>
+                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center' }}>Status</th>
+                <th style={{ padding: '10px 16px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'right', width: 100 }}>Actions</th>
               </tr>
-            ) : (
-              paginatedPrices.map(prc => {
-                const prodDetails = getProductDetails(prc.product_id || (prc as any).productId || '');
-                const segDetails = getSegmentDetails(prc.customer_segment_id || (prc as any).customerSegmentId || '');
-                const mfgDetails = getManufacturerMappingDetails(prc.product_manufacturer_id || (prc as any).productManufacturerId);
+            </thead>
+            <tbody>
+              {filteredPrices.length === 0 ? (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                    <Tag size={32} style={{ color: '#94A3B8', display: 'block', margin: '0 auto 8px' }} />
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>No product price records found.</div>
+                    <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
+                      Database records will appear here once configured.
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedPrices.map(prc => {
+                  const priceId = prc.product_price_id || prc.id || '—';
+                  const prod = getProductRecord(prc.product_id || (prc as any).productId || '');
+                  const seg = getSegmentRecord(prc.customer_segment_id || (prc as any).customerSegmentId);
+                  const mfgName = getManufacturerMappingName(prc.product_manufacturer_id || (prc as any).productManufacturerId);
+                  const status = (prc.price_status || (prc as any).status || 'ACTIVE').toUpperCase();
+                  const isActive = status === 'ACTIVE';
+                  const unitPrice = Number(prc.unit_price ?? (prc as any).unitPrice ?? 0);
+                  const minQty = prc.minimum_quantity ?? (prc as any).minQuantity ?? 1;
+                  const maxQty = prc.maximum_quantity ?? (prc as any).maxQuantity ?? null;
 
-                const priceId = prc.product_price_id || prc.id || '—';
-                const status = prc.price_status || (prc as any).status || 'ACTIVE';
-                const badge = getStatusBadge(status);
-                const unitPriceNum = prc.unit_price ?? (prc as any).unitPrice ?? 0;
-                const minQty = prc.minimum_quantity ?? (prc as any).minQuantity ?? 1;
-                const maxQty = prc.maximum_quantity ?? (prc as any).maxQuantity ?? null;
-                const effFrom = prc.effective_from || (prc as any).effectiveFrom || '—';
-                const effTo = prc.effective_to || (prc as any).effectiveTo || '—';
-                const createdAt = prc.created_at || '—';
-                const updatedAt = prc.updated_at || '—';
+                  return (
+                    <tr
+                      key={priceId}
+                      style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s ease' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
+                    >
+                      {/* ID */}
+                      <td style={{ padding: '12px 14px' }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', background: '#F0FDFA', padding: '2px 6px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
+                          #{priceId}
+                        </span>
+                      </td>
 
-                return (
-                  <tr
-                    key={priceId}
-                    style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.15s ease' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
-                  >
-                    {/* 1. PRODUCT */}
-                    <td style={{ padding: '12px 14px' }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', lineHeight: 1.3 }}>
-                        {prodDetails.productName}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#0F766E', fontFamily: 'monospace', marginTop: 1, fontWeight: 700 }}>
-                        {prodDetails.productCode}
-                      </div>
-                    </td>
+                      {/* Product */}
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 13 }}>
+                          {prod?.name || prod?.product_name || prc.product_id || (prc as any).productId}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace' }}>
+                            {prod?.product_code || prod?.code || (prod as any)?.productCode || prc.product_id}
+                          </span>
+                          {prod?.category && (
+                            <span style={{ fontSize: 10, color: '#64748B', background: '#F1F5F9', padding: '1px 5px', borderRadius: 3 }}>
+                              {prod.category}
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    {/* 2. PRODUCT ID */}
-                    <td style={{ padding: '12px 10px', fontSize: 12, fontWeight: 600, color: '#334155', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {prodDetails.productId}
-                    </td>
-
-                    {/* 3. PRODUCT MANUFACTURER */}
-                    <td style={{ padding: '12px 12px' }}>
-                      {mfgDetails ? (
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#0F172A', fontWeight: 700, fontSize: 12.5 }}>
-                            <Factory size={13} style={{ color: '#0F766E', flexShrink: 0 }} />
-                            <span>{mfgDetails.manufacturerName}</span>
+                      {/* Segment */}
+                      <td style={{ padding: '12px 14px' }}>
+                        {seg ? (
+                          <div>
+                            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
+                              {seg.segment_name || seg.name}
+                            </span>
                           </div>
-                          {mfgDetails.mfgProductCode && (
-                            <div style={{ fontSize: 10.5, color: '#64748B', fontFamily: 'monospace', marginTop: 1 }}>
-                              {mfgDetails.mfgProductCode}
+                        ) : (
+                          <span style={{ color: '#94A3B8', fontSize: 11.5, fontStyle: 'italic' }}>Global Default</span>
+                        )}
+                      </td>
+
+                      {/* Manufacturer */}
+                      <td style={{ padding: '12px 14px', color: '#475569', fontSize: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <Building2 size={13} style={{ color: '#64748B', flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }} title={mfgName}>
+                            {mfgName}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Type */}
+                      <td style={{ padding: '12px 14px' }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#F8FAFC', color: '#475569', border: '1px solid #E2E8F0' }}>
+                          {prc.price_type || 'BASE'}
+                        </span>
+                      </td>
+
+                      {/* Unit Price */}
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                        <div style={{ fontSize: 14, fontWeight: 900, color: '#0F766E', fontFamily: 'monospace' }}>
+                          {prc.currency === 'USD' ? '$' : '₹'}{unitPrice.toFixed(2)}
+                        </div>
+                      </td>
+
+                      {/* Tier Qty */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 600, color: '#0F172A' }}>
+                          Min: {minQty.toLocaleString()}
+                        </div>
+                        {maxQty && (
+                          <div style={{ fontSize: 10.5, color: '#64748B' }}>
+                            Max: {Number(maxQty).toLocaleString()}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Validity */}
+                      <td style={{ padding: '12px 14px', color: '#475569', fontSize: 11.5 }}>
+                        <div>{formatMasterDate(prc.effective_from || (prc as any).effectiveFrom)}</div>
+                        <div style={{ color: '#94A3B8', fontSize: 10.5 }}>to {formatMasterDate(prc.effective_to || (prc as any).effectiveTo)}</div>
+                      </td>
+
+                      {/* Status */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <span style={{
+                          fontSize: 10.5, fontWeight: 800, padding: '3px 7px', borderRadius: 4,
+                          background: isActive ? '#DCFCE7' : '#FEE2E2',
+                          color: isActive ? '#15803D' : '#B91C1C',
+                          border: isActive ? '1px solid #86EFAC' : '1px solid #FCA5A5'
+                        }}>
+                          {status}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <div style={{ position: 'relative', display: 'inline-block' }} data-actions-menu={`price_${priceId}`}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenActionMenuId(openActionMenuId === `price_${priceId}` ? null : `price_${priceId}`);
+                            }}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              background: openActionMenuId === `price_${priceId}` ? '#F1F5F9' : '#FFFFFF',
+                              border: '1px solid #CBD5E1',
+                              color: '#334155',
+                              fontSize: 11.5,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3
+                            }}
+                            title="Actions"
+                          >
+                            <span>Actions</span>
+                            <MoreVertical size={13} style={{ color: '#64748B' }} />
+                          </button>
+
+                          {openActionMenuId === `price_${priceId}` && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                right: 0,
+                                top: 'calc(100% + 4px)',
+                                zIndex: 1000,
+                                minWidth: 160,
+                                background: '#FFFFFF',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: 8,
+                                boxShadow: '0 10px 25px -5px rgba(15,23,42,0.15)',
+                                padding: '4px 0',
+                                textAlign: 'left'
+                              }}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenActionMenuId(null);
+                                  setSelectedPriceForDetail(prc);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  padding: '7px 14px',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  color: '#334155',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <Eye size={13} style={{ color: '#0F766E' }} />
+                                <span>View Details</span>
+                              </button>
+
+                              {canEdit && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionMenuId(null);
+                                      handleOpenEditModal(prc);
+                                    }}
+                                    style={{
+                                      width: '100%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      padding: '7px 14px',
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                      color: '#334155',
+                                      background: 'transparent',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      textAlign: 'left'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                  >
+                                    <Edit3 size={13} style={{ color: '#0F766E' }} />
+                                    <span>Edit</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionMenuId(null);
+                                      handleToggleStatus(prc);
+                                    }}
+                                    style={{
+                                      width: '100%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      padding: '7px 14px',
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                      color: '#334155',
+                                      background: 'transparent',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      textAlign: 'left'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                  >
+                                    <Power size={13} style={{ color: isActive ? '#D97706' : '#16A34A' }} />
+                                    <span>{isActive ? 'Deactivate' : 'Activate'}</span>
+                                  </button>
+
+                                  {isAdmin && (
+                                    <>
+                                      <div style={{ height: 1, background: '#F1F5F9', margin: '4px 0' }} />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenActionMenuId(null);
+                                          setDeleteTarget(prc);
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          padding: '7px 14px',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: '#DC2626',
+                                          background: 'transparent',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          textAlign: 'left'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      >
+                                        <Trash2 size={13} style={{ color: '#DC2626' }} />
+                                        <span>Delete</span>
+                                      </button>
+                                    </>
+                                  )}
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
-                      ) : (
-                        <span style={{ color: '#94A3B8', fontSize: 11.5, fontStyle: 'italic' }}>
-                          All Manufacturers (Global)
-                        </span>
-                      )}
-                    </td>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-                    {/* 4. CUSTOMER SEGMENT */}
-                    <td style={{ padding: '12px 12px' }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
-                        {segDetails.segmentName}
-                      </div>
-                      {segDetails.segmentCode && (
-                        <div style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace', marginTop: 1 }}>
-                          {segDetails.segmentCode}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* 5. PRICE TYPE */}
-                    <td style={{ padding: '12px 10px', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        padding: '3px 7px',
-                        borderRadius: 4,
-                        background: '#EFF6FF',
-                        color: '#1D4ED8',
-                        border: '1px solid #BFDBFE'
-                      }}>
-                        {prc.price_type}
-                      </span>
-                    </td>
-
-                    {/* 6. CURRENCY */}
-                    <td style={{ padding: '12px 10px', fontSize: 12.5, fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>
-                      {prc.currency || 'INR'}
-                    </td>
-
-                    {/* 7. UNIT PRICE */}
-                    <td style={{ padding: '12px 12px', fontSize: 14, fontWeight: 900, color: '#0F766E', whiteSpace: 'nowrap' }}>
-                      ₹{unitPriceNum.toFixed(2)}
-                    </td>
-
-                    {/* 8. MINIMUM QUANTITY */}
-                    <td style={{ padding: '12px 10px', fontSize: 12.5, color: '#334155', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {minQty}
-                    </td>
-
-                    {/* 9. MAXIMUM QUANTITY */}
-                    <td style={{ padding: '12px 10px', fontSize: 12.5, color: '#64748B', whiteSpace: 'nowrap' }}>
-                      {maxQty !== null && maxQty !== '' ? maxQty : '—'}
-                    </td>
-
-                    {/* 10. EFFECTIVE FROM */}
-                    <td style={{ padding: '12px 10px', fontSize: 11.5, color: '#64748B', whiteSpace: 'nowrap' }}>
-                      {effFrom}
-                    </td>
-
-                    {/* 11. EFFECTIVE TO */}
-                    <td style={{ padding: '12px 10px', fontSize: 11.5, color: '#64748B', whiteSpace: 'nowrap' }}>
-                      {effTo}
-                    </td>
-
-                    {/* 12. PRICE STATUS */}
-                    <td style={{ padding: '12px 10px', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontSize: 10.5,
-                        fontWeight: 800,
-                        padding: '3px 8px',
-                        borderRadius: 4,
-                        background: badge.bg,
-                        color: badge.color,
-                        border: `1px solid ${badge.border}`
-                      }}>
-                        {badge.label}
-                      </span>
-                    </td>
-
-                    {/* 13. CREATED AT */}
-                    <td style={{ padding: '12px 10px', fontSize: 11.5, color: '#64748B', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {createdAt}
-                    </td>
-
-                    {/* 14. UPDATED AT */}
-                    <td style={{ padding: '12px 10px', fontSize: 11.5, color: '#64748B', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {updatedAt}
-                    </td>
-
-                    {/* 15. ACTIONS */}
-                    <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenViewModal(prc)}
-                          title="View Complete Price Details"
-                          style={{
-                            padding: '5px 7px',
-                            borderRadius: 4,
-                            background: '#F8FAFC',
-                            border: '1px solid #CBD5E1',
-                            color: '#334155',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 3
-                          }}
-                        >
-                          <Eye size={12} /> View
-                        </button>
-
-                        {canEdit && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditModal(prc)}
-                              title="Edit Price Record"
-                              style={{
-                                padding: '5px 7px',
-                                borderRadius: 4,
-                                background: '#F0FDFA',
-                                border: '1px solid #99F6E4',
-                                color: '#0F766E',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3
-                              }}
-                            >
-                              <Edit2 size={12} /> Edit
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleToggleStatus(prc)}
-                              title={status === 'ACTIVE' ? 'Deactivate Price' : 'Activate Price'}
-                              style={{
-                                padding: '5px 6px',
-                                borderRadius: 4,
-                                background: status === 'ACTIVE' ? '#FEF2F2' : '#F0FDF4',
-                                border: status === 'ACTIVE' ? '1px solid #FECACA' : '1px solid #BBF7D0',
-                                color: status === 'ACTIVE' ? '#DC2626' : '#16A34A',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <Power size={12} />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(prc)}
-                              title="Remove Price Record"
-                              style={{
-                                padding: '5px 6px',
-                                borderRadius: 4,
-                                background: '#FFFFFF',
-                                border: '1px solid #CBD5E1',
-                                color: '#64748B',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-        <PaginationControl {...paginationProps} />
+        {/* Pagination */}
+        <div style={{ borderTop: '1px solid #E2E8F0', padding: '10px 16px', background: '#FAFAFA' }}>
+          <PaginationControl {...paginationProps} />
+        </div>
       </div>
 
-      {/* ── VIEW DETAILS MODAL ────────────────────────────────────── */}
-      {selectedPriceForDetail && (() => {
-        const detail = selectedPriceForDetail;
-        const prodDetails = getProductDetails(detail.product_id || (detail as any).productId || '');
-        const segDetails = getSegmentDetails(detail.customer_segment_id || (detail as any).customerSegmentId || '');
-        const mfgDetails = getManufacturerMappingDetails(detail.product_manufacturer_id || (detail as any).productManufacturerId);
-        const priceId = detail.product_price_id || detail.id || '—';
-        const status = detail.price_status || (detail as any).status || 'ACTIVE';
-        const badge = getStatusBadge(status);
-        const unitPriceNum = detail.unit_price ?? (detail as any).unitPrice ?? 0;
-
-        return (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 10000,
-              background: 'rgba(15, 23, 42, 0.55)',
-              backdropFilter: 'blur(4px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 16
-            }}
-            onClick={() => setSelectedPriceForDetail(null)}
-          >
-            <div
-              onClick={e => e.stopPropagation()}
-              style={{
-                width: '100%',
-                maxWidth: 720,
-                background: '#FFFFFF',
-                borderRadius: 14,
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                border: '1px solid #E2E8F0',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column'
-              }}
-            >
-              {/* Modal Header */}
-              <div style={{
-                padding: '20px 24px',
-                borderBottom: '1px solid #E2E8F0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: '#F8FAFC'
-              }}>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0F766E' }}>
-                    ENTITY RECORD · PRODUCT_PRICE
-                  </div>
-                  <h3 style={{ margin: '2px 0 0', fontSize: 19, fontWeight: 800, color: '#0F172A' }}>
-                    Product Price Details
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPriceForDetail(null)}
-                  style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Modal Content */}
-              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, maxHeight: '80vh', overflowY: 'auto' }}>
-
-                {/* Primary Key Banner */}
-                <div style={{
-                  padding: '14px 18px',
-                  background: '#F0FDFA',
-                  borderRadius: 8,
-                  border: '1px solid #99F6E4',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Primary Key (product_price_id)
-                    </div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#134E4A', fontFamily: 'monospace', marginTop: 2 }}>
-                      {priceId}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#0F766E' }}>
-                      ₹{unitPriceNum.toFixed(2)} {detail.currency || 'INR'}
-                    </span>
-                    <span style={{
-                      fontSize: 11,
-                      fontWeight: 800,
-                      padding: '4px 10px',
-                      borderRadius: 6,
-                      background: badge.bg,
-                      color: badge.color,
-                      border: `1px solid ${badge.border}`
-                    }}>
-                      {badge.label}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Section 1: UI Contextual Hierarchy (UI Context only - not columns of PRODUCT_PRICE) */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      1. Contextual Product Hierarchy (UI Resolution Context)
-                    </div>
-                    <span style={{ fontSize: 11, color: '#94A3B8', fontStyle: 'italic' }}>
-                      Resolved from catalog mapping
-                    </span>
-                  </div>
-                  <div style={{ background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', padding: 14 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, fontSize: 12, color: '#334155', fontWeight: 600 }}>
-                      <span style={{ padding: '3px 8px', borderRadius: 4, background: '#E2E8F0', color: '#1E293B', fontWeight: 700 }}>
-                        {prodDetails.productTypeName}
-                      </span>
-                      <ChevronRight size={14} style={{ color: '#94A3B8' }} />
-                      <span style={{ padding: '3px 8px', borderRadius: 4, background: '#E2E8F0', color: '#1E293B' }}>
-                        {prodDetails.categoryName}
-                      </span>
-                      {prodDetails.subCategoryName !== '—' && (
-                        <>
-                          <ChevronRight size={14} style={{ color: '#94A3B8' }} />
-                          <span style={{ padding: '3px 8px', borderRadius: 4, background: '#E2E8F0', color: '#1E293B' }}>
-                            {prodDetails.subCategoryName}
-                          </span>
-                        </>
-                      )}
-                      {prodDetails.subSubCategoryName !== '—' && (
-                        <>
-                          <ChevronRight size={14} style={{ color: '#94A3B8' }} />
-                          <span style={{ padding: '3px 8px', borderRadius: 4, background: '#CCFBF1', color: '#0F766E', fontWeight: 700 }}>
-                            {prodDetails.subSubCategoryName}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #E2E8F0', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
-                      <div>
-                        <div style={{ fontSize: 11, color: '#64748B', textTransform: 'uppercase', fontWeight: 700 }}>Product Name</div>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', marginTop: 2 }}>{prodDetails.productName}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: '#64748B', textTransform: 'uppercase', fontWeight: 700 }}>Product ID (FK → PRODUCT)</div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace', marginTop: 2 }}>{prodDetails.productId}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 2: Relationship Mapping Entities */}
-                <div>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                    2. Linked Customer Segment &amp; Product Manufacturer
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    {/* Customer Segment Box */}
-                    <div style={{ padding: '14px 16px', background: '#FFFFFF', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#1D4ED8', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
-                        <Users size={14} /> Customer Segment (FK → CUSTOMER_SEGMENT)
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', marginTop: 4 }}>
-                        {segDetails.segmentName}
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px dashed #CBD5E1', fontSize: 11.5 }}>
-                        <span style={{ color: '#64748B' }}>Customer Segment ID:</span>
-                        <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0F172A' }}>{detail.customer_segment_id || (detail as any).customerSegmentId}</span>
-                      </div>
-                    </div>
-
-                    {/* Product Manufacturer Box */}
-                    <div style={{ padding: '14px 16px', background: '#FFFFFF', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0F766E', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
-                        <Factory size={14} /> Product Manufacturer (FK → PRODUCT_MANUFACTURER)
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', marginTop: 4 }}>
-                        {mfgDetails ? mfgDetails.manufacturerName : 'All Manufacturers / Global'}
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px dashed #CBD5E1', fontSize: 11.5 }}>
-                        <span style={{ color: '#64748B' }}>Manufacturer Mapping ID:</span>
-                        <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0F766E' }}>
-                          {detail.product_manufacturer_id || (detail as any).productManufacturerId || 'NULL (Global)'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 3: Commercial Terms */}
-                <div>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                    3. Commercial Pricing Terms
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                    <div style={{ padding: '12px 14px', background: '#FFFFFF', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Price Type</div>
-                      <div style={{ fontSize: 13.5, fontWeight: 800, color: '#1D4ED8', marginTop: 4 }}>
-                        {detail.price_type}
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '12px 14px', background: '#FFFFFF', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Currency</div>
-                      <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A', marginTop: 4 }}>
-                        {detail.currency || 'INR'}
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '12px 14px', background: '#FFFFFF', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Minimum Quantity</div>
-                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A', marginTop: 4 }}>
-                        {detail.minimum_quantity ?? (detail as any).minQuantity ?? 1}
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '12px 14px', background: '#FFFFFF', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Maximum Quantity</div>
-                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#64748B', marginTop: 4 }}>
-                        {detail.maximum_quantity ?? (detail as any).maxQuantity ?? '— (No Limit)'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 4: Validity & Audit */}
-                <div>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                    4. Validity Dates &amp; Audit Metadata
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                    <div style={{ padding: '12px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Effective From</div>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A', marginTop: 4 }}>
-                        {detail.effective_from || (detail as any).effectiveFrom || '—'}
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '12px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Effective To</div>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A', marginTop: 4 }}>
-                        {detail.effective_to || (detail as any).effectiveTo || '—'}
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '12px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Created At</div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', fontFamily: 'monospace', marginTop: 4 }}>
-                        {detail.created_at || '—'}
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '12px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Updated At</div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', fontFamily: 'monospace', marginTop: 4 }}>
-                        {detail.updated_at || '—'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Modal Footer */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '16px 24px', borderTop: '1px solid #E2E8F0', background: '#F8FAFC' }}>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const toEdit = selectedPriceForDetail;
-                      setSelectedPriceForDetail(null);
-                      handleOpenEditModal(toEdit);
-                    }}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: 6,
-                      background: '#0F766E',
-                      color: '#FFF',
-                      border: 'none',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6
-                    }}
-                  >
-                    <Edit2 size={14} /> Edit Product Price
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setSelectedPriceForDetail(null)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 6,
-                    border: '1px solid #CBD5E1',
-                    background: '#FFF',
-                    color: '#475569',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── ADD / EDIT PRODUCT PRICE MODAL ───────────────────────── */}
+      {/* ── Add / Edit Price Modal ─────────────────────────────────── */}
       {isModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#FFFFFF', borderRadius: 12, width: '100%', maxWidth: 660, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15,23,42,0.45)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000,
+          padding: 16
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: 12,
+            border: '1px solid #CBD5E1',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
+            width: '100%',
+            maxWidth: 580,
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
             {/* Modal Header */}
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0F766E' }}>
-                  ENTITY: PRODUCT_PRICE
-                </div>
-                <h3 style={{ margin: '2px 0 0', fontSize: 18, fontWeight: 800, color: '#0F172A' }}>
-                  {editingPriceId ? 'Edit Product Price' : 'Add Product Price'}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <DollarSign size={18} style={{ color: '#0F766E' }} />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
+                  {editingPrice ? `Edit Price Rule #${editingPrice.product_price_id || editingPrice.id}` : 'Create New Product Price Rule'}
                 </h3>
               </div>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}
+              >
                 <X size={18} />
               </button>
             </div>
 
-            {formError && (
-              <div style={{ background: '#FEE2E2', borderBottom: '1px solid #FCA5A5', padding: '10px 24px', color: '#B91C1C', fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <AlertTriangle size={15} />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
-
-              {/* Read-Only Info Banner when Editing */}
-              {editingPriceId && (
-                <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Product Price ID</div>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace', marginTop: 2 }}>
-                      {editingPriceId}
-                    </div>
+            {/* Modal Form */}
+            <form onSubmit={handleSavePrice} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
+              <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {formError && (
+                  <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 6, color: '#B91C1C', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                    <span>{formError}</span>
                   </div>
-                  <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Created At (Preserved)</div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: '#334155', fontFamily: 'monospace', marginTop: 2 }}>
-                      {editingCreatedAt || '—'}
-                    </div>
-                  </div>
-                </div>
-              )}
+                )}
 
-              {/* ────────────────────────────────────────────────────────── */}
-              {/* SECTION: PRODUCT SELECTION (Cascading UI Hierarchy)       */}
-              {/* ────────────────────────────────────────────────────────── */}
-              <div style={{ background: '#F8FAFC', padding: 16, borderRadius: 10, border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <Package size={15} /> Product Selection (Hierarchy Flow)
-                </div>
-
-                {/* 1. Product Type * */}
+                {/* Product Select */}
                 <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                    1. Product Type *
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                    Catalog Product <span style={{ color: '#DC2626' }}>*</span>
                   </label>
                   <select
-                    required
-                    value={modalProductTypeId}
-                    onChange={e => {
-                      const newPtId = e.target.value;
-                      // Cascading reset
-                      setModalProductTypeId(newPtId);
-                      setModalCategory('');
-                      setModalSubCategory('');
-                      setModalSubSubCategory('');
-                      setFormData(prev => ({
-                        ...prev,
-                        product_id: '',
-                        product_manufacturer_id: null
-                      }));
-                    }}
-                    style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none', background: '#F0FDFA', color: '#0F766E' }}
-                  >
-                    <option value="" disabled>-- Select Product Type * --</option>
-                    {(productTypes || []).filter(t => (t.lifecycle_status || t.status) === 'ACTIVE').map(t => (
-                      <option key={t.product_type_id || t.id} value={t.product_type_id || t.id}>
-                        {t.product_type_name || t.name} ({t.product_type_code || t.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 2. Category * */}
-                <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                    2. Category *
-                  </label>
-                  <select
-                    required
-                    disabled={!modalProductTypeId}
-                    value={modalCategory}
-                    onChange={e => {
-                      const newCat = e.target.value;
-                      // Cascading reset
-                      setModalCategory(newCat);
-                      setModalSubCategory('');
-                      setModalSubSubCategory('');
-                      setFormData(prev => ({
-                        ...prev,
-                        product_id: '',
-                        product_manufacturer_id: null
-                      }));
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '9px 12px',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: 6,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: !modalProductTypeId ? '#F1F5F9' : '#FFFFFF',
-                      color: !modalProductTypeId ? '#94A3B8' : '#0F172A',
-                      cursor: !modalProductTypeId ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    <option value="" disabled>
-                      {!modalProductTypeId ? '-- Select Product Type First --' : '-- Select Category * --'}
-                    </option>
-                    {modalCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 3. Sub-Category & 4. Sub-Sub-Category */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  {/* 3. Sub-Category */}
-                  <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      3. Sub-Category {modalSubCategories.length > 0 ? <span style={{ color: '#0F766E' }}>*</span> : <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>}
-                    </label>
-                    <select
-                      disabled={!modalCategory || modalSubCategories.length === 0}
-                      value={modalSubCategory}
-                      onChange={e => {
-                        const newSubCat = e.target.value;
-                        // Cascading reset
-                        setModalSubCategory(newSubCat);
-                        setModalSubSubCategory('');
-                        setFormData(prev => ({
-                          ...prev,
-                          product_id: '',
-                          product_manufacturer_id: null
-                        }));
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        border: '1px solid #CBD5E1',
-                        borderRadius: 6,
-                        fontSize: 13,
-                        fontWeight: 600,
-                        background: (!modalCategory || modalSubCategories.length === 0) ? '#F1F5F9' : '#FFFFFF',
-                        color: (!modalCategory || modalSubCategories.length === 0) ? '#94A3B8' : '#0F172A',
-                        cursor: (!modalCategory || modalSubCategories.length === 0) ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      <option value="" disabled={modalSubCategories.length > 0}>
-                        {!modalCategory
-                          ? '-- Select Category First --'
-                          : modalSubCategories.length === 0
-                          ? '-- No Sub-Categories (Direct) --'
-                          : '-- Select Sub-Category --'}
-                      </option>
-                      {modalSubCategories.map(subCat => (
-                        <option key={subCat} value={subCat}>{subCat}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* 4. Sub-Sub-Category */}
-                  <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      4. Sub-Sub-Category {modalSubSubCategories.length > 0 ? <span style={{ color: '#0F766E' }}>*</span> : <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>}
-                    </label>
-                    <select
-                      disabled={!modalSubCategory || modalSubSubCategories.length === 0}
-                      value={modalSubSubCategory}
-                      onChange={e => {
-                        const newSubSub = e.target.value;
-                        // Cascading reset
-                        setModalSubSubCategory(newSubSub);
-                        setFormData(prev => ({
-                          ...prev,
-                          product_id: '',
-                          product_manufacturer_id: null
-                        }));
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        border: '1px solid #CBD5E1',
-                        borderRadius: 6,
-                        fontSize: 13,
-                        fontWeight: 600,
-                        background: (!modalSubCategory || modalSubSubCategories.length === 0) ? '#F1F5F9' : '#FFFFFF',
-                        color: (!modalSubCategory || modalSubSubCategories.length === 0) ? '#94A3B8' : '#0F172A',
-                        cursor: (!modalSubCategory || modalSubSubCategories.length === 0) ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      <option value="" disabled={modalSubSubCategories.length > 0}>
-                        {!modalSubCategory
-                          ? '-- Select Sub-Category First --'
-                          : modalSubSubCategories.length === 0
-                          ? '-- No Sub-Sub-Categories --'
-                          : '-- Select Sub-Sub-Category --'}
-                      </option>
-                      {modalSubSubCategories.map(subSub => (
-                        <option key={subSub} value={subSub}>{subSub}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* 5. Product * */}
-                <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                    5. Product * (Resolves to product_id)
-                  </label>
-                  <select
-                    required
-                    disabled={!modalProductTypeId || !modalCategory || (modalSubCategories.length > 0 && !modalSubCategory) || (modalSubSubCategories.length > 0 && !modalSubSubCategory)}
                     value={formData.product_id}
-                    onChange={e => {
-                      // Cascading refresh for manufacturer
-                      setFormData(prev => ({ ...prev, product_id: e.target.value, product_manufacturer_id: null }));
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '9px 12px',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: 6,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: (!modalProductTypeId || !modalCategory || (modalSubCategories.length > 0 && !modalSubCategory) || (modalSubSubCategories.length > 0 && !modalSubSubCategory)) ? '#F1F5F9' : '#FFFFFF',
-                      color: (!modalProductTypeId || !modalCategory || (modalSubCategories.length > 0 && !modalSubCategory) || (modalSubSubCategories.length > 0 && !modalSubSubCategory)) ? '#94A3B8' : '#0F172A',
-                      cursor: (!modalProductTypeId || !modalCategory || (modalSubCategories.length > 0 && !modalSubCategory) || (modalSubSubCategories.length > 0 && !modalSubSubCategory)) ? 'not-allowed' : 'pointer'
-                    }}
+                    onChange={e => setFormData({ ...formData, product_id: e.target.value })}
+                    disabled={Boolean(editingPrice)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A', background: editingPrice ? '#F1F5F9' : '#FFFFFF' }}
                   >
-                    <option value="" disabled>
-                      {!modalProductTypeId
-                        ? '-- Select Product Type First --'
-                        : !modalCategory
-                        ? '-- Select Category First --'
-                        : (modalSubCategories.length > 0 && !modalSubCategory)
-                        ? '-- Select Sub-Category First --'
-                        : (modalSubSubCategories.length > 0 && !modalSubSubCategory)
-                        ? '-- Select Sub-Sub-Category First --'
-                        : modalAvailableProducts.length === 0
-                        ? '-- No Products Found in Selected Hierarchy --'
-                        : '-- Select Product * --'}
-                    </option>
-                    {modalAvailableProducts.map(p => (
-                      <option key={p.id || p.product_id} value={p.id || p.product_id}>
-                        {p.product_code || p.code} · {p.product_name || p.name}
-                      </option>
-                    ))}
+                    <option value="">Select a Product...</option>
+                    {(products || []).map(p => {
+                      const pid = p.id || p.product_id;
+                      const pcode = p.product_code || p.code || (p as any).productCode;
+                      const pname = p.name || p.product_name;
+                      return (
+                        <option key={pid} value={pid}>
+                          {pcode} — {pname}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
-                {/* 6. Product Manufacturer (Optional / nullable) */}
-                <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                    6. Product Manufacturer <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional / Nullable → product_manufacturer_id)</span>
-                  </label>
-                  <select
-                    disabled={!formData.product_id}
-                    value={formData.product_manufacturer_id || ''}
-                    onChange={e => setFormData(prev => ({ ...prev, product_manufacturer_id: e.target.value || null }))}
-                    style={{
-                      width: '100%',
-                      padding: '9px 12px',
-                      border: '1px solid #CBD5E1',
-                      borderRadius: 6,
-                      fontSize: 13,
-                      background: !formData.product_id ? '#F1F5F9' : '#FFFFFF',
-                      color: !formData.product_id ? '#94A3B8' : '#0F172A',
-                      cursor: !formData.product_id ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    <option value="">-- All Manufacturers / Global Product Price (NULL) --</option>
-                    {modalAvailableMappings.map(m => (
-                      <option key={m.product_manufacturer_id || (m as any).id} value={m.product_manufacturer_id || (m as any).id}>
-                        {m.manufacturer_name || m.manufacturerName} ({m.manufacturer_product_code || m.mfgProductCode || 'Mapped'})
-                      </option>
-                    ))}
-                  </select>
-                  <span style={{ fontSize: 11, color: '#64748B', marginTop: 3, display: 'block' }}>
-                    Leave unselected for global catalog pricing across all approved manufacturers.
-                  </span>
-                </div>
-              </div>
-
-              {/* ────────────────────────────────────────────────────────── */}
-              {/* SECTION: PRICING DETAILS                                  */}
-              {/* ────────────────────────────────────────────────────────── */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <DollarSign size={15} /> Commercial Pricing Details
-                </div>
-
-                {/* 7. Customer Segment * & 8. Price Type * */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {/* Customer Segment */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      7. Customer Segment * (customer_segment_id)
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      Customer Segment
                     </label>
                     <select
-                      required
                       value={formData.customer_segment_id}
                       onChange={e => setFormData({ ...formData, customer_segment_id: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, background: '#F0FDFA', color: '#0F766E' }}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A' }}
                     >
-                      <option value="" disabled>-- Select Customer Segment * --</option>
-                      {(customerSegments || []).map(s => (
-                        <option key={s.customer_segment_id || s.id} value={s.customer_segment_id || s.id}>
-                          {s.segment_name || s.name} ({s.segment_code || s.code})
-                        </option>
-                      ))}
+                      <option value="">Global (All Segments)</option>
+                      {(customerSegments || []).map(s => {
+                        const sid = s.customer_segment_id || s.id;
+                        return (
+                          <option key={sid} value={sid}>
+                            {s.segment_code} — {s.segment_name || s.name}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      8. Price Type * (price_type)
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      Price Type
                     </label>
                     <select
-                      required
                       value={formData.price_type}
                       onChange={e => setFormData({ ...formData, price_type: e.target.value as any })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF' }}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A' }}
                     >
-                      <option value="FIXED">FIXED</option>
-                      <option value="TIERED">TIERED</option>
-                      <option value="CONTRACT">CONTRACT</option>
-                      <option value="LIST">LIST</option>
+                      <option value="TIERED">TIERED (Quantity Break)</option>
+                      <option value="FIXED">FIXED (Standard)</option>
+                      <option value="CONTRACT">CONTRACT (Institutional)</option>
+                      <option value="BASE">BASE (Catalog Floor)</option>
+                      <option value="LIST">LIST (MSRP)</option>
                     </select>
                   </div>
                 </div>
 
-                {/* 9. Currency * & 10. Unit Price * */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {/* Price & Currency */}
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12 }}>
                   <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      9. Currency * (currency)
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      Currency
                     </label>
-                    <input
-                      type="text"
-                      required
+                    <select
                       value={formData.currency}
-                      onChange={e => setFormData({ ...formData, currency: e.target.value.toUpperCase() })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none' }}
-                    />
+                      onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A' }}
+                    >
+                      <option value="INR">INR (₹)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="EUR">EUR (€)</option>
+                    </select>
                   </div>
 
                   <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      10. Unit Price * (unit_price)
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      Unit Price <span style={{ color: '#DC2626' }}>*</span>
                     </label>
                     <input
                       type="number"
@@ -1785,88 +1020,78 @@ export const ProductPriceModule: React.FC = () => {
                       required
                       value={formData.unit_price}
                       onChange={e => setFormData({ ...formData, unit_price: parseFloat(e.target.value) || 0 })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 800, color: '#0F766E', outline: 'none' }}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A' }}
                     />
                   </div>
                 </div>
 
-                {/* 11. Minimum Quantity * & 12. Maximum Quantity */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {/* Min & Max Quantity */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      11. Minimum Quantity * (minimum_quantity)
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      Minimum Quantity <span style={{ color: '#DC2626' }}>*</span>
                     </label>
                     <input
                       type="number"
                       min="1"
                       required
                       value={formData.minimum_quantity}
-                      onChange={e => setFormData({ ...formData, minimum_quantity: parseInt(e.target.value) || 1 })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                      onChange={e => setFormData({ ...formData, minimum_quantity: parseInt(e.target.value, 10) || 1 })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A' }}
                     />
                   </div>
 
                   <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      12. Maximum Quantity <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional → maximum_quantity)</span>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      Maximum Quantity (Optional)
                     </label>
                     <input
                       type="number"
-                      placeholder="Leave blank for unlimited"
+                      min="1"
+                      placeholder="Leave empty for unlimited"
                       value={formData.maximum_quantity}
-                      onChange={e => setFormData({ ...formData, maximum_quantity: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                      onChange={e => setFormData({ ...formData, maximum_quantity: e.target.value ? parseInt(e.target.value, 10) : '' })}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A' }}
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* ────────────────────────────────────────────────────────── */}
-              {/* SECTION: VALIDITY & STATUS                                */}
-              {/* ────────────────────────────────────────────────────────── */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <Calendar size={15} /> Validity &amp; Lifecycle Status
-                </div>
-
-                {/* 13. Effective From * & 14. Effective To */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {/* Effective Dates */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      13. Effective From * (effective_from)
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      Effective From
                     </label>
                     <input
                       type="date"
-                      required
                       value={formData.effective_from}
                       onChange={e => setFormData({ ...formData, effective_from: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A' }}
                     />
                   </div>
 
                   <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      14. Effective To <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional → effective_to)</span>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      Effective To
                     </label>
                     <input
                       type="date"
                       value={formData.effective_to}
                       onChange={e => setFormData({ ...formData, effective_to: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A' }}
                     />
                   </div>
                 </div>
 
-                {/* 15. Price Status * */}
+                {/* Status */}
                 <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                    15. Price Status * (price_status)
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                    Price Rule Status
                   </label>
                   <select
-                    required
                     value={formData.price_status}
                     onChange={e => setFormData({ ...formData, price_status: e.target.value as any })}
-                    style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, color: '#0F766E', background: '#F0FDFA' }}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, color: '#0F172A' }}
                   >
                     <option value="ACTIVE">ACTIVE</option>
                     <option value="INACTIVE">INACTIVE</option>
@@ -1876,28 +1101,223 @@ export const ProductPriceModule: React.FC = () => {
                 </div>
               </div>
 
-              {/* Modal Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #E2E8F0' }}>
+              {/* Modal Footer */}
+              <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '9px 22px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFFFFF', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,118,110,0.2)' }}
+                  disabled={isSubmitting}
+                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#0F766E', fontSize: 13, fontWeight: 700, color: '#FFFFFF', cursor: 'pointer', opacity: isSubmitting ? 0.7 : 1 }}
                 >
-                  {editingPriceId ? 'Update Product Price' : 'Save Product Price'}
+                  {isSubmitting ? 'Saving...' : editingPrice ? 'Update Price Rule' : 'Create Price Rule'}
                 </button>
               </div>
-
             </form>
           </div>
         </div>
       )}
 
+      {/* ── View Details Modal ─────────────────────────────────────── */}
+      {selectedPriceForDetail && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15,23,42,0.45)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000,
+          padding: 16
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: 12,
+            border: '1px solid #CBD5E1',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
+            width: '100%',
+            maxWidth: 520,
+            overflow: 'hidden'
+          }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Eye size={18} style={{ color: '#0F766E' }} />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
+                  Price Rule Details #{selectedPriceForDetail.product_price_id || selectedPriceForDetail.id}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPriceForDetail(null)}
+                style={{ background: 'transparent', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12, fontSize: 13 }}>
+              {(() => {
+                const prod = getProductRecord(selectedPriceForDetail.product_id || (selectedPriceForDetail as any).productId || '');
+                const seg = getSegmentRecord(selectedPriceForDetail.customer_segment_id || (selectedPriceForDetail as any).customerSegmentId);
+                const mfg = getManufacturerMappingName(selectedPriceForDetail.product_manufacturer_id || (selectedPriceForDetail as any).productManufacturerId);
+                const status = (selectedPriceForDetail.price_status || (selectedPriceForDetail as any).status || 'ACTIVE').toUpperCase();
+                const unitPrice = Number(selectedPriceForDetail.unit_price ?? (selectedPriceForDetail as any).unitPrice ?? 0);
+
+                return (
+                  <>
+                    <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Product</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', marginTop: 2 }}>
+                        {prod?.name || prod?.product_name || selectedPriceForDetail.product_id}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#0F766E', fontFamily: 'monospace', marginTop: 2, fontWeight: 700 }}>
+                        {prod?.product_code || prod?.code || selectedPriceForDetail.product_id}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Segment</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1D4ED8', marginTop: 2 }}>
+                          {seg?.segment_name || seg?.name || 'Global (All Segments)'}
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Manufacturer</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A', marginTop: 2 }}>
+                          {mfg}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div style={{ background: '#F0FDFA', padding: 12, borderRadius: 8, border: '1px solid #CCFBF1' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase' }}>Unit Price</div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: '#0F766E', marginTop: 2, fontFamily: 'monospace' }}>
+                          ₹{unitPrice.toFixed(2)} {selectedPriceForDetail.currency || 'INR'}
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Pricing Type</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', marginTop: 2 }}>
+                          {selectedPriceForDetail.price_type || 'TIERED'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Min Quantity</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
+                          {selectedPriceForDetail.minimum_quantity ?? 1}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Max Quantity</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
+                          {selectedPriceForDetail.maximum_quantity ? Number(selectedPriceForDetail.maximum_quantity) : 'Unlimited'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Effective From</div>
+                        <div style={{ fontSize: 12.5, color: '#0F172A' }}>
+                          {formatMasterDate(selectedPriceForDetail.effective_from)}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B' }}>Effective To</div>
+                        <div style={{ fontSize: 12.5, color: '#0F172A' }}>
+                          {formatMasterDate(selectedPriceForDetail.effective_to)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E2E8F0', paddingTop: 10, marginTop: 4, fontSize: 11, color: '#64748B' }}>
+                      <span>Status: <strong style={{ color: status === 'ACTIVE' ? '#15803D' : '#B91C1C' }}>{status}</strong></span>
+                      <span>Created: {formatMasterDate(selectedPriceForDetail.created_at)}</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #E2E8F0', background: '#F8FAFC', textAlign: 'right' }}>
+              <button
+                type="button"
+                onClick={() => setSelectedPriceForDetail(null)}
+                style={{ padding: '7px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', fontSize: 12.5, fontWeight: 600, color: '#475569', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Dialog ─────────────────────────────── */}
+      {deleteTarget && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15,23,42,0.45)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000,
+          padding: 16
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: 12,
+            border: '1px solid #CBD5E1',
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
+            width: '100%',
+            maxWidth: 420,
+            padding: 20,
+            textAlign: 'center'
+          }}>
+            <div style={{ width: 44, height: 44, borderRadius: 22, background: '#FEF2F2', border: '1px solid #FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#DC2626' }}>
+              <Trash2 size={22} />
+            </div>
+            <h3 style={{ margin: '0 0 6px 0', fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
+              Delete Price Rule #{deleteTarget.product_price_id || deleteTarget.id}?
+            </h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: 12.5, color: '#64748B' }}>
+              This will permanently delete this price rule from the PostgreSQL database. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', fontSize: 12.5, fontWeight: 600, color: '#475569', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeletePrice}
+                style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#DC2626', fontSize: 12.5, fontWeight: 700, color: '#FFFFFF', cursor: 'pointer' }}
+              >
+                Yes, Delete Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

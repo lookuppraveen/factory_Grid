@@ -26,7 +26,7 @@ export type ShipmentStatus =
   | 'CLOSED';
 
 export const ShipmentModule: React.FC<ShipmentModuleProps> = ({ onNavigateTab }) => {
-  const { currentRole, addAuditLog, manufacturers, invoices, addInvoice, recordInvoicePayment, updateInvoiceStatus, setActiveTab, orders } = useApp();
+  const { currentRole, addAuditLog, manufacturers, invoices, addInvoice, recordInvoicePayment, updateInvoiceStatus, setActiveTab, orders, sendInvoiceToCustomer } = useApp();
 
   const myMfg = (manufacturers && manufacturers[0]) || null;
   const myMfgName = myMfg?.companyName || myMfg?.name || 'SunBio LifeSciences Ltd.';

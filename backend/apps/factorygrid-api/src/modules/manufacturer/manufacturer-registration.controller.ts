@@ -49,7 +49,7 @@ import {
 } from './dto/gallery-and-achievements.dto';
 import { ManufacturerRegistrationService } from './manufacturer-registration.service';
 
-@ApiTags('Manufacturer Registration & Onboarding')
+@ApiTags('Manufacturer')
 @Controller(['manufacturer', 'manufacturers'])
 export class ManufacturerRegistrationController {
   constructor(private readonly service: ManufacturerRegistrationService) {}

@@ -83,6 +83,29 @@ export const CustomerModule: React.FC = () => {
   });
   const paginatedCustomers = customerPagination.paginateItems(filteredCustomers);
 
+  const totalPipelineValue = useMemo(() => {
+    return pipelineDeals.reduce((sum, d) => sum + (d.expectedRevenue || 0), 0);
+  }, []);
+
+  const wonValue = useMemo(() => {
+    return pipelineDeals
+      .filter(d => d.stage === 'LIVE_CUSTOMER' || d.stage === 'APPROVED_CUSTOMER')
+      .reduce((sum, d) => sum + (d.expectedRevenue || 0), 0);
+  }, []);
+
+  const funnelCounts = useMemo(() => {
+    return crmStages.map(stage => {
+      const deals = pipelineDeals.filter(d => d.stage === stage.id);
+      const count = deals.length;
+      const value = deals.reduce((sum, d) => sum + (d.expectedRevenue || 0), 0);
+      return {
+        ...stage,
+        count,
+        value
+      };
+    });
+  }, []);
+
   const pipelinePagination = usePagination({
     totalItems: pipelineDeals.length,
     initialPageSize: 10

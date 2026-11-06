@@ -18,7 +18,7 @@ import { AuthUser, CurrentUser, Roles } from '@factorygrid/auth';
 import { StorageService } from '../storage/storage.service';
 import { BrandVerificationService } from './brand-verification.service';
 
-@ApiTags('Admin Brand Verification')
+@ApiTags('Admin')
 @ApiBearerAuth()
 @Roles('ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
 @Controller('compliance/brand-verifications')

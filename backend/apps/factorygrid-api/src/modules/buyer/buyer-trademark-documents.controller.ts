@@ -21,7 +21,7 @@ import { StorageService } from '../storage/storage.service';
 import { BuyerTrademarkDocumentsService } from './buyer-trademark-documents.service';
 import { BuyerTrademarkDocumentDto } from './dto/brand-trademark-documents.dto';
 
-@ApiTags('Buyer Trademark Documents')
+@ApiTags('Buyer')
 @ApiBearerAuth()
 @Controller('buyer/trademark-documents')
 export class BuyerTrademarkDocumentsController {

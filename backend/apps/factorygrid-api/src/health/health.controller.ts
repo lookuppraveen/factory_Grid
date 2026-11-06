@@ -5,7 +5,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('Health')
-@Controller('health')
+@Controller(['health', 'actuator/health'])
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 

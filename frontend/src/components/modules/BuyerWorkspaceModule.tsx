@@ -4,7 +4,7 @@ import {
   FileText, Plus, Search, Filter, Calendar, Clock, CheckCircle2, AlertCircle,
   X, Building2, Package, Layers, Eye, Trash2,
   Upload, ShoppingBag, Receipt, Bot,
-  File, Tag, Activity, Star
+  File, Tag, Activity, Star, ShieldCheck
 } from 'lucide-react';
 import { RFQ, RFQLine, MasterOrder } from '../../types';
 import { Badge } from '../common/Badge';

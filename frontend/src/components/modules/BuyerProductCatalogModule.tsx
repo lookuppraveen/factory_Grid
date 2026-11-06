@@ -232,12 +232,20 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
     const map: Record<string, Array<{ mapping: ManufacturerProductMapping; manufacturer: Manufacturer }>> = {};
 
     (mappings || []).forEach(m => {
-      const mfg = (manufacturers || []).find(man => man.id === m.manufacturerId);
-      if (mfg) {
-        if (!map[m.productId]) {
-          map[m.productId] = [];
+      const targetMid = m.manufacturer_id || m.manufacturerId;
+      const targetPid = m.product_id || m.productId;
+      const mfg = (manufacturers || []).find(man =>
+        man.id === targetMid ||
+        man.manufacturer_id === targetMid ||
+        man.code === targetMid ||
+        man.manufacturer_code === targetMid ||
+        (m.manufacturerName && (man.companyName === m.manufacturerName || man.name === m.manufacturerName))
+      );
+      if (mfg && targetPid) {
+        if (!map[targetPid]) {
+          map[targetPid] = [];
         }
-        map[m.productId].push({ mapping: m, manufacturer: mfg });
+        map[targetPid].push({ mapping: m, manufacturer: mfg });
       }
     });
 
@@ -247,7 +255,7 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
   // Mappings for the currently selected product in Drawer
   const selectedProductMappings = useMemo(() => {
     if (!selectedProduct) return [];
-    return productMappingsMap[selectedProduct.id] || [];
+    return productMappingsMap[selectedProduct.id] || (selectedProduct.code ? productMappingsMap[selectedProduct.code] : []) || [];
   }, [selectedProduct, productMappingsMap]);
 
   // Navigate to RFQ creation with product pre-selected

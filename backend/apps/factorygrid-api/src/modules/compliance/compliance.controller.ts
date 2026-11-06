@@ -19,7 +19,7 @@ import {
 } from '../buyer/dto/verification.dto';
 import { ComplianceService } from './compliance.service';
 
-@ApiTags('Compliance & Customer Verification')
+@ApiTags('Admin')
 @ApiBearerAuth()
 @Roles('ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER')
 @Controller('compliance/customer-verifications')
@@ -137,7 +137,7 @@ export class ComplianceController {
   }
 }
 
-@ApiTags('Compliance Documents')
+@ApiTags('Admin')
 @ApiBearerAuth()
 @Roles('ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_ADMIN', 'ROLE_COMPLIANCE_OFFICER', 'BUYER', 'ROLE_BUYER')
 @Controller('compliance/documents')

@@ -8,6 +8,8 @@ import {
   MaxLength,
   IsIn,
   IsObject,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
 import { PageableQueryDto } from '../../../common/pagination/pageable.dto';
 
@@ -122,11 +124,11 @@ export class CreateCatalogProductDto {
   @MaxLength(100)
   packSize!: string;
 
-  @ApiProperty({ example: 'Strip', description: 'Pack packaging unit of measurement' })
+  @ApiPropertyOptional({ example: 'Strip', description: 'Pack packaging unit of measurement' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(50)
-  packUom!: string;
+  packUom?: string;
 
   @ApiPropertyOptional({ example: 'ACTIVE', enum: VALID_LIFECYCLE_STATUSES, description: 'Product lifecycle status' })
   @IsOptional()
@@ -398,3 +400,83 @@ export class ProductQueryDto extends PageableQueryDto {
   @IsString()
   dosageForm?: string;
 }
+
+export class ProductBulkUploadItemDto {
+  @ApiPropertyOptional({ description: 'Row index for error reporting' })
+  @IsOptional()
+  row?: number;
+
+  @ApiPropertyOptional({ description: 'Product Code / SKU', example: 'PRD-AMX-500' })
+  @IsOptional()
+  @IsString()
+  productCode?: string;
+
+  @ApiPropertyOptional({ description: 'Product Name', example: 'Amoxicillin 500mg' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ description: 'Category Name or ID', example: 'Drugs' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ description: 'Sub-Category', example: 'Tablets' })
+  @IsOptional()
+  @IsString()
+  subCategory?: string;
+
+  @ApiPropertyOptional({ description: 'Sub-Sub-Category', example: 'Film Coated Tablets' })
+  @IsOptional()
+  @IsString()
+  subSubCategory?: string;
+
+  @ApiPropertyOptional({ description: 'Product Type ID or Code', example: 'pt_med' })
+  @IsOptional()
+  @IsString()
+  productTypeId?: string;
+
+  @ApiPropertyOptional({ description: 'Generic Name / Molecule', example: 'Amoxicillin Trihydrate' })
+  @IsOptional()
+  @IsString()
+  genericName?: string;
+
+  @ApiPropertyOptional({ description: 'Strength', example: '500mg' })
+  @IsOptional()
+  @IsString()
+  strength?: string;
+
+  @ApiPropertyOptional({ description: 'Dosage Form', example: 'Capsule' })
+  @IsOptional()
+  @IsString()
+  dosageForm?: string;
+
+  @ApiPropertyOptional({ description: 'Pack Size', example: '10 x 10 Strip' })
+  @IsOptional()
+  @IsString()
+  packSize?: string;
+
+  @ApiPropertyOptional({ description: 'Base UOM', example: 'Unit' })
+  @IsOptional()
+  @IsString()
+  baseUom?: string;
+
+  @ApiPropertyOptional({ description: 'Brand Name or ID' })
+  @IsOptional()
+  @IsString()
+  brand?: string;
+
+  @ApiPropertyOptional({ description: 'Product Description' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+export class ProductBulkUploadDto {
+  @ApiProperty({ description: 'List of product rows to upload and validate', type: [ProductBulkUploadItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductBulkUploadItemDto)
+  rows!: ProductBulkUploadItemDto[];
+}
+

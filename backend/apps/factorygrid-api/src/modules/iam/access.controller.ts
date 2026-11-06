@@ -13,7 +13,7 @@ import {
 
 const authorities = (user: AuthUser) => user.roles.map((authority) => ({ authority }));
 
-@ApiTags('Admin Governance')
+@ApiTags('Admin')
 @ApiBearerAuth()
 @Controller('admin')
 export class AdminController {
@@ -30,7 +30,7 @@ export class AdminController {
 }
 
 /** Role-isolation checks for the buyer portal, kept from the Java service. */
-@ApiTags('Buyer Access Isolation')
+@ApiTags('Buyer')
 @ApiBearerAuth()
 @Roles('BUYER')
 @Controller('buyer')
@@ -60,7 +60,7 @@ export class BuyerAccessController {
 
 
 /** Role-isolation checks for the manufacturer portal, kept from the Java service. */
-@ApiTags('Manufacturer Access Isolation')
+@ApiTags('Manufacturer')
 @ApiBearerAuth()
 @Roles('SUPPLIER', 'MANUFACTURER')
 @Controller('manufacturer')

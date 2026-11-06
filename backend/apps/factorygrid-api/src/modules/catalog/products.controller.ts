@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { Public, Roles } from '@factorygrid/auth';
 import { CatalogService } from './catalog.service';
+import { CreateProductTaxDto, CreateProductUomDto } from './dto/pricing-tax-uom.dto';
 import {
   BulkProductAttributesDto,
   CreateProductPriceDto,
@@ -27,11 +28,12 @@ import {
 } from './dto/attribute-master.dto';
 import {
   CreateCatalogProductDto,
+  ProductBulkUploadDto,
   ProductQueryDto,
   UpdateCatalogProductDto,
 } from './dto/catalog-product.dto';
 
-@ApiTags('Products (Catalogue & Procurement)')
+@ApiTags('Product Catalog & Master Data')
 @Controller('products')
 export class ProductsController {
   constructor(private readonly service: CatalogService) {}
@@ -79,6 +81,15 @@ export class ProductsController {
   createProduct(@Body() dto: CreateCatalogProductDto) {
     return this.service.createProduct(dto);
   }
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post('bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Admin: Bulk upload products into central catalog' })
+  bulkUploadProducts(@Body() dto: ProductBulkUploadDto) {
+    return this.service.bulkUploadProducts(dto);
+  }
+
 
   @Roles('ADMIN', 'ROLE_ADMIN')
   @ApiBearerAuth()
@@ -170,5 +181,55 @@ export class ProductsController {
     @Body() dto: MapProductManufacturerDto,
   ) {
     return this.service.mapProductManufacturer(id, dto);
+  }
+
+  // -------------------------------------------------------------------
+  // PRODUCT TAXES
+  // -------------------------------------------------------------------
+
+  @Public()
+  @Get(':id/taxes')
+  @ApiOperation({ summary: 'Get tax list for product' })
+  @ApiParam({ name: 'id', description: 'Product ID or Product Code' })
+  getProductTaxes(@Param('id') id: string) {
+    return this.service.listProductTaxes(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post(':id/taxes')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add product tax definition' })
+  @ApiParam({ name: 'id', description: 'Product ID or Product Code' })
+  createProductTax(
+    @Param('id') id: string,
+    @Body() dto: CreateProductTaxDto,
+  ) {
+    return this.service.createProductTax({ ...dto, productId: id });
+  }
+
+  // -------------------------------------------------------------------
+  // PRODUCT UOMS
+  // -------------------------------------------------------------------
+
+  @Public()
+  @Get(':id/uoms')
+  @ApiOperation({ summary: 'Get UOM list for product' })
+  @ApiParam({ name: 'id', description: 'Product ID or Product Code' })
+  getProductUoms(@Param('id') id: string) {
+    return this.service.listProductUoms(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post(':id/uoms')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add product UOM definition' })
+  @ApiParam({ name: 'id', description: 'Product ID or Product Code' })
+  createProductUom(
+    @Param('id') id: string,
+    @Body() dto: CreateProductUomDto,
+  ) {
+    return this.service.createProductUom({ ...dto, productId: id });
   }
 }

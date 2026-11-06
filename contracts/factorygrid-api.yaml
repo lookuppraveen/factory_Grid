@@ -38,7 +38,7 @@ paths:
           description: Invalid GSTIN, PAN, or required fields
       summary: 'Step 1: Save Company & Regulatory Information'
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/registration/step-2:
     post:
       description: Saves primary contact person, designation, mobile number, and email address.
@@ -67,7 +67,7 @@ paths:
           description: Missing required contact fields
       summary: 'Step 2: Save Contact Information'
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/registration/step-3:
     post:
       description: >-
@@ -98,7 +98,7 @@ paths:
           description: Missing required address fields
       summary: 'Step 3: Save Business Details, Addresses & Customer-Type Specifics'
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/documents/upload:
     post:
       description: >-
@@ -149,7 +149,7 @@ paths:
           description: File missing, oversized, or invalid category
       summary: 'Step 4 & Document Re-upload: Upload Mandatory Regulatory Document'
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/documents:
     get:
       operationId: BuyerRegistrationController_getDocuments
@@ -179,7 +179,7 @@ paths:
         - bearer: []
       summary: List all regulatory documents for a registration
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/documents/download/{path}:
     get:
       operationId: BuyerRegistrationController_downloadDocument
@@ -195,7 +195,7 @@ paths:
         - bearer: []
       summary: Download a regulatory document from private storage
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/documents/{id}/download:
     get:
       operationId: BuyerRegistrationController_downloadDocumentById
@@ -212,7 +212,7 @@ paths:
         - bearer: []
       summary: Download or stream an uploaded buyer regulatory document by ID
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/registration/submit:
     post:
       description: >-
@@ -241,7 +241,7 @@ paths:
           description: Already submitted, or an account with this email/username exists
       summary: 'Step 5: Review & Submit Complete Buyer Registration'
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/my-registration:
     get:
       operationId: BuyerRegistrationController_getMyRegistration
@@ -253,7 +253,7 @@ paths:
         - bearer: []
       summary: Get current authenticated buyer registration, documents, and verification status
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/profile:
     get:
       operationId: BuyerRegistrationController_getBuyerProfile
@@ -265,7 +265,7 @@ paths:
         - bearer: []
       summary: Get authenticated buyer profile, registration, and compliance status
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/registration/{code}:
     get:
       operationId: BuyerRegistrationController_getRegistration
@@ -289,7 +289,7 @@ paths:
         - bearer: []
       summary: Get buyer registration details by code or email
       tags:
-        - Buyer Onboarding & Registration
+        - Buyer
   /api/v1/buyer/brand-documents:
     get:
       operationId: BuyerBrandDocumentsController_listMyDocuments
@@ -307,7 +307,7 @@ paths:
         - bearer: []
       summary: List authenticated buyer brand documents
       tags:
-        - Buyer Brand Documents
+        - Buyer
     post:
       operationId: BuyerBrandDocumentsController_uploadDocument
       parameters: []
@@ -322,7 +322,7 @@ paths:
         - bearer: []
       summary: Upload a new brand document
       tags:
-        - Buyer Brand Documents
+        - Buyer
   /api/v1/buyer/brand-documents/{id}:
     put:
       operationId: BuyerBrandDocumentsController_updateDocument
@@ -343,7 +343,7 @@ paths:
         - bearer: []
       summary: Update or re-upload a brand document
       tags:
-        - Buyer Brand Documents
+        - Buyer
   /api/v1/buyer/brand-documents/{id}/download:
     get:
       operationId: BuyerBrandDocumentsController_downloadDocument
@@ -360,7 +360,7 @@ paths:
         - bearer: []
       summary: Download / view authorized brand document
       tags:
-        - Buyer Brand Documents
+        - Buyer
   /api/v1/buyer/trademark-documents:
     get:
       operationId: BuyerTrademarkDocumentsController_listMyDocuments
@@ -378,7 +378,7 @@ paths:
         - bearer: []
       summary: List authenticated buyer trademark documents
       tags:
-        - Buyer Trademark Documents
+        - Buyer
     post:
       operationId: BuyerTrademarkDocumentsController_uploadDocument
       parameters: []
@@ -393,7 +393,7 @@ paths:
         - bearer: []
       summary: Upload a new trademark document
       tags:
-        - Buyer Trademark Documents
+        - Buyer
   /api/v1/buyer/trademark-documents/{id}:
     put:
       operationId: BuyerTrademarkDocumentsController_updateDocument
@@ -414,7 +414,7 @@ paths:
         - bearer: []
       summary: Update or re-upload a trademark document
       tags:
-        - Buyer Trademark Documents
+        - Buyer
   /api/v1/buyer/trademark-documents/{id}/download:
     get:
       operationId: BuyerTrademarkDocumentsController_downloadDocument
@@ -431,7 +431,7 @@ paths:
         - bearer: []
       summary: Download / view authorized trademark document
       tags:
-        - Buyer Trademark Documents
+        - Buyer
   /api/v1/manufacturer/catalog:
     get:
       operationId: ManufacturerRegistrationController_listCatalog[0]
@@ -447,7 +447,7 @@ paths:
           description: ''
       summary: List master product catalogue for manufacturer capabilities
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/catalog:
     get:
       operationId: ManufacturerRegistrationController_listCatalog[1]
@@ -463,7 +463,7 @@ paths:
           description: ''
       summary: List master product catalogue for manufacturer capabilities
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/categories:
     get:
       operationId: ManufacturerRegistrationController_listCategories[0]
@@ -473,7 +473,7 @@ paths:
           description: ''
       summary: List Category -> Sub-Category -> Sub-Sub-Category hierarchy for manufacturer onboarding
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/categories:
     get:
       operationId: ManufacturerRegistrationController_listCategories[1]
@@ -483,7 +483,7 @@ paths:
           description: ''
       summary: List Category -> Sub-Category -> Sub-Sub-Category hierarchy for manufacturer onboarding
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/registration/step-1:
     post:
       operationId: ManufacturerRegistrationController_saveStep1[0]
@@ -509,7 +509,7 @@ paths:
                 $ref: '#/components/schemas/ManufacturerStepResponseDto'
       summary: 'Step 1: Save Company & Plant Information'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/registration/step-1:
     post:
       operationId: ManufacturerRegistrationController_saveStep1[1]
@@ -535,7 +535,7 @@ paths:
                 $ref: '#/components/schemas/ManufacturerStepResponseDto'
       summary: 'Step 1: Save Company & Plant Information'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/documents/upload:
     post:
       description: >-
@@ -597,7 +597,7 @@ paths:
           description: ''
       summary: 'Step 2 & Document Re-upload: Upload Mandatory Certification Document'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/documents/upload:
     post:
       description: >-
@@ -659,7 +659,7 @@ paths:
           description: ''
       summary: 'Step 2 & Document Re-upload: Upload Mandatory Certification Document'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/documents/{id}:
     delete:
       operationId: ManufacturerRegistrationController_removeDocument[0]
@@ -677,7 +677,7 @@ paths:
         - bearer: []
       summary: Remove an uploaded document before submission
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/documents/{id}:
     delete:
       operationId: ManufacturerRegistrationController_removeDocument[1]
@@ -695,7 +695,7 @@ paths:
         - bearer: []
       summary: Remove an uploaded document before submission
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/registration/step-2:
     post:
       operationId: ManufacturerRegistrationController_saveStep2[0]
@@ -720,7 +720,7 @@ paths:
                 $ref: '#/components/schemas/ManufacturerStepResponseDto'
       summary: 'Step 2: Save Certification Expiry and Issue Dates'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/registration/step-2:
     post:
       operationId: ManufacturerRegistrationController_saveStep2[1]
@@ -745,7 +745,7 @@ paths:
                 $ref: '#/components/schemas/ManufacturerStepResponseDto'
       summary: 'Step 2: Save Certification Expiry and Issue Dates'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/registration/step-3:
     post:
       operationId: ManufacturerRegistrationController_saveStep3[0]
@@ -770,7 +770,7 @@ paths:
                 $ref: '#/components/schemas/ManufacturerStepResponseDto'
       summary: 'Step 3: Save Product Manufacturing Capabilities'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/registration/step-3:
     post:
       operationId: ManufacturerRegistrationController_saveStep3[1]
@@ -795,7 +795,7 @@ paths:
                 $ref: '#/components/schemas/ManufacturerStepResponseDto'
       summary: 'Step 3: Save Product Manufacturing Capabilities'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/registration/step-4:
     post:
       operationId: ManufacturerRegistrationController_saveStep4[0]
@@ -820,7 +820,7 @@ paths:
                 $ref: '#/components/schemas/ManufacturerStepResponseDto'
       summary: 'Step 4: Save MOQ and Delivery Schedule'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/registration/step-4:
     post:
       operationId: ManufacturerRegistrationController_saveStep4[1]
@@ -845,7 +845,7 @@ paths:
                 $ref: '#/components/schemas/ManufacturerStepResponseDto'
       summary: 'Step 4: Save MOQ and Delivery Schedule'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/registration/submit:
     post:
       operationId: ManufacturerRegistrationController_submit[0]
@@ -861,7 +861,7 @@ paths:
           description: ''
       summary: 'Step 5: Review & Submit Complete Manufacturer Registration'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/registration/submit:
     post:
       operationId: ManufacturerRegistrationController_submit[1]
@@ -877,7 +877,7 @@ paths:
           description: ''
       summary: 'Step 5: Review & Submit Complete Manufacturer Registration'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/my-registration:
     get:
       operationId: ManufacturerRegistrationController_getMyRegistration[0]
@@ -889,7 +889,7 @@ paths:
         - bearer: []
       summary: Get current authenticated manufacturer registration details, documents, and status
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/my-registration:
     get:
       operationId: ManufacturerRegistrationController_getMyRegistration[1]
@@ -901,7 +901,7 @@ paths:
         - bearer: []
       summary: Get current authenticated manufacturer registration details, documents, and status
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/me/documents:
     get:
       operationId: ManufacturerRegistrationController_getMyDocuments[0]
@@ -913,7 +913,7 @@ paths:
         - bearer: []
       summary: Get current authenticated manufacturer uploaded certification documents
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     post:
       operationId: ManufacturerRegistrationController_uploadMyDocument[0]
       parameters:
@@ -949,7 +949,7 @@ paths:
         - bearer: []
       summary: Upload a new certification document for the authenticated manufacturer
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/me/documents:
     get:
       operationId: ManufacturerRegistrationController_getMyDocuments[1]
@@ -961,7 +961,7 @@ paths:
         - bearer: []
       summary: Get current authenticated manufacturer uploaded certification documents
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     post:
       operationId: ManufacturerRegistrationController_uploadMyDocument[1]
       parameters:
@@ -997,7 +997,7 @@ paths:
         - bearer: []
       summary: Upload a new certification document for the authenticated manufacturer
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/me/documents/{id}:
     put:
       operationId: ManufacturerRegistrationController_replaceMyDocument[0]
@@ -1029,7 +1029,7 @@ paths:
         - bearer: []
       summary: Replace an existing certification document for the authenticated manufacturer
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/me/documents/{id}:
     put:
       operationId: ManufacturerRegistrationController_replaceMyDocument[1]
@@ -1061,7 +1061,7 @@ paths:
         - bearer: []
       summary: Replace an existing certification document for the authenticated manufacturer
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/me/documents/{id}/download:
     get:
       operationId: ManufacturerRegistrationController_downloadMyDocument[0]
@@ -1078,7 +1078,7 @@ paths:
         - bearer: []
       summary: Download or stream an authenticated manufacturer certification document
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/me/documents/{id}/download:
     get:
       operationId: ManufacturerRegistrationController_downloadMyDocument[1]
@@ -1095,7 +1095,7 @@ paths:
         - bearer: []
       summary: Download or stream an authenticated manufacturer certification document
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/registration/{code}:
     get:
       operationId: ManufacturerRegistrationController_getRegistration[0]
@@ -1113,7 +1113,7 @@ paths:
         - bearer: []
       summary: Get manufacturer registration by registration code
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/registration/{code}:
     get:
       operationId: ManufacturerRegistrationController_getRegistration[1]
@@ -1131,7 +1131,7 @@ paths:
         - bearer: []
       summary: Get manufacturer registration by registration code
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/documents:
     get:
       operationId: ManufacturerRegistrationController_getDocuments[0]
@@ -1149,7 +1149,7 @@ paths:
         - bearer: []
       summary: List certifications for a registration
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/documents:
     get:
       operationId: ManufacturerRegistrationController_getDocuments[1]
@@ -1167,7 +1167,7 @@ paths:
         - bearer: []
       summary: List certifications for a registration
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/documents/{id}/download:
     get:
       operationId: ManufacturerRegistrationController_downloadDocument[0]
@@ -1191,7 +1191,7 @@ paths:
         - bearer: []
       summary: Download or view a manufacturer certification document
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/documents/{id}/download:
     get:
       operationId: ManufacturerRegistrationController_downloadDocument[1]
@@ -1215,7 +1215,7 @@ paths:
         - bearer: []
       summary: Download or view a manufacturer certification document
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/review/verifications:
     get:
       operationId: ManufacturerRegistrationController_listForReview[0]
@@ -1237,7 +1237,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: List submitted manufacturer registrations for review'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/review/verifications:
     get:
       operationId: ManufacturerRegistrationController_listForReview[1]
@@ -1259,7 +1259,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: List submitted manufacturer registrations for review'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/review/verifications/{code}:
     get:
       operationId: ManufacturerRegistrationController_getForReview[0]
@@ -1277,7 +1277,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Get single manufacturer registration with documents for audit'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/review/verifications/{code}:
     get:
       operationId: ManufacturerRegistrationController_getForReview[1]
@@ -1295,7 +1295,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Get single manufacturer registration with documents for audit'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/review/verifications/{code}/documents/{docId}/review:
     post:
       operationId: ManufacturerRegistrationController_reviewDocument[0]
@@ -1325,7 +1325,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Approve, reject, or request replacement for a manufacturer certification'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/review/verifications/{code}/documents/{docId}/review:
     post:
       operationId: ManufacturerRegistrationController_reviewDocument[1]
@@ -1355,7 +1355,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Approve, reject, or request replacement for a manufacturer certification'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/review/verifications/{code}/approve:
     post:
       operationId: ManufacturerRegistrationController_approve[0]
@@ -1373,7 +1373,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Final approve manufacturer registration and activate account'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/review/verifications/{code}/approve:
     post:
       operationId: ManufacturerRegistrationController_approve[1]
@@ -1391,7 +1391,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Final approve manufacturer registration and activate account'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/review/verifications/{code}/reject:
     post:
       operationId: ManufacturerRegistrationController_reject[0]
@@ -1409,7 +1409,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Reject manufacturer registration with reason'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/review/verifications/{code}/reject:
     post:
       operationId: ManufacturerRegistrationController_reject[1]
@@ -1427,7 +1427,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Reject manufacturer registration with reason'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/review/verifications/{code}/request-docs:
     post:
       operationId: ManufacturerRegistrationController_requestDocs[0]
@@ -1445,7 +1445,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Request replacement/additional certifications with notes'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/review/verifications/{code}/request-docs:
     post:
       operationId: ManufacturerRegistrationController_requestDocs[1]
@@ -1463,7 +1463,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Request replacement/additional certifications with notes'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/gallery:
     get:
       operationId: ManufacturerRegistrationController_listGallery[0]
@@ -1487,7 +1487,7 @@ paths:
         - bearer: []
       summary: List factory gallery entries for a manufacturer
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/gallery:
     get:
       operationId: ManufacturerRegistrationController_listGallery[1]
@@ -1511,7 +1511,7 @@ paths:
         - bearer: []
       summary: List factory gallery entries for a manufacturer
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/gallery/upload:
     post:
       description: >-
@@ -1580,7 +1580,7 @@ paths:
         - bearer: []
       summary: Upload a factory photo to the gallery
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/gallery/upload:
     post:
       description: >-
@@ -1649,7 +1649,7 @@ paths:
         - bearer: []
       summary: Upload a factory photo to the gallery
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/gallery/{id}/image:
     get:
       operationId: ManufacturerRegistrationController_getGalleryImage[0]
@@ -1665,7 +1665,7 @@ paths:
           description: ''
       summary: Stream factory gallery photo
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/gallery/{id}/image:
     get:
       operationId: ManufacturerRegistrationController_getGalleryImage[1]
@@ -1681,7 +1681,7 @@ paths:
           description: ''
       summary: Stream factory gallery photo
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/gallery/{id}:
     patch:
       operationId: ManufacturerRegistrationController_updateGalleryEntry[0]
@@ -1709,7 +1709,7 @@ paths:
         - bearer: []
       summary: Update factory gallery photo metadata
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     delete:
       operationId: ManufacturerRegistrationController_deleteGalleryEntry[0]
       parameters:
@@ -1726,7 +1726,7 @@ paths:
         - bearer: []
       summary: Delete a factory gallery entry
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/gallery/{id}:
     patch:
       operationId: ManufacturerRegistrationController_updateGalleryEntry[1]
@@ -1754,7 +1754,7 @@ paths:
         - bearer: []
       summary: Update factory gallery photo metadata
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     delete:
       operationId: ManufacturerRegistrationController_deleteGalleryEntry[1]
       parameters:
@@ -1771,7 +1771,7 @@ paths:
         - bearer: []
       summary: Delete a factory gallery entry
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/achievements:
     get:
       operationId: ManufacturerRegistrationController_listAchievements[0]
@@ -1795,7 +1795,7 @@ paths:
         - bearer: []
       summary: List achievements and awards for a manufacturer
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     post:
       operationId: ManufacturerRegistrationController_createAchievement[0]
       parameters: []
@@ -1816,7 +1816,7 @@ paths:
         - bearer: []
       summary: Create an achievement or award record
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/achievements:
     get:
       operationId: ManufacturerRegistrationController_listAchievements[1]
@@ -1840,7 +1840,7 @@ paths:
         - bearer: []
       summary: List achievements and awards for a manufacturer
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     post:
       operationId: ManufacturerRegistrationController_createAchievement[1]
       parameters: []
@@ -1861,7 +1861,7 @@ paths:
         - bearer: []
       summary: Create an achievement or award record
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/achievements/{id}:
     patch:
       operationId: ManufacturerRegistrationController_updateAchievement[0]
@@ -1889,7 +1889,7 @@ paths:
         - bearer: []
       summary: Update an achievement or award record
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     delete:
       operationId: ManufacturerRegistrationController_deleteAchievement[0]
       parameters:
@@ -1906,7 +1906,7 @@ paths:
         - bearer: []
       summary: Delete an achievement or award
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/achievements/{id}:
     patch:
       operationId: ManufacturerRegistrationController_updateAchievement[1]
@@ -1934,7 +1934,7 @@ paths:
         - bearer: []
       summary: Update an achievement or award record
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     delete:
       operationId: ManufacturerRegistrationController_deleteAchievement[1]
       parameters:
@@ -1951,7 +1951,7 @@ paths:
         - bearer: []
       summary: Delete an achievement or award
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/achievements/{id}/certificate:
     post:
       operationId: ManufacturerRegistrationController_uploadAchievementCertificate[0]
@@ -1973,7 +1973,7 @@ paths:
         - bearer: []
       summary: Upload or replace supporting document/certificate for an achievement
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     get:
       operationId: ManufacturerRegistrationController_getAchievementCertificate[0]
       parameters:
@@ -1988,7 +1988,7 @@ paths:
           description: ''
       summary: Download or view achievement supporting certificate
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/achievements/{id}/certificate:
     post:
       operationId: ManufacturerRegistrationController_uploadAchievementCertificate[1]
@@ -2010,7 +2010,7 @@ paths:
         - bearer: []
       summary: Upload or replace supporting document/certificate for an achievement
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
     get:
       operationId: ManufacturerRegistrationController_getAchievementCertificate[1]
       parameters:
@@ -2025,7 +2025,7 @@ paths:
           description: ''
       summary: Download or view achievement supporting certificate
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/review/verifications/{code}/gallery/{id}/review:
     post:
       operationId: ManufacturerRegistrationController_reviewGalleryEntry[0]
@@ -2059,7 +2059,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Verify or reject a manufacturer factory gallery entry'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/review/verifications/{code}/gallery/{id}/review:
     post:
       operationId: ManufacturerRegistrationController_reviewGalleryEntry[1]
@@ -2093,7 +2093,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Verify or reject a manufacturer factory gallery entry'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/review/verifications/{code}/achievements/{id}/review:
     post:
       operationId: ManufacturerRegistrationController_reviewAchievement[0]
@@ -2127,7 +2127,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Verify or reject a manufacturer achievement or award'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturers/review/verifications/{code}/achievements/{id}/review:
     post:
       operationId: ManufacturerRegistrationController_reviewAchievement[1]
@@ -2161,7 +2161,7 @@ paths:
         - bearer: []
       summary: 'Admin/Compliance: Verify or reject a manufacturer achievement or award'
       tags:
-        - Manufacturer Registration & Onboarding
+        - Manufacturer
   /api/v1/manufacturer/products/summary:
     get:
       operationId: ManufacturerProductController_getSummary
@@ -2173,7 +2173,7 @@ paths:
         - bearer: []
       summary: Get summary statistics of mapped products for authenticated manufacturer
       tags:
-        - Manufacturer Product Catalog
+        - Manufacturer
   /api/v1/manufacturer/products:
     get:
       operationId: ManufacturerProductController_listMappedProducts
@@ -2232,7 +2232,7 @@ paths:
         - bearer: []
       summary: List products mapped exclusively to authenticated manufacturer facility
       tags:
-        - Manufacturer Product Catalog
+        - Manufacturer
     post:
       operationId: ManufacturerProductController_createMapping
       parameters: []
@@ -2249,7 +2249,7 @@ paths:
         - bearer: []
       summary: Add product mapping from master catalogue to manufacturer facility
       tags:
-        - Manufacturer Product Catalog
+        - Manufacturer
   /api/v1/manufacturer/products/{id}:
     get:
       operationId: ManufacturerProductController_getMappingById
@@ -2267,7 +2267,7 @@ paths:
         - bearer: []
       summary: Get single product mapping details by mapping ID
       tags:
-        - Manufacturer Product Catalog
+        - Manufacturer
     put:
       operationId: ManufacturerProductController_updateMapping
       parameters:
@@ -2290,7 +2290,7 @@ paths:
         - bearer: []
       summary: Update manufacturer-specific details of a mapped product
       tags:
-        - Manufacturer Product Catalog
+        - Manufacturer
     delete:
       operationId: ManufacturerProductController_deleteMapping
       parameters:
@@ -2307,7 +2307,7 @@ paths:
         - bearer: []
       summary: Remove product mapping from facility
       tags:
-        - Manufacturer Product Catalog
+        - Manufacturer
   /api/v1/manufacturer/products/{id}/status:
     patch:
       operationId: ManufacturerProductController_updateStatus
@@ -2331,7 +2331,7 @@ paths:
         - bearer: []
       summary: Activate or deactivate product mapping
       tags:
-        - Manufacturer Product Catalog
+        - Manufacturer
   /api/v1/admin/manufacturers/{manufacturerId}/documents:
     get:
       operationId: AdminManufacturerController_getDocuments[0]
@@ -2349,7 +2349,7 @@ paths:
         - bearer: []
       summary: 'Admin: List all uploaded certification documents for a manufacturer'
       tags:
-        - Admin Manufacturer Document Verification
+        - Admin
   /api/v1/admin/manufacturer/{manufacturerId}/documents:
     get:
       operationId: AdminManufacturerController_getDocuments[1]
@@ -2367,7 +2367,7 @@ paths:
         - bearer: []
       summary: 'Admin: List all uploaded certification documents for a manufacturer'
       tags:
-        - Admin Manufacturer Document Verification
+        - Admin
   /api/v1/admin/manufacturers/{manufacturerId}/documents/{documentId}/download:
     get:
       operationId: AdminManufacturerController_downloadDocument[0]
@@ -2391,7 +2391,7 @@ paths:
         - bearer: []
       summary: 'Admin: Download or stream a manufacturer certification document'
       tags:
-        - Admin Manufacturer Document Verification
+        - Admin
   /api/v1/admin/manufacturer/{manufacturerId}/documents/{documentId}/download:
     get:
       operationId: AdminManufacturerController_downloadDocument[1]
@@ -2415,7 +2415,7 @@ paths:
         - bearer: []
       summary: 'Admin: Download or stream a manufacturer certification document'
       tags:
-        - Admin Manufacturer Document Verification
+        - Admin
   /api/v1/admin/manufacturers/{manufacturerId}/documents/{documentId}/verification:
     patch:
       operationId: AdminManufacturerController_verifyDocument[0]
@@ -2445,7 +2445,7 @@ paths:
         - bearer: []
       summary: 'Admin: Verify, approve, reject or request replacement for a manufacturer certification document'
       tags:
-        - Admin Manufacturer Document Verification
+        - Admin
   /api/v1/admin/manufacturer/{manufacturerId}/documents/{documentId}/verification:
     patch:
       operationId: AdminManufacturerController_verifyDocument[1]
@@ -2475,7 +2475,7 @@ paths:
         - bearer: []
       summary: 'Admin: Verify, approve, reject or request replacement for a manufacturer certification document'
       tags:
-        - Admin Manufacturer Document Verification
+        - Admin
   /api/v1/compliance/customer-verifications:
     get:
       description: Retrieves onboarding buyer verification cases with filters for status and search query.
@@ -2506,7 +2506,7 @@ paths:
         - bearer: []
       summary: List all customer verification requests
       tags:
-        - Compliance & Customer Verification
+        - Admin
   /api/v1/compliance/customer-verifications/{id}:
     get:
       operationId: ComplianceController_getVerification
@@ -2528,7 +2528,7 @@ paths:
         - bearer: []
       summary: Get details of a specific customer verification case
       tags:
-        - Compliance & Customer Verification
+        - Admin
   /api/v1/compliance/customer-verifications/{id}/assign:
     post:
       operationId: ComplianceController_assignOfficer
@@ -2550,7 +2550,7 @@ paths:
         - bearer: []
       summary: Assign a compliance officer to a verification case
       tags:
-        - Compliance & Customer Verification
+        - Admin
   /api/v1/compliance/customer-verifications/{id}/approve:
     post:
       description: Generates official customer code (CUS000...), marks case as Active, and activates portal buyer user account.
@@ -2579,7 +2579,7 @@ paths:
         - bearer: []
       summary: Approve customer verification case
       tags:
-        - Compliance & Customer Verification
+        - Admin
   /api/v1/compliance/customer-verifications/{id}/reject:
     post:
       operationId: ComplianceController_rejectVerification
@@ -2607,7 +2607,7 @@ paths:
         - bearer: []
       summary: Reject customer verification case with reason
       tags:
-        - Compliance & Customer Verification
+        - Admin
   /api/v1/compliance/customer-verifications/{id}/request-docs:
     post:
       operationId: ComplianceController_requestMoreDocs
@@ -2635,7 +2635,7 @@ paths:
         - bearer: []
       summary: Request additional regulatory documents from customer
       tags:
-        - Compliance & Customer Verification
+        - Admin
   /api/v1/compliance/customer-verifications/{id}/documents/{docId}/review:
     post:
       description: Allows Admin/Compliance Officer to approve, reject, or request replacement for a specific document with reason.
@@ -2666,7 +2666,7 @@ paths:
         - bearer: []
       summary: Review an individual uploaded regulatory document
       tags:
-        - Compliance & Customer Verification
+        - Admin
   /api/v1/compliance/customer-verifications/{id}/documents/{docId}/download:
     get:
       operationId: ComplianceController_downloadCaseDocument
@@ -2683,7 +2683,7 @@ paths:
         - bearer: []
       summary: Stream an uploaded buyer document within a customer verification case
       tags:
-        - Compliance & Customer Verification
+        - Admin
   /api/v1/compliance/customer-verifications/{id}/classification:
     post:
       operationId: ComplianceController_updateClassification
@@ -2711,7 +2711,7 @@ paths:
         - bearer: []
       summary: Update customer classification (REGULAR or SPECIAL_PARTY)
       tags:
-        - Compliance & Customer Verification
+        - Admin
   /api/v1/compliance/documents/{id}/download:
     get:
       operationId: ComplianceDocumentController_downloadDocument
@@ -2728,7 +2728,7 @@ paths:
         - bearer: []
       summary: Download or stream uploaded regulatory document for PDF viewer
       tags:
-        - Compliance Documents
+        - Admin
   /api/v1/compliance/brand-verifications:
     get:
       operationId: BrandVerificationController_listAll
@@ -2745,7 +2745,7 @@ paths:
         - bearer: []
       summary: List all brand verification records for compliance desk
       tags:
-        - Admin Brand Verification
+        - Admin
   /api/v1/compliance/brand-verifications/{id}:
     get:
       operationId: BrandVerificationController_getById
@@ -2762,7 +2762,7 @@ paths:
         - bearer: []
       summary: Get brand verification details by ID
       tags:
-        - Admin Brand Verification
+        - Admin
   /api/v1/compliance/brand-verifications/{id}/approve:
     post:
       operationId: BrandVerificationController_approve
@@ -2779,7 +2779,7 @@ paths:
         - bearer: []
       summary: Approve brand authorization
       tags:
-        - Admin Brand Verification
+        - Admin
   /api/v1/compliance/brand-verifications/{id}/request-auth:
     post:
       operationId: BrandVerificationController_requestAuth
@@ -2796,7 +2796,7 @@ paths:
         - bearer: []
       summary: Request Letter of Authorization / additional documents
       tags:
-        - Admin Brand Verification
+        - Admin
   /api/v1/compliance/brand-verifications/{id}/reject:
     post:
       operationId: BrandVerificationController_reject
@@ -2813,7 +2813,7 @@ paths:
         - bearer: []
       summary: Reject brand authorization
       tags:
-        - Admin Brand Verification
+        - Admin
   /api/v1/compliance/brand-verifications/{id}/checks:
     post:
       operationId: BrandVerificationController_updateCheck
@@ -2830,7 +2830,7 @@ paths:
         - bearer: []
       summary: Update a specific verification check
       tags:
-        - Admin Brand Verification
+        - Admin
   /api/v1/compliance/brand-verifications/{id}/download:
     get:
       operationId: BrandVerificationController_download
@@ -2847,7 +2847,7 @@ paths:
         - bearer: []
       summary: Download uploaded brand document file
       tags:
-        - Admin Brand Verification
+        - Admin
   /api/v1/compliance/trademark-verifications:
     get:
       operationId: TrademarkVerificationController_listAll
@@ -2864,7 +2864,7 @@ paths:
         - bearer: []
       summary: List all trademark verification records for compliance desk
       tags:
-        - Admin Trademark Verification
+        - Admin
   /api/v1/compliance/trademark-verifications/{id}:
     get:
       operationId: TrademarkVerificationController_getById
@@ -2881,7 +2881,7 @@ paths:
         - bearer: []
       summary: Get trademark verification details by ID
       tags:
-        - Admin Trademark Verification
+        - Admin
   /api/v1/compliance/trademark-verifications/{id}/approve:
     post:
       operationId: TrademarkVerificationController_approve
@@ -2898,7 +2898,7 @@ paths:
         - bearer: []
       summary: Approve trademark filing
       tags:
-        - Admin Trademark Verification
+        - Admin
   /api/v1/compliance/trademark-verifications/{id}/conflict:
     post:
       operationId: TrademarkVerificationController_markConflict
@@ -2915,7 +2915,7 @@ paths:
         - bearer: []
       summary: Mark conflict on trademark registration
       tags:
-        - Admin Trademark Verification
+        - Admin
   /api/v1/compliance/trademark-verifications/{id}/expired:
     post:
       operationId: TrademarkVerificationController_markExpired
@@ -2932,7 +2932,7 @@ paths:
         - bearer: []
       summary: Mark trademark registration as expired
       tags:
-        - Admin Trademark Verification
+        - Admin
   /api/v1/compliance/trademark-verifications/{id}/reject:
     post:
       operationId: TrademarkVerificationController_reject
@@ -2949,7 +2949,7 @@ paths:
         - bearer: []
       summary: Reject trademark filing
       tags:
-        - Admin Trademark Verification
+        - Admin
   /api/v1/compliance/trademark-verifications/{id}/checks:
     post:
       operationId: TrademarkVerificationController_updateCheck
@@ -2966,7 +2966,7 @@ paths:
         - bearer: []
       summary: Update a specific verification check
       tags:
-        - Admin Trademark Verification
+        - Admin
   /api/v1/compliance/trademark-verifications/{id}/download:
     get:
       operationId: TrademarkVerificationController_download
@@ -2983,7 +2983,7 @@ paths:
         - bearer: []
       summary: Download uploaded trademark certificate file
       tags:
-        - Admin Trademark Verification
+        - Admin
   /api/v1/auth/register/buyer:
     post:
       description: Creates a user with ROLE_BUYER only.
@@ -3016,7 +3016,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponseDto'
       summary: Register a buyer account
       tags:
-        - Authentication & Registration
+        - Authentication
   /api/v1/auth/register/manufacturer:
     post:
       description: Creates a user with ROLE_MANUFACTURER and ROLE_SUPPLIER.
@@ -3049,7 +3049,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponseDto'
       summary: Register a manufacturer account
       tags:
-        - Authentication & Registration
+        - Authentication
   /api/v1/auth/login:
     post:
       description: Checks the password and returns an access token, a refresh token and the user profile.
@@ -3088,7 +3088,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponseDto'
       summary: Sign in
       tags:
-        - Authentication & Registration
+        - Authentication
   /api/v1/auth/refresh:
     post:
       description: 'Rotates the refresh token: the old one is revoked.'
@@ -3115,7 +3115,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponseDto'
       summary: Refresh the access token
       tags:
-        - Authentication & Registration
+        - Authentication
   /api/v1/auth/logout:
     post:
       description: Revokes the given refresh token.
@@ -3136,7 +3136,7 @@ paths:
                 $ref: '#/components/schemas/MessageResponseDto'
       summary: Sign out
       tags:
-        - Authentication & Registration
+        - Authentication
   /api/v1/auth/me:
     get:
       operationId: AuthController_me
@@ -3158,7 +3158,7 @@ paths:
         - bearer: []
       summary: Current user profile
       tags:
-        - Authentication & Registration
+        - Authentication
   /api/v1/admin/users:
     get:
       description: Admin only.
@@ -3181,7 +3181,7 @@ paths:
         - bearer: []
       summary: List all users
       tags:
-        - Admin Governance
+        - Admin
   /api/v1/buyer/dashboard:
     get:
       operationId: BuyerAccessController_dashboard
@@ -3203,7 +3203,7 @@ paths:
         - bearer: []
       summary: Buyer portal access check
       tags:
-        - Buyer Access Isolation
+        - Buyer
   /api/v1/manufacturer/dashboard:
     get:
       operationId: ManufacturerAccessController_dashboard
@@ -3225,7 +3225,7 @@ paths:
         - bearer: []
       summary: Manufacturer portal access check
       tags:
-        - Manufacturer Access Isolation
+        - Manufacturer
   /api/v1/manufacturer/profile:
     get:
       operationId: ManufacturerAccessController_profile
@@ -3247,7 +3247,7 @@ paths:
         - bearer: []
       summary: Manufacturer profile access check
       tags:
-        - Manufacturer Access Isolation
+        - Manufacturer
   /api/v1/catalog/products:
     get:
       description: Publicly readable by buyers, manufacturers and admins with query filtering.
@@ -3268,7 +3268,7 @@ paths:
           description: Number of items per page (10, 20, 50, 100)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             default: 10
             example: 10
             type: number
@@ -3278,7 +3278,7 @@ paths:
           description: Alias for size (limit)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             example: 10
             type: number
         - name: sort
@@ -3342,7 +3342,7 @@ paths:
           description: ''
       summary: List master product catalog with filters
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     post:
       description: Requires platform Administrator credentials. Persists directly into PostgreSQL.
       operationId: CatalogController_createProduct
@@ -3360,7 +3360,7 @@ paths:
         - bearer: []
       summary: 'Admin: Create new central catalog product'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/products/{id}:
     get:
       operationId: CatalogController_getProduct
@@ -3376,7 +3376,7 @@ paths:
           description: ''
       summary: Get single catalog product by ID or Code
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     put:
       operationId: CatalogController_updateProduct
       parameters:
@@ -3399,7 +3399,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update central catalog product'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     delete:
       operationId: CatalogController_deleteProduct
       parameters:
@@ -3416,7 +3416,7 @@ paths:
         - bearer: []
       summary: 'Admin: Delete or deactivate product'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/products/{id}/status:
     patch:
       operationId: CatalogController_toggleProductStatus
@@ -3434,7 +3434,7 @@ paths:
         - bearer: []
       summary: 'Admin: Toggle or update product lifecycle status'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/products/{id}/attributes:
     get:
       operationId: CatalogController_getProductAttributes
@@ -3450,7 +3450,7 @@ paths:
           description: ''
       summary: Get dynamic attributes for product
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     put:
       operationId: CatalogController_saveProductAttributes
       parameters:
@@ -3473,7 +3473,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update dynamic attributes for product'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/products/{id}/prices:
     get:
       operationId: CatalogController_getProductPrices
@@ -3489,7 +3489,7 @@ paths:
           description: ''
       summary: Get prices for product
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     post:
       operationId: CatalogController_createProductPrice
       parameters:
@@ -3512,7 +3512,7 @@ paths:
         - bearer: []
       summary: Add product price definition
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/products/{id}/manufacturers:
     get:
       operationId: CatalogController_getProductManufacturers
@@ -3528,7 +3528,7 @@ paths:
           description: ''
       summary: Get manufacturer mappings for product
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     post:
       operationId: CatalogController_mapProductManufacturer
       parameters:
@@ -3551,7 +3551,7 @@ paths:
         - bearer: []
       summary: Map product to manufacturer
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/categories:
     get:
       operationId: CatalogController_listCategories
@@ -3571,7 +3571,7 @@ paths:
           description: Number of items per page (10, 20, 50, 100)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             default: 10
             example: 10
             type: number
@@ -3581,7 +3581,7 @@ paths:
           description: Alias for size (limit)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             example: 10
             type: number
         - name: sort
@@ -3621,7 +3621,7 @@ paths:
           description: ''
       summary: List Category -> Sub-Category -> Sub-Sub-Category hierarchy with pagination and filters
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     post:
       operationId: CatalogController_createCategory
       parameters: []
@@ -3638,7 +3638,7 @@ paths:
         - bearer: []
       summary: 'Admin: Create new Category hierarchy record'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/categories/{id}:
     get:
       operationId: CatalogController_getCategory
@@ -3654,7 +3654,7 @@ paths:
           description: ''
       summary: Get single category by ID or Code
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     put:
       operationId: CatalogController_updateCategory
       parameters:
@@ -3676,7 +3676,24 @@ paths:
         - bearer: []
       summary: 'Admin: Update Category record'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
+    delete:
+      operationId: CatalogController_deleteCategory
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Category ID or category code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: 'Admin: Delete Category record'
+      tags:
+        - Product Catalog & Master Data
   /api/v1/catalog/product-types:
     get:
       operationId: CatalogController_listProductTypes
@@ -3696,7 +3713,7 @@ paths:
           description: Number of items per page (10, 20, 50, 100)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             default: 10
             example: 10
             type: number
@@ -3706,7 +3723,7 @@ paths:
           description: Alias for size (limit)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             example: 10
             type: number
         - name: sort
@@ -3740,7 +3757,7 @@ paths:
           description: ''
       summary: List all active product types from database with pagination and filters
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     post:
       operationId: CatalogController_createProductType
       parameters: []
@@ -3757,7 +3774,7 @@ paths:
         - bearer: []
       summary: 'Admin: Create new Product Type'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/product-types/{id}:
     get:
       operationId: CatalogController_getProductType
@@ -3773,7 +3790,7 @@ paths:
           description: ''
       summary: Get Product Type by ID or Code
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     put:
       operationId: CatalogController_updateProductType
       parameters:
@@ -3795,7 +3812,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update Product Type'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     delete:
       operationId: CatalogController_deleteProductType
       parameters:
@@ -3811,7 +3828,7 @@ paths:
         - bearer: []
       summary: 'Admin: Delete Product Type'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/product-types/{id}/status:
     patch:
       operationId: CatalogController_toggleProductTypeStatus
@@ -3828,7 +3845,7 @@ paths:
         - bearer: []
       summary: 'Admin: Toggle Product Type active/inactive status'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/product-types/{id}/attributes:
     get:
       operationId: CatalogController_getProductTypeAttributes
@@ -3844,7 +3861,7 @@ paths:
           description: ''
       summary: Get attributes applicable to this Product Type
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     post:
       operationId: CatalogController_assignProductTypeAttribute
       parameters:
@@ -3867,7 +3884,7 @@ paths:
         - bearer: []
       summary: 'Admin: Assign an attribute to this Product Type'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     put:
       operationId: CatalogController_bulkUpdateProductTypeAttributes
       parameters:
@@ -3890,7 +3907,7 @@ paths:
         - bearer: []
       summary: 'Admin: Bulk update assigned attributes for this Product Type'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/product-types/{id}/attributes/{attributeId}:
     put:
       operationId: CatalogController_updateProductTypeAttribute
@@ -3920,7 +3937,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update attribute configuration for this Product Type'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     delete:
       operationId: CatalogController_removeProductTypeAttribute
       parameters:
@@ -3943,7 +3960,7 @@ paths:
         - bearer: []
       summary: 'Admin: Remove attribute assignment from Product Type'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/categories/{id}/status:
     patch:
       operationId: CatalogController_toggleCategoryStatus
@@ -3960,7 +3977,42 @@ paths:
         - bearer: []
       summary: 'Admin: Toggle category status between ACTIVE and INACTIVE'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
+  /api/v1/catalog/categories/product-type/{productTypeId}:
+    get:
+      operationId: CatalogController_listCategoriesByProductType
+      parameters:
+        - name: productTypeId
+          required: true
+          in: path
+          description: Product Type ID (e.g. pt_med, pt_nut)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: List categories by Product Type ID
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/categories/hierarchy-options:
+    get:
+      operationId: CatalogController_getCategoryHierarchyOptions
+      parameters:
+        - name: productTypeId
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+      summary: Get available categories, sub-categories and sub-sub-categories options grouped by Product Type
+      tags:
+        - Product Catalog & Master Data
   /api/v1/catalog/attributes:
     get:
       operationId: CatalogController_listAttributes
@@ -3980,7 +4032,7 @@ paths:
           description: Number of items per page (10, 20, 50, 100)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             default: 10
             example: 10
             type: number
@@ -3990,7 +4042,7 @@ paths:
           description: Alias for size (limit)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             example: 10
             type: number
         - name: sort
@@ -4042,7 +4094,7 @@ paths:
           description: ''
       summary: List reusable central attribute master definitions
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     post:
       operationId: CatalogController_createAttribute
       parameters: []
@@ -4059,7 +4111,7 @@ paths:
         - bearer: []
       summary: 'Admin: Create new central reusable attribute'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/attributes/{id}:
     get:
       operationId: CatalogController_getAttribute
@@ -4074,7 +4126,7 @@ paths:
           description: ''
       summary: Get attribute definition by ID or code
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     put:
       operationId: CatalogController_updateAttribute
       parameters:
@@ -4096,7 +4148,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update attribute definition'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/attributes/{id}/status:
     patch:
       operationId: CatalogController_toggleAttributeStatus
@@ -4113,7 +4165,7 @@ paths:
         - bearer: []
       summary: 'Admin: Toggle attribute status'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
   /api/v1/catalog/attributes/{id}/product-types/{productTypeId}:
     post:
       operationId: CatalogController_assignAttributeToProductType
@@ -4137,7 +4189,7 @@ paths:
         - bearer: []
       summary: 'Admin: Assign attribute to Product Type'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
     delete:
       operationId: CatalogController_removeAttributeFromProductType
       parameters:
@@ -4160,7 +4212,549 @@ paths:
         - bearer: []
       summary: 'Admin: Remove attribute from Product Type'
       tags:
-        - Product Catalog & Category Master
+        - Product Catalog & Master Data
+  /api/v1/catalog/prices:
+    get:
+      operationId: CatalogController_listPrices
+      parameters:
+        - name: productId
+          required: false
+          in: query
+          description: Filter by Product ID or Code
+          schema:
+            type: string
+        - name: manufacturerId
+          required: false
+          in: query
+          description: Filter by Manufacturer Registration ID or Mapping ID
+          schema:
+            type: string
+        - name: customerSegmentId
+          required: false
+          in: query
+          description: Filter by Customer Segment ID
+          schema:
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: 'Filter by status: ACTIVE, INACTIVE, EXPIRED, DRAFT'
+          schema:
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search keyword
+          schema:
+            type: string
+        - name: page
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            default: 1
+            example: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            default: 20
+            example: 20
+            type: number
+        - name: size
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            default: 20
+            example: 20
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: Sort e.g. createdAt,desc
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: List product prices with filtering by product, manufacturer, segment and status
+      tags:
+        - Product Catalog & Master Data
+    post:
+      operationId: CatalogController_createPrice
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePriceDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Create new product price rule
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/prices/{id}:
+    get:
+      operationId: CatalogController_getPrice
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Price record ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get single price record details
+      tags:
+        - Product Catalog & Master Data
+    put:
+      operationId: CatalogController_updatePrice
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Price record ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePriceDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Update product price rule
+      tags:
+        - Product Catalog & Master Data
+    delete:
+      operationId: CatalogController_deletePrice
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Price record ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Delete product price rule
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/prices/{id}/status:
+    patch:
+      operationId: CatalogController_togglePriceStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Price record ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Toggle product price status between ACTIVE and INACTIVE
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/taxes:
+    get:
+      operationId: CatalogController_listTaxes
+      parameters:
+        - name: productId
+          required: false
+          in: query
+          description: Filter by Product ID or Code
+          schema:
+            type: string
+        - name: status
+          required: false
+          in: query
+          description: 'Filter by status: ALL, ACTIVE, INACTIVE'
+          schema:
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search keyword
+          schema:
+            type: string
+        - name: page
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            default: 1
+            example: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            default: 20
+            example: 20
+            type: number
+        - name: size
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            default: 20
+            example: 20
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: Sort e.g. createdAt,desc
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: List product tax mappings with product and status filtering
+      tags:
+        - Product Catalog & Master Data
+    post:
+      operationId: CatalogController_createTax
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductTaxDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Create product tax mapping
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/taxes/{id}:
+    get:
+      operationId: CatalogController_getTax
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Tax record ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get single product tax mapping details
+      tags:
+        - Product Catalog & Master Data
+    put:
+      operationId: CatalogController_updateTax
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Tax record ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductTaxDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Update product tax mapping
+      tags:
+        - Product Catalog & Master Data
+    delete:
+      operationId: CatalogController_deleteTax
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Tax record ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Delete product tax mapping
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/taxes/{id}/status:
+    patch:
+      operationId: CatalogController_toggleTaxStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Tax record ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Toggle product tax mapping status
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/uoms:
+    get:
+      operationId: CatalogController_listUoms
+      parameters:
+        - name: productId
+          required: false
+          in: query
+          description: Filter by Product ID or Code
+          schema:
+            type: string
+        - name: active
+          required: false
+          in: query
+          description: Filter active status
+          schema:
+            type: string
+        - name: search
+          required: false
+          in: query
+          description: Search keyword
+          schema:
+            type: string
+        - name: page
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            default: 1
+            example: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            default: 20
+            example: 20
+            type: number
+        - name: size
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            default: 20
+            example: 20
+            type: number
+        - name: sort
+          required: false
+          in: query
+          description: Sort e.g. createdAt,desc
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: List product UOM configurations
+      tags:
+        - Product Catalog & Master Data
+    post:
+      operationId: CatalogController_createUom
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductUomDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Create product UOM configuration
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/uoms/{id}:
+    get:
+      operationId: CatalogController_getUom
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: UOM record ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get single product UOM details
+      tags:
+        - Product Catalog & Master Data
+    put:
+      operationId: CatalogController_updateUom
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: UOM record ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductUomDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Update product UOM configuration
+      tags:
+        - Product Catalog & Master Data
+    delete:
+      operationId: CatalogController_deleteUom
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: UOM record ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Delete product UOM configuration
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/uoms/{id}/status:
+    patch:
+      operationId: CatalogController_toggleUomStatus
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: UOM record ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Toggle product UOM active status
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/customer-segments:
+    get:
+      operationId: CatalogController_listCustomerSegments
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      summary: List all customer segments
+      tags:
+        - Product Catalog & Master Data
+    post:
+      operationId: CatalogController_createCustomerSegment
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerSegmentDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Create customer segment
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/catalog/customer-segments/{id}:
+    get:
+      operationId: CatalogController_getCustomerSegment
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Customer segment ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get single customer segment
+      tags:
+        - Product Catalog & Master Data
+    put:
+      operationId: CatalogController_updateCustomerSegment
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Customer segment ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCustomerSegmentDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Update customer segment
+      tags:
+        - Product Catalog & Master Data
+    delete:
+      operationId: CatalogController_deleteCustomerSegment
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Customer segment ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      summary: Delete customer segment
+      tags:
+        - Product Catalog & Master Data
   /api/v1/products:
     get:
       description: Public read-only formulation catalogue from PostgreSQL for buyers and marketplace users.
@@ -4181,7 +4775,7 @@ paths:
           description: Number of items per page (10, 20, 50, 100)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             default: 10
             example: 10
             type: number
@@ -4191,7 +4785,7 @@ paths:
           description: Alias for size (limit)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             example: 10
             type: number
         - name: sort
@@ -4255,7 +4849,7 @@ paths:
           description: ''
       summary: List master product catalog with filters and pagination
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
     post:
       operationId: ProductsController_createProduct
       parameters: []
@@ -4272,7 +4866,7 @@ paths:
         - bearer: []
       summary: 'Admin: Create new central catalog product'
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
   /api/v1/products/search:
     get:
       operationId: ProductsController_searchProducts
@@ -4297,7 +4891,7 @@ paths:
           description: Number of items per page (10, 20, 50, 100)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             default: 10
             example: 10
             type: number
@@ -4307,7 +4901,7 @@ paths:
           description: Alias for size (limit)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             example: 10
             type: number
         - name: sort
@@ -4371,7 +4965,7 @@ paths:
           description: ''
       summary: Search products by query string
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
   /api/v1/products/{id}:
     get:
       operationId: ProductsController_getProduct
@@ -4387,7 +4981,7 @@ paths:
           description: ''
       summary: Get single catalog product by ID or Code
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
     put:
       operationId: ProductsController_updateProduct
       parameters:
@@ -4410,7 +5004,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update central catalog product'
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
   /api/v1/products/{id}/status:
     patch:
       operationId: ProductsController_toggleProductStatus
@@ -4428,7 +5022,7 @@ paths:
         - bearer: []
       summary: 'Admin: Toggle or update product lifecycle status'
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
   /api/v1/products/{id}/attributes:
     get:
       operationId: ProductsController_getProductAttributes
@@ -4444,7 +5038,7 @@ paths:
           description: ''
       summary: Get dynamic attributes for product
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
     put:
       operationId: ProductsController_saveProductAttributes
       parameters:
@@ -4467,7 +5061,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update dynamic attributes for product'
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
   /api/v1/products/{id}/prices:
     get:
       operationId: ProductsController_getProductPrices
@@ -4483,7 +5077,7 @@ paths:
           description: ''
       summary: Get price list for product
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
     post:
       operationId: ProductsController_createProductPrice
       parameters:
@@ -4506,7 +5100,7 @@ paths:
         - bearer: []
       summary: Add product price definition
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
   /api/v1/products/{id}/manufacturers:
     get:
       operationId: ProductsController_getProductManufacturers
@@ -4522,7 +5116,7 @@ paths:
           description: ''
       summary: Get manufacturer mappings for product
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
     post:
       operationId: ProductsController_mapProductManufacturer
       parameters:
@@ -4545,7 +5139,85 @@ paths:
         - bearer: []
       summary: Map product to manufacturer
       tags:
-        - Products (Catalogue & Procurement)
+        - Product Catalog & Master Data
+  /api/v1/products/{id}/taxes:
+    get:
+      operationId: ProductsController_getProductTaxes
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get tax list for product
+      tags:
+        - Product Catalog & Master Data
+    post:
+      operationId: ProductsController_createProductTax
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductTaxDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Add product tax definition
+      tags:
+        - Product Catalog & Master Data
+  /api/v1/products/{id}/uoms:
+    get:
+      operationId: ProductsController_getProductUoms
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      summary: Get UOM list for product
+      tags:
+        - Product Catalog & Master Data
+    post:
+      operationId: ProductsController_createProductUom
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Product ID or Product Code
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductUomDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      summary: Add product UOM definition
+      tags:
+        - Product Catalog & Master Data
   /api/v1/categories:
     get:
       operationId: CategoriesController_listCategories
@@ -4565,7 +5237,7 @@ paths:
           description: Number of items per page (10, 20, 50, 100)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             default: 10
             example: 10
             type: number
@@ -4575,7 +5247,7 @@ paths:
           description: Alias for size (limit)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             example: 10
             type: number
         - name: sort
@@ -4615,7 +5287,7 @@ paths:
           description: ''
       summary: List Category -> Sub-Category -> Sub-Sub-Category hierarchy with pagination and filters
       tags:
-        - Categories & Hierarchies
+        - Product Catalog & Master Data
     post:
       operationId: CategoriesController_createCategory
       parameters: []
@@ -4632,7 +5304,7 @@ paths:
         - bearer: []
       summary: 'Admin: Create new Category hierarchy record'
       tags:
-        - Categories & Hierarchies
+        - Product Catalog & Master Data
   /api/v1/categories/product-types:
     get:
       operationId: CategoriesController_listProductTypes
@@ -4642,7 +5314,7 @@ paths:
           description: ''
       summary: List all active product types from database
       tags:
-        - Categories & Hierarchies
+        - Product Catalog & Master Data
   /api/v1/categories/{id}:
     get:
       operationId: CategoriesController_getCategory
@@ -4658,7 +5330,7 @@ paths:
           description: ''
       summary: Get category by ID or Code
       tags:
-        - Categories & Hierarchies
+        - Product Catalog & Master Data
     put:
       operationId: CategoriesController_updateCategory
       parameters:
@@ -4680,7 +5352,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update Category record'
       tags:
-        - Categories & Hierarchies
+        - Product Catalog & Master Data
     delete:
       operationId: CategoriesController_deleteCategory
       parameters:
@@ -4696,7 +5368,7 @@ paths:
         - bearer: []
       summary: 'Admin: Delete Category record'
       tags:
-        - Categories & Hierarchies
+        - Product Catalog & Master Data
   /api/v1/categories/{id}/status:
     patch:
       operationId: CategoriesController_toggleCategoryStatus
@@ -4713,7 +5385,7 @@ paths:
         - bearer: []
       summary: 'Admin: Toggle category status between ACTIVE and INACTIVE'
       tags:
-        - Categories & Hierarchies
+        - Product Catalog & Master Data
   /api/v1/categories/{categoryId}/sub-categories:
     get:
       operationId: CategoriesController_getSubCategories
@@ -4735,7 +5407,7 @@ paths:
                   type: string
       summary: List sub-categories for a given category
       tags:
-        - Categories & Hierarchies
+        - Product Catalog & Master Data
   /api/v1/categories/{categoryId}/sub-categories/{subCategory}/sub-sub-categories:
     get:
       operationId: CategoriesController_getSubSubCategories
@@ -4763,7 +5435,7 @@ paths:
                   type: string
       summary: List sub-sub-categories for a given category and sub-category
       tags:
-        - Categories & Hierarchies
+        - Product Catalog & Master Data
   /api/v1/attributes:
     get:
       description: Fetch reusable enterprise attributes with filters for data type, status, and text search.
@@ -4784,7 +5456,7 @@ paths:
           description: Number of items per page (10, 20, 50, 100)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             default: 10
             example: 10
             type: number
@@ -4794,7 +5466,7 @@ paths:
           description: Alias for size (limit)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             example: 10
             type: number
         - name: sort
@@ -4846,7 +5518,7 @@ paths:
           description: ''
       summary: List central Attribute Master records
       tags:
-        - Attributes (Attribute Master)
+        - Product Catalog & Master Data
     post:
       description: Persists reusable attribute into PostgreSQL attribute_masters table.
       operationId: AttributesController_createAttribute
@@ -4864,7 +5536,7 @@ paths:
         - bearer: []
       summary: 'Admin: Create new central reusable attribute'
       tags:
-        - Attributes (Attribute Master)
+        - Product Catalog & Master Data
   /api/v1/attributes/{id}:
     get:
       operationId: AttributesController_getAttribute
@@ -4880,7 +5552,7 @@ paths:
           description: ''
       summary: Get attribute definition by ID or code
       tags:
-        - Attributes (Attribute Master)
+        - Product Catalog & Master Data
     put:
       operationId: AttributesController_updateAttribute
       parameters:
@@ -4903,7 +5575,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update attribute definition'
       tags:
-        - Attributes (Attribute Master)
+        - Product Catalog & Master Data
   /api/v1/attributes/{id}/status:
     patch:
       operationId: AttributesController_toggleAttributeStatus
@@ -4921,7 +5593,7 @@ paths:
         - bearer: []
       summary: 'Admin: Toggle attribute active status'
       tags:
-        - Attributes (Attribute Master)
+        - Product Catalog & Master Data
   /api/v1/attributes/{id}/product-types/{productTypeId}:
     post:
       operationId: AttributesController_assignToProductType
@@ -4945,7 +5617,7 @@ paths:
         - bearer: []
       summary: 'Admin: Assign this attribute to a Product Type'
       tags:
-        - Attributes (Attribute Master)
+        - Product Catalog & Master Data
     delete:
       operationId: AttributesController_removeFromProductType
       parameters:
@@ -4968,7 +5640,7 @@ paths:
         - bearer: []
       summary: 'Admin: Remove this attribute from a Product Type'
       tags:
-        - Attributes (Attribute Master)
+        - Product Catalog & Master Data
   /api/v1/product-types:
     get:
       operationId: ProductTypesController_listProductTypes
@@ -4988,7 +5660,7 @@ paths:
           description: Number of items per page (10, 20, 50, 100)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             default: 10
             example: 10
             type: number
@@ -4998,7 +5670,7 @@ paths:
           description: Alias for size (limit)
           schema:
             minimum: 1
-            maximum: 100
+            maximum: 1000
             example: 10
             type: number
         - name: sort
@@ -5032,7 +5704,7 @@ paths:
           description: ''
       summary: List all Product Types with pagination, search, and lifecycle filtering
       tags:
-        - Product Types
+        - Product Catalog & Master Data
     post:
       operationId: ProductTypesController_createProductType
       parameters: []
@@ -5049,7 +5721,7 @@ paths:
         - bearer: []
       summary: 'Admin: Create new Product Type'
       tags:
-        - Product Types
+        - Product Catalog & Master Data
   /api/v1/product-types/{id}:
     get:
       operationId: ProductTypesController_getProductType
@@ -5065,7 +5737,7 @@ paths:
           description: ''
       summary: Get Product Type by ID or Code
       tags:
-        - Product Types
+        - Product Catalog & Master Data
     put:
       operationId: ProductTypesController_updateProductType
       parameters:
@@ -5087,7 +5759,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update Product Type'
       tags:
-        - Product Types
+        - Product Catalog & Master Data
     delete:
       operationId: ProductTypesController_deleteProductType
       parameters:
@@ -5103,7 +5775,7 @@ paths:
         - bearer: []
       summary: 'Admin: Delete Product Type'
       tags:
-        - Product Types
+        - Product Catalog & Master Data
   /api/v1/product-types/{id}/status:
     patch:
       operationId: ProductTypesController_toggleProductTypeStatus
@@ -5120,7 +5792,7 @@ paths:
         - bearer: []
       summary: 'Admin: Toggle Product Type active/inactive lifecycle status'
       tags:
-        - Product Types
+        - Product Catalog & Master Data
   /api/v1/product-types/{id}/attributes:
     get:
       description: Returns all attributes assigned to this Product Type with attribute definitions from Attribute Master.
@@ -5137,7 +5809,7 @@ paths:
           description: ''
       summary: Get attributes applicable to this Product Type
       tags:
-        - Product Types
+        - Product Catalog & Master Data
     post:
       operationId: ProductTypesController_assignProductTypeAttribute
       parameters:
@@ -5160,7 +5832,7 @@ paths:
         - bearer: []
       summary: 'Admin: Assign an attribute to this Product Type'
       tags:
-        - Product Types
+        - Product Catalog & Master Data
     put:
       operationId: ProductTypesController_bulkUpdateProductTypeAttributes
       parameters:
@@ -5183,7 +5855,7 @@ paths:
         - bearer: []
       summary: 'Admin: Bulk update assigned attributes for this Product Type'
       tags:
-        - Product Types
+        - Product Catalog & Master Data
   /api/v1/product-types/{id}/attributes/{attributeId}:
     put:
       operationId: ProductTypesController_updateProductTypeAttribute
@@ -5213,7 +5885,7 @@ paths:
         - bearer: []
       summary: 'Admin: Update attribute configuration for this Product Type'
       tags:
-        - Product Types
+        - Product Catalog & Master Data
     delete:
       operationId: ProductTypesController_removeProductTypeAttribute
       parameters:
@@ -5236,7 +5908,7 @@ paths:
         - bearer: []
       summary: 'Admin: Remove attribute assignment from Product Type'
       tags:
-        - Product Types
+        - Product Catalog & Master Data
   /api/v1/buyer/rfqs:
     post:
       description: Creates an RFQ bound to the authenticated buyer identity. Automatically assigns sequential RFQ number.
@@ -5255,7 +5927,7 @@ paths:
         - bearer: []
       summary: Create or draft a new Buyer RFQ
       tags:
-        - Buyer RFQ Workflow
+        - Buyer
     get:
       description: Returns all RFQs belonging to the authenticated buyer. Administrators can view all RFQs.
       operationId: RfqController_listRfqs
@@ -5279,7 +5951,7 @@ paths:
         - bearer: []
       summary: List RFQs for current authenticated buyer
       tags:
-        - Buyer RFQ Workflow
+        - Buyer
   /api/v1/buyer/rfqs/{id}:
     get:
       operationId: RfqController_getRfq
@@ -5297,7 +5969,7 @@ paths:
         - bearer: []
       summary: Get single RFQ details with product lines
       tags:
-        - Buyer RFQ Workflow
+        - Buyer
     put:
       operationId: RfqController_updateRfq
       parameters:
@@ -5320,7 +5992,7 @@ paths:
         - bearer: []
       summary: Update an existing draft RFQ
       tags:
-        - Buyer RFQ Workflow
+        - Buyer
   /api/v1/buyer/rfqs/{id}/submit:
     post:
       operationId: RfqController_submitRfq
@@ -5338,7 +6010,7 @@ paths:
         - bearer: []
       summary: Submit a valid draft RFQ for pricing and manufacturer distribution
       tags:
-        - Buyer RFQ Workflow
+        - Buyer
   /api/v1/buyer/rfqs/{id}/match:
     post:
       description: Matches eligible manufacturers for products in the RFQ. Does NOT submit the RFQ.
@@ -5357,13 +6029,27 @@ paths:
         - bearer: []
       summary: Run AI/Rule-based manufacturer matching against real PostgreSQL records
       tags:
-        - Buyer RFQ Workflow
+        - Buyer
 info:
   title: FactoryGrid API
-  description: FactoryGrid B2B pharmaceutical manufacturing marketplace API.
-  version: 1.0.0
+  description: >-
+    FactoryGrid B2B Procurement Platform API — Centralized OpenAPI specification and live interactive execution console
+    for Admin, Buyer, Manufacturer, and Central Catalog services.
+  version: v1
   contact: {}
-tags: []
+tags:
+  - name: Authentication
+    description: User authentication, token refresh, logout, session management, and self-registration
+  - name: Admin
+    description: Platform administration, user management, compliance review, and document verification
+  - name: Buyer
+    description: Buyer registration, profile, regulatory compliance, brand & trademark documents, and RFQ workflows
+  - name: Manufacturer
+    description: Manufacturer onboarding, certification documents, facility verification, and product mapping
+  - name: Product Catalog & Master Data
+    description: Central product catalog, Category Master hierarchy, Product Types, dynamic attributes, pricing, tax, and UOM
+  - name: Health
+    description: System liveness, readiness, and PostgreSQL database connectivity check
 servers: []
 components:
   securitySchemes:
@@ -5371,6 +6057,9 @@ components:
       scheme: bearer
       bearerFormat: JWT
       type: http
+      name: Authorization
+      description: 'Enter your Bearer JWT token to access protected APIs. Example: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...'
+      in: header
   schemas:
     Step1CompanyDto:
       type: object
@@ -6753,29 +7442,45 @@ components:
       properties:
         username:
           type: string
-          example: buyer_pharma_01
           minLength: 3
           maxLength: 50
+          description: Desired username (3 to 50 characters)
+          example: pharma_buyer_01
         email:
           type: string
-          example: buyer@pharmaco.in
           format: email
+          description: Official corporate email address
+          example: buyer01@testpharma.com
         password:
           type: string
           minLength: 8
+          description: Account password (minimum 8 characters)
+          example: Buyer12345678
+          format: password
         fullName:
           type: string
+          description: Full legal name of the user
+          example: Vikramaditya Sharma
         phone:
           type: string
+          description: Contact telephone number
+          example: '+919876543210'
         companyName:
           type: string
+          description: Company or business legal name
+          example: Apex Healthcare Pvt Ltd
         companyCode:
           type: string
-          description: Generated when omitted.
+          description: Company registration or tracking code (auto-generated if omitted)
+          example: APEX-HC-001
         department:
           type: string
+          description: Department within company
+          example: Central Procurement
         jobTitle:
           type: string
+          description: Official job title
+          example: Head of Sourcing
       required:
         - username
         - email
@@ -6787,66 +7492,81 @@ components:
       properties:
         id:
           type: number
+          example: 2
+          description: Internal numeric user ID
         userCode:
           type: string
+          example: USR-ADM-001
+          description: Business user code
         username:
           type: string
+          example: admin
+          description: Unique username
         email:
           type: string
+          example: admin@factorygrid.com
+          description: User corporate email
         fullName:
           type: string
+          example: System Administrator
+          description: Full user legal name
         phone:
           type: string
           nullable: true
+          example: '+919876543210'
         companyName:
           type: string
           nullable: true
+          example: FactoryGrid Platform
         companyCode:
           type: string
           nullable: true
+          example: FG-HQ-001
         department:
           type: string
           nullable: true
+          example: Executive IT & Security
         jobTitle:
           type: string
           nullable: true
+          example: Super Administrator
         accountStatus:
           type: string
           example: ACTIVE
+          description: Account lifecycle status
         roles:
           example:
-            - ROLE_BUYER
+            - ROLE_ADMIN
+          description: Assigned platform RBAC roles
           type: array
           items:
             type: string
         lastLoginAt:
           type: string
           nullable: true
+          example: '2026-11-05T11:03:38.110Z'
       required:
         - id
         - userCode
         - username
         - email
         - fullName
-        - phone
-        - companyName
-        - companyCode
-        - department
-        - jobTitle
         - accountStatus
         - roles
-        - lastLoginAt
     RegistrationResponseDto:
       type: object
       properties:
         success:
           type: boolean
+          example: true
         message:
           type: string
+          example: User account created successfully
         user:
           $ref: '#/components/schemas/UserProfileDto'
         timestamp:
           type: string
+          example: '2026-11-05T11:03:38.110Z'
       required:
         - success
         - message
@@ -6855,25 +7575,33 @@ components:
     ErrorResponseDto:
       type: object
       properties:
+        status:
+          type: number
+          example: 401
+          description: HTTP status code
+        error:
+          type: string
+          example: Unauthorized
+          description: HTTP error title
+        message:
+          type: string
+          example: Invalid credentials or expired JWT token
+          description: Human-readable error message
+        timestamp:
+          type: string
+          example: '2026-11-05T11:03:38.110Z'
+          description: ISO 8601 error timestamp
+        path:
+          type: string
+          example: /api/v1/auth/login
+          description: Request URI path
         errors:
           type: object
           additionalProperties:
             type: string
-          description: Field-level messages, only on validation failures.
+          description: Field-level validation error messages (present on 400 Bad Request)
           example:
             email: Please provide a valid email address
-        status:
-          type: number
-          example: 401
-        error:
-          type: string
-          example: Unauthorized
-        message:
-          type: string
-        timestamp:
-          type: string
-        path:
-          type: string
       required:
         - status
         - error
@@ -6885,32 +7613,49 @@ components:
       properties:
         username:
           type: string
-          example: buyer_pharma_01
           minLength: 3
           maxLength: 50
+          description: Desired username (3 to 50 characters)
+          example: pharma_buyer_01
         email:
           type: string
-          example: buyer@pharmaco.in
           format: email
+          description: Official corporate email address
+          example: buyer01@testpharma.com
         password:
           type: string
           minLength: 8
+          description: Account password (minimum 8 characters)
+          example: Buyer12345678
+          format: password
         fullName:
           type: string
+          description: Full legal name of the user
+          example: Vikramaditya Sharma
         phone:
           type: string
+          description: Contact telephone number
+          example: '+919876543210'
         companyName:
           type: string
+          description: Company or business legal name
+          example: Apex Healthcare Pvt Ltd
         companyCode:
           type: string
-          description: Generated when omitted.
+          description: Company registration or tracking code (auto-generated if omitted)
+          example: APEX-HC-001
         department:
           type: string
+          description: Department within company
+          example: Central Procurement
         jobTitle:
           type: string
+          description: Official job title
+          example: Head of Sourcing
         factoryDetails:
           type: string
-          description: Accepted for compatibility; stored by the partner module in Phase 2.
+          description: Manufacturing facility details and plant location notes
+          example: 'Plant 1: Formulation unit at Baddi, Himachal Pradesh. WHO-GMP accredited.'
       required:
         - username
         - email
@@ -6922,12 +7667,17 @@ components:
       properties:
         usernameOrEmail:
           type: string
-          example: admin
+          description: Username or registered email address
+          example: admin@factorygrid.com
         password:
           type: string
+          description: Account password (minimum 8 characters)
+          example: Admin12345678
+          format: password
         portalType:
           type: string
-          description: 'Optional portal check: BUYER, MANUFACTURER, SUPPLIER, FG_STAFF, STAFF or ADMIN.'
+          description: 'Optional portal check: BUYER, MANUFACTURER, SUPPLIER, or ADMIN'
+          example: ADMIN
       required:
         - usernameOrEmail
         - password
@@ -6936,16 +7686,24 @@ components:
       properties:
         accessToken:
           type: string
+          description: Signed JWT Bearer access token
+          example: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...
         refreshToken:
           type: string
+          description: Secure refresh token UUID
+          example: 0dcf40ed-cbc8-4432-aec0-f054e2747a30
         tokenType:
           type: string
           example: Bearer
+          description: Token scheme type
         expiresIn:
           type: number
-          description: Access token lifetime in milliseconds.
+          example: 86400000
+          description: Access token lifetime in milliseconds (24 hours)
         user:
-          $ref: '#/components/schemas/UserProfileDto'
+          description: Authenticated user profile
+          allOf:
+            - $ref: '#/components/schemas/UserProfileDto'
       required:
         - accessToken
         - refreshToken
@@ -6957,6 +7715,8 @@ components:
       properties:
         refreshToken:
           type: string
+          description: Cryptographically secure refresh token UUID received from login or refresh
+          example: 0dcf40ed-cbc8-4432-aec0-f054e2747a30
       required:
         - refreshToken
     TokenRefreshResponseDto:
@@ -6964,14 +7724,19 @@ components:
       properties:
         accessToken:
           type: string
+          description: Newly generated signed JWT Bearer access token
+          example: eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...
         refreshToken:
           type: string
+          description: Newly rotated refresh token UUID
+          example: e3f01b17-7a89-498c-bc5d-6e9a03970fd1
         tokenType:
           type: string
           example: Bearer
         expiresIn:
           type: number
-          description: Access token lifetime in milliseconds.
+          example: 86400000
+          description: Access token lifetime in milliseconds
       required:
         - accessToken
         - refreshToken
@@ -6982,37 +7747,45 @@ components:
       properties:
         refreshToken:
           type: string
+          description: Optional refresh token to revoke upon logout
+          example: 0dcf40ed-cbc8-4432-aec0-f054e2747a30
     MessageResponseDto:
       type: object
       properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Operation completed successfully
         data:
           type: object
           nullable: true
           example: null
-        success:
-          type: boolean
-        message:
-          type: string
         timestamp:
           type: string
+          example: '2026-11-05T11:03:38.110Z'
       required:
-        - data
         - success
         - message
+        - data
         - timestamp
     UserListResponseDto:
       type: object
       properties:
         success:
           type: boolean
+          example: true
         message:
           type: string
+          example: Users retrieved successfully
         data:
           type: array
           items:
             $ref: '#/components/schemas/UserProfileDto'
         timestamp:
           type: string
+          example: '2026-11-05T11:03:38.110Z'
       required:
         - success
         - message
@@ -7021,6 +7794,12 @@ components:
     PortalAccessDataDto:
       type: object
       properties:
+        portal:
+          type: string
+          example: BUYER
+        accessibleBy:
+          type: string
+          example: buyer_pharma_01
         authorities:
           type: array
           items:
@@ -7030,29 +7809,28 @@ components:
                 type: string
           example:
             - authority: ROLE_BUYER
-        portal:
-          type: string
-          example: BUYER
-        accessibleBy:
-          type: string
         message:
           type: string
+          example: Welcome to Buyer Procurement Portal.
       required:
-        - authorities
         - portal
         - accessibleBy
+        - authorities
         - message
     PortalAccessResponseDto:
       type: object
       properties:
         success:
           type: boolean
+          example: true
         message:
           type: string
+          example: Portal access granted
         data:
           $ref: '#/components/schemas/PortalAccessDataDto'
         timestamp:
           type: string
+          example: '2026-11-05T11:03:38.110Z'
       required:
         - success
         - message
@@ -7061,6 +7839,12 @@ components:
     PortalProfileResponseDto:
       type: object
       properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Profile accessed
         data:
           type: object
           additionalProperties:
@@ -7068,16 +7852,13 @@ components:
           example:
             username: buyer_pharma_01
             role: BUYER
-        success:
-          type: boolean
-        message:
-          type: string
         timestamp:
           type: string
+          example: '2026-11-05T11:03:38.110Z'
       required:
-        - data
         - success
         - message
+        - data
         - timestamp
     CreateCatalogProductDto:
       type: object
@@ -8148,6 +8929,247 @@ components:
         is_active:
           type: boolean
           example: true
+    CreatePriceDto:
+      type: object
+      properties:
+        productId:
+          type: string
+          example: p1
+          description: Catalog Product ID or Product Code
+        productManufacturerId:
+          type: number
+          nullable: true
+          example: 1
+          description: Optional Manufacturer Product Mapping ID
+        customerSegmentId:
+          type: string
+          nullable: true
+          example: seg_dist
+          description: Customer Segment ID
+        priceType:
+          type: string
+          example: TIERED
+          default: BASE
+        currency:
+          type: string
+          example: INR
+          default: INR
+        unitPrice:
+          type: number
+          minimum: 1
+          example: 45.5
+          description: Unit price
+        minQuantity:
+          type: number
+          minimum: 1
+          example: 100
+          default: 1
+        maxQuantity:
+          type: number
+          nullable: true
+          minimum: 1
+          example: 10000
+        effectiveFrom:
+          type: string
+          nullable: true
+          example: '2025-01-01'
+        effectiveTo:
+          type: string
+          nullable: true
+          example: '2027-12-31'
+        priceStatus:
+          type: string
+          example: ACTIVE
+          default: ACTIVE
+      required:
+        - productId
+        - unitPrice
+    UpdatePriceDto:
+      type: object
+      properties:
+        productManufacturerId:
+          type: number
+          nullable: true
+          example: 1
+        customerSegmentId:
+          type: string
+          nullable: true
+          example: seg_dist
+        priceType:
+          type: string
+          example: TIERED
+        currency:
+          type: string
+          example: INR
+        unitPrice:
+          type: number
+          minimum: 1
+          example: 45.5
+        minQuantity:
+          type: number
+          minimum: 1
+          example: 100
+        maxQuantity:
+          type: number
+          nullable: true
+          minimum: 1
+          example: 10000
+        effectiveFrom:
+          type: string
+          nullable: true
+          example: '2025-01-01'
+        effectiveTo:
+          type: string
+          nullable: true
+          example: '2027-12-31'
+        priceStatus:
+          type: string
+          example: ACTIVE
+    CreateProductTaxDto:
+      type: object
+      properties:
+        productId:
+          type: string
+          example: p1
+          description: Product ID or Code
+        taxCode:
+          type: string
+          example: HSN-3004-10
+          description: Tax or HSN code
+        taxRate:
+          type: number
+          minimum: 0
+          example: 12
+          description: Tax percentage rate (e.g. 12, 18)
+        effectiveFrom:
+          type: string
+          nullable: true
+          example: '2025-01-01'
+        effectiveTo:
+          type: string
+          nullable: true
+          example: '2027-12-31'
+        status:
+          type: string
+          example: ACTIVE
+          default: ACTIVE
+      required:
+        - productId
+        - taxCode
+        - taxRate
+    UpdateProductTaxDto:
+      type: object
+      properties:
+        taxCode:
+          type: string
+          example: HSN-3004-10
+        taxRate:
+          type: number
+          minimum: 0
+          example: 12
+        effectiveFrom:
+          type: string
+          nullable: true
+          example: '2025-01-01'
+        effectiveTo:
+          type: string
+          nullable: true
+          example: '2027-12-31'
+        status:
+          type: string
+          example: ACTIVE
+    CreateProductUomDto:
+      type: object
+      properties:
+        productId:
+          type: string
+          example: p1
+          description: Product ID or Code
+        uom:
+          type: string
+          example: Box
+          description: Unit of measure name
+        conversionFactor:
+          type: number
+          minimum: 1
+          example: 10
+          description: Positive conversion factor relative to base unit
+        isBaseUom:
+          type: boolean
+          example: false
+          default: false
+          description: Whether this is the single base UOM
+        isOrderUom:
+          type: boolean
+          example: true
+          default: true
+          description: Whether this UOM is orderable by buyers
+        isActive:
+          type: boolean
+          example: true
+          default: true
+      required:
+        - productId
+        - uom
+        - conversionFactor
+    UpdateProductUomDto:
+      type: object
+      properties:
+        uom:
+          type: string
+          example: Box
+        conversionFactor:
+          type: number
+          minimum: 1
+          example: 10
+        isBaseUom:
+          type: boolean
+          example: false
+        isOrderUom:
+          type: boolean
+          example: true
+        isActive:
+          type: boolean
+          example: true
+    CreateCustomerSegmentDto:
+      type: object
+      properties:
+        id:
+          type: string
+          example: seg_corp
+        segmentCode:
+          type: string
+          example: CORP
+          description: Unique segment code
+        segmentName:
+          type: string
+          example: Corporate Procurement
+          description: Segment display name
+        description:
+          type: string
+          example: Direct institutional and corporate agreements
+        lifecycleStatus:
+          type: string
+          example: ACTIVE
+          default: ACTIVE
+      required:
+        - segmentCode
+        - segmentName
+    UpdateCustomerSegmentDto:
+      type: object
+      properties:
+        segmentCode:
+          type: string
+          example: CORP
+        segmentName:
+          type: string
+          example: Corporate Procurement
+        description:
+          type: string
+          example: Direct institutional agreements
+        lifecycleStatus:
+          type: string
+          example: ACTIVE
     CreateRfqLineDto:
       type: object
       properties:

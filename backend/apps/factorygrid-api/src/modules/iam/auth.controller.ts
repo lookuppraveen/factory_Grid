@@ -29,7 +29,7 @@ import {
 /** Brute-force protection on the public credential endpoints: 1000 requests a minute per IP. */
 const CREDENTIAL_LIMIT = { default: { limit: 1000, ttl: 60_000 } };
 
-@ApiTags('Authentication & Registration')
+@ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}

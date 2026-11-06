@@ -22,7 +22,7 @@ import { AuthUser, CurrentUser, Roles } from '@factorygrid/auth';
 import { RfqService } from './rfq.service';
 import { CreateRfqDto, UpdateRfqDto } from './dto/rfq.dto';
 
-@ApiTags('Buyer RFQ Workflow')
+@ApiTags('Buyer')
 @ApiBearerAuth()
 @Roles('BUYER', 'ROLE_BUYER', 'ADMIN', 'ROLE_ADMIN', 'COMPLIANCE_OFFICER', 'ROLE_COMPLIANCE_OFFICER')
 @Controller('buyer/rfqs')

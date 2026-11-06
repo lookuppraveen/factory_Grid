@@ -552,7 +552,7 @@ export const ManufacturerAssignedRFQsModule: React.FC = () => {
     if (isSpecialParty) {
       const selections: Record<string, { mfgId: string; mfgName: string; price: number }> = {};
       selectedRfqForDetail.lines.forEach(l => {
-        const inp = consolidatedInputs[l.id];
+        const inp = lineInputs[l.id];
         const pr = Number(inp?.baseUnitPrice || l.buyerProvidedPrice || l.targetPrice || 14.50);
         selections[l.id] = {
           mfgId: myMfgId,

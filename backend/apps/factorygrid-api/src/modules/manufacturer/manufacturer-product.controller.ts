@@ -1,4 +1,6 @@
+import { FastifyRequest } from 'fastify';
 import {
+  Req,
   Body,
   Controller,
   Delete,
@@ -13,6 +15,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
@@ -23,15 +26,16 @@ import { AuthUser, CurrentUser, Roles } from '@factorygrid/auth';
 import { ManufacturerProductService } from './manufacturer-product.service';
 import {
   CreateManufacturerProductDto,
+  ManufacturerProductBulkUploadDto,
   ManufacturerProductQueryDto,
   UpdateManufacturerProductDto,
   UpdateManufacturerProductStatusDto,
 } from './dto/manufacturer-product.dto';
 
-@ApiTags('Manufacturer Product Catalog')
+@ApiTags('Manufacturer')
 @ApiBearerAuth()
-@Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER')
-@Controller('manufacturer/products')
+@Roles('MANUFACTURER', 'SUPPLIER', 'ROLE_MANUFACTURER', 'ROLE_SUPPLIER', 'ADMIN', 'ROLE_ADMIN')
+@Controller(['manufacturer/products', 'manufacturers/:manufacturerId/products', 'manufacturers/products'])
 export class ManufacturerProductController {
   constructor(private readonly service: ManufacturerProductService) {}
 
@@ -39,8 +43,8 @@ export class ManufacturerProductController {
   @ApiOperation({
     summary: 'Get summary statistics of mapped products for authenticated manufacturer',
   })
-  getSummary(@CurrentUser() user: AuthUser) {
-    return this.service.getSummary(user);
+  getSummary(@CurrentUser() user: AuthUser, @Param('manufacturerId') manufacturerId?: string) {
+    return this.service.getSummary(user, manufacturerId);
   }
 
   @Get()
@@ -50,8 +54,9 @@ export class ManufacturerProductController {
   listMappedProducts(
     @CurrentUser() user: AuthUser,
     @Query() query: ManufacturerProductQueryDto,
+    @Param('manufacturerId') manufacturerId?: string,
   ) {
-    return this.service.listMappedProducts(user, query);
+    return this.service.listMappedProducts(user, query, manufacturerId);
   }
 
   @Get(':id')
@@ -73,6 +78,28 @@ export class ManufacturerProductController {
   ) {
     return this.service.createMapping(user, dto);
   }
+
+  @Post('map-master')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Map an existing master product to manufacturer facility',
+  })
+  mapMasterProduct(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateManufacturerProductDto,
+  ) {
+    return this.service.createMapping(user, dto);
+  }
+  @Post('bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk upload and map products to authenticated manufacturer facility' })
+  bulkUpload(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ManufacturerProductBulkUploadDto,
+  ) {
+    return this.service.bulkUpload(user, dto);
+  }
+
 
   @Put(':id')
   @ApiOperation({ summary: 'Update manufacturer-specific details of a mapped product' })

@@ -46,6 +46,7 @@ export const CategoryMasterModule: React.FC = () => {
   const [categoryPtFilter, setCategoryPtFilter] = useState<string>('ALL');
   const [categorySearchTerm, setCategorySearchTerm] = useState<string>('');
   const [categoryStatusFilter, setCategoryStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [categoryLevelFilter, setCategoryLevelFilter] = useState<'ALL' | 'L1' | 'L2' | 'L3'>('ALL');
 
   // Filters for Product Type Master
   const [productTypeSearch, setProductTypeSearch] = useState('');
@@ -150,6 +151,7 @@ export const CategoryMasterModule: React.FC = () => {
     display_order: 1
   });
   const [catFormError, setCatFormError] = useState<string | null>(null);
+  const [isSavingCat, setIsSavingCat] = useState(false);
 
   // ── INTEGRATED PRODUCT TYPE MASTER (SELECT EXISTING ATTRIBUTES ONLY) ──
   const [selectedAttributeIds, setSelectedAttributeIds] = useState<string[]>([]);
@@ -193,13 +195,21 @@ export const CategoryMasterModule: React.FC = () => {
   const filteredCategoryList = useMemo(() => {
     return (unifiedCategories || []).filter(c => {
       // 1. Product Type filter
-      if (categoryPtFilter !== 'ALL' && c.product_type_id !== categoryPtFilter) {
+      const cPt = c.product_type_id || (c as any).productTypeId;
+      if (categoryPtFilter !== 'ALL' && cPt !== categoryPtFilter) {
         return false;
       }
       // 2. Status filter
-      const st = (c.lifecycle_status || (c.status === 'Active' ? 'ACTIVE' : 'INACTIVE')).toUpperCase();
+      const st = (c.lifecycle_status || (c as any).lifecycleStatus || (c.status === 'Active' ? 'ACTIVE' : 'INACTIVE')).toUpperCase();
       if (categoryStatusFilter !== 'ALL' && st !== categoryStatusFilter) {
         return false;
+      }
+      // 3. Level filter
+      if (categoryLevelFilter !== 'ALL') {
+        const itemLevel: 1 | 2 | 3 = !c.sub_category ? 1 : (!c.sub_sub_category ? 2 : 3);
+        if (categoryLevelFilter === 'L1' && itemLevel !== 1) return false;
+        if (categoryLevelFilter === 'L2' && itemLevel !== 2) return false;
+        if (categoryLevelFilter === 'L3' && itemLevel !== 3) return false;
       }
       // 3. Search query
       const q = categorySearchTerm.toLowerCase().trim();
@@ -239,7 +249,7 @@ export const CategoryMasterModule: React.FC = () => {
       const idB = String(b.category_id || b.categoryId || b.id || '');
       return idB.localeCompare(idA);
     });
-  }, [unifiedCategories, categoryPtFilter, categoryStatusFilter, categorySearchTerm, productTypes]);
+  }, [unifiedCategories, categoryPtFilter, categoryStatusFilter, categoryLevelFilter, categorySearchTerm, productTypes]);
 
   // ── FILTERED DATA: PRODUCT TYPE MASTER ──
   const filteredProductTypes = useMemo(() => {
@@ -271,7 +281,7 @@ export const CategoryMasterModule: React.FC = () => {
   // ── PAGINATION CONTROLS ──
   const categoryPagination = usePagination(filteredCategoryList, {
     initialPageSize: 10,
-    resetDeps: [categoryPtFilter, categoryStatusFilter, categorySearchTerm]
+    resetDeps: [categoryPtFilter, categoryStatusFilter, categoryLevelFilter, categorySearchTerm]
   });
   const paginatedCategories = categoryPagination.paginatedItems;
 
@@ -454,33 +464,7 @@ export const CategoryMasterModule: React.FC = () => {
     }));
   };
 
-  // Helper: Auto-suggest category code
-  const handleAutoGenerateCode = () => {
-    const pt = getPt(catFormData.product_type_id);
-    const ptCode = (pt?.product_type_code || pt?.code || 'CAT').replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase();
 
-    const parts: string[] = [ptCode];
-    if (currentLevel === 2 && parsedParent.category) {
-      const p1 = parsedParent.category.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase();
-      if (p1) parts.push(p1);
-    } else if (currentLevel === 3) {
-      const p1 = parsedParent.category.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase();
-      const p2 = parsedParent.sub_category.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase();
-      if (p1) parts.push(p1);
-      if (p2) parts.push(p2);
-    }
-
-    const words = (catFormData.name.trim() || 'NEW').split(/\s+/);
-    let selfPart = '';
-    if (words.length > 1) {
-      selfPart = words.map(w => w[0]).join('').slice(0, 4).toUpperCase();
-    } else {
-      selfPart = catFormData.name.trim().replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() || 'CAT';
-    }
-
-    parts.push(selfPart);
-    setCatFormData(prev => ({ ...prev, category_code: parts.join('-') }));
-  };
 
   // ── ACTION HANDLERS: CATEGORY ──
 
@@ -559,26 +543,6 @@ export const CategoryMasterModule: React.FC = () => {
       setCatFormError(`Please enter a ${nameFieldLabel}.`);
       return false;
     }
-    const cleanCode = catFormData.category_code.trim().toUpperCase();
-    if (!cleanCode) {
-      setCatFormError('Category Code is required.');
-      return false;
-    }
-
-    // Validate UNIQUE category_code within selected product type
-    const duplicateCode = (unifiedCategories || []).find(c => {
-      const isSelf = editingCat && (c.category_id === editingCat.category_id || c.id === editingCat.id);
-      if (isSelf) return false;
-      return (
-        c.product_type_id === catFormData.product_type_id &&
-        (c.category_code || c.code || '').toUpperCase() === cleanCode
-      );
-    });
-
-    if (duplicateCode) {
-      setCatFormError(`Category Code "${cleanCode}" is already in use within this Product Type. Category codes must be unique.`);
-      return false;
-    }
 
     const today = new Date().toISOString().split('T')[0];
 
@@ -602,88 +566,72 @@ export const CategoryMasterModule: React.FC = () => {
       targetSubSubCategory = cleanName;
     }
 
+    setIsSavingCat(true);
+    setCatFormError(null);
+
     try {
       if (editingCat) {
         const catId = editingCat.category_id || editingCat.id!;
+        const existingCode = editingCat.category_code || editingCat.code || '';
         await updateUnifiedCategory(catId, {
           product_type_id: catFormData.product_type_id,
           category: targetCategory,
           sub_category: targetSubCategory,
           sub_sub_category: targetSubSubCategory,
-          category_code: cleanCode,
+          category_code: existingCode,
           description: catFormData.description.trim() || undefined,
           lifecycle_status: catFormData.lifecycle_status,
           display_order: Number(catFormData.display_order) || 1,
           name: cleanName,
-          code: cleanCode,
+          code: existingCode,
           status: catFormData.lifecycle_status === 'ACTIVE' ? 'Active' : 'Inactive',
           subCategory: targetSubCategory,
           subSubCategory: targetSubSubCategory,
           updated_at: today
         });
-        showToast(`Updated ${levelLabel} record "${cleanCode}" (${cleanName})`);
+        showToast(`Updated ${levelLabel} record "${existingCode}" (${cleanName})`);
       } else {
-        // Auto-generate canonical category_id e.g. CAT033
-        const existingMaxNum = (unifiedCategories || []).reduce((max, c) => {
-          const match = (c.category_id || '').match(/^CAT(\d+)$/i);
-          if (match) {
-            const num = parseInt(match[1], 10);
-            return num > max ? num : max;
-          }
-          return max;
-        }, 0);
-        const newCatId = `CAT${String(existingMaxNum + 1).padStart(3, '0')}`;
-
-        const newRecord: Category = {
-          category_id: newCatId,
+        const saved = await addUnifiedCategory({
           product_type_id: catFormData.product_type_id,
           category: targetCategory,
           sub_category: targetSubCategory,
           sub_sub_category: targetSubSubCategory,
-          category_code: cleanCode,
           description: catFormData.description.trim() || undefined,
           lifecycle_status: catFormData.lifecycle_status,
           display_order: Number(catFormData.display_order) || 1,
-          created_at: today,
-          updated_at: today,
-          id: newCatId,
-          code: cleanCode,
-          name: cleanName,
-          status: catFormData.lifecycle_status === 'ACTIVE' ? 'Active' : 'Inactive',
-          subCategory: targetSubCategory,
-          subSubCategory: targetSubSubCategory
-        };
+        } as any);
 
-        const saved = await addUnifiedCategory(newRecord);
-        const savedCatId = saved?.category_id || saved?.id || newCatId;
-        showToast(`Created ${levelLabel} record ${savedCatId} — ${cleanCode}`);
+        const savedCode = saved?.category_code || saved?.code || 'Generated';
+        showToast(`Created ${levelLabel} record "${savedCode}" (${cleanName})`);
       }
+
+      categoryPagination.resetPage();
+      if (options.closeAfterSave) {
+        setIsCatModalOpen(false);
+      } else {
+        // Save & Add Another: preserve Product Type and parent, reset name/code/description
+        const currentPt = catFormData.product_type_id;
+        const currentParent = catFormData.parent_key;
+        const nextOrder = Number(catFormData.display_order) + 1;
+        setCatFormData({
+          product_type_id: currentPt,
+          parent_key: currentParent,
+          name: '',
+          category_code: '',
+          description: '',
+          lifecycle_status: 'ACTIVE',
+          display_order: nextOrder
+        });
+        setCatFormError(null);
+      }
+      return true;
     } catch (err: any) {
-      setCatFormError(err.message || 'Failed to save category to database.');
+      const msg = err?.response?.data?.message || err?.message || 'Category hierarchy already exists for this Product Type.';
+      setCatFormError(msg);
       return false;
+    } finally {
+      setIsSavingCat(false);
     }
-
-    categoryPagination.resetPage();
-    if (options.closeAfterSave) {
-      setIsCatModalOpen(false);
-    } else {
-      // Save & Add Another: preserve Product Type and parent, reset name/code/description
-      const currentPt = catFormData.product_type_id;
-      const currentParent = catFormData.parent_key;
-      const nextOrder = Number(catFormData.display_order) + 1;
-      setCatFormData({
-        product_type_id: currentPt,
-        parent_key: currentParent,
-        name: '',
-        category_code: '',
-        description: '',
-        lifecycle_status: 'ACTIVE',
-        display_order: nextOrder
-      });
-      setCatFormError(null);
-    }
-
-    return true;
   };
 
   const handleSaveCategory = async (e: React.FormEvent) => {
@@ -1498,6 +1446,21 @@ export const CategoryMasterModule: React.FC = () => {
                 </select>
               </div>
 
+              {/* Hierarchy Level Filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Level:</span>
+                <select
+                  value={categoryLevelFilter}
+                  onChange={e => setCategoryLevelFilter(e.target.value as any)}
+                  style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, fontWeight: 600, background: '#FFF', color: '#0F172A', cursor: 'pointer' }}
+                >
+                  <option value="ALL">All Levels</option>
+                  <option value="L1">Level 1 (Top-Level Category)</option>
+                  <option value="L2">Level 2 (Sub-Category)</option>
+                  <option value="L3">Level 3 (Sub-Sub-Category)</option>
+                </select>
+              </div>
+
               {/* View Mode Toggle: Table View vs Hierarchy View */}
               <div style={{ display: 'flex', background: '#F1F5F9', padding: 3, borderRadius: 6, border: '1px solid #CBD5E1' }}>
                 <button
@@ -1620,9 +1583,22 @@ export const CategoryMasterModule: React.FC = () => {
 
                             {/* 3. Category */}
                             <td style={{ padding: '12px 14px' }}>
-                              <span style={{ fontWeight: 800, color: '#0F172A', fontSize: 13 }}>
-                                {cat.category}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  padding: '1px 5px',
+                                  borderRadius: 3,
+                                  background: !cat.sub_category ? '#E0F2FE' : (!cat.sub_sub_category ? '#FEF3C7' : '#DCFCE7'),
+                                  color: !cat.sub_category ? '#0369A1' : (!cat.sub_sub_category ? '#92400E' : '#15803D'),
+                                  border: `1px solid ${!cat.sub_category ? '#BAE6FD' : (!cat.sub_sub_category ? '#FDE68A' : '#86EFAC')}`
+                                }}>
+                                  L{!cat.sub_category ? '1' : (!cat.sub_sub_category ? '2' : '3')}
+                                </span>
+                                <span style={{ fontWeight: 800, color: '#0F172A', fontSize: 13 }}>
+                                  {cat.category}
+                                </span>
+                              </div>
                             </td>
 
                             {/* 4. Sub-Category */}
@@ -2623,6 +2599,20 @@ export const CategoryMasterModule: React.FC = () => {
 
                       {/* Name Field (Dynamic Label) */}
                       <div>
+                        {currentLevel === 2 && (
+                          <div style={{ marginBottom: 10, padding: '8px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12 }}>
+                            <span style={{ color: '#64748B' }}>Parent Category: </span>
+                            <strong style={{ color: '#0F766E' }}>{parsedParent.category}</strong>
+                          </div>
+                        )}
+                        {currentLevel === 3 && (
+                          <div style={{ marginBottom: 10, padding: '8px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12 }}>
+                            <span style={{ color: '#64748B' }}>Parent Hierarchy: </span>
+                            <strong style={{ color: '#0F766E' }}>{parsedParent.category}</strong>
+                            <span style={{ color: '#94A3B8', margin: '0 6px' }}>→</span>
+                            <strong style={{ color: '#0F766E' }}>{parsedParent.sub_category}</strong>
+                          </div>
+                        )}
                         <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
                           {nameFieldLabel} *
                         </label>
@@ -2644,51 +2634,32 @@ export const CategoryMasterModule: React.FC = () => {
                         />
                       </div>
 
-                      {/* Category Code (Unique) */}
+                      {/* Category Code (Non-editable, backend assigned) */}
                       <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                          <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                            Category Code * <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Unique within product type)</span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={handleAutoGenerateCode}
-                            style={{
-                              fontSize: 11,
-                              color: '#0F766E',
-                              background: '#F0FDFA',
-                              border: '1px solid #CCFBF1',
-                              borderRadius: 4,
-                              padding: '2px 8px',
-                              cursor: 'pointer',
-                              fontWeight: 700,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4
-                            }}
-                          >
-                            <Sparkles size={11} /> Auto-suggest Code
-                          </button>
-                        </div>
+                        <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
+                          Category Code
+                        </label>
                         <input
                           type="text"
-                          required
-                          placeholder="e.g. DRUG-TAB-FCT, APP-MEN-TOP"
-                          value={catFormData.category_code}
-                          onChange={e => setCatFormData(prev => ({ ...prev, category_code: e.target.value.toUpperCase() }))}
+                          readOnly
+                          disabled
+                          value={editingCat ? (editingCat.category_code || editingCat.code || '') : 'Assigned automatically'}
                           style={{
                             width: '100%',
                             padding: '9px 12px',
                             border: '1px solid #CBD5E1',
                             borderRadius: 6,
                             fontSize: 13,
-                            fontFamily: 'monospace',
-                            fontWeight: 700,
-                            outline: 'none'
+                            fontFamily: editingCat ? 'monospace' : 'inherit',
+                            fontWeight: 600,
+                            background: '#F8FAFC',
+                            color: editingCat ? '#0F172A' : '#64748B',
+                            outline: 'none',
+                            cursor: 'not-allowed'
                           }}
                         />
                         <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
-                          Client model has one single category_code representing this complete record.
+                          Unique category code is assigned automatically upon saving.
                         </div>
                       </div>
 
@@ -3010,7 +2981,7 @@ export const CategoryMasterModule: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed #E2E8F0' }}>
                       <span style={{ color: '#64748B' }}>category_code:</span>
                       <span style={{ fontFamily: 'monospace', color: '#1D4ED8', fontWeight: 700 }}>
-                        {catFormData.category_code || '—'}
+                        {editingCat ? (editingCat.category_code || editingCat.code || '—') : 'Assigned automatically'}
                       </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>

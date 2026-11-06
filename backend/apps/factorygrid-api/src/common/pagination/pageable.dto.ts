@@ -16,7 +16,7 @@ export class PageableQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  page?: number = 0;
+  page?: number;
 
   /**
    * Page size (number of records per page).
@@ -30,8 +30,8 @@ export class PageableQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
-  size?: number = 10;
+  @Max(1000)
+  size?: number;
 
   /**
    * Alternative alias for size.
@@ -44,7 +44,7 @@ export class PageableQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(1000)
   limit?: number;
 
   /**
@@ -87,7 +87,8 @@ export function getPaginationParams(
   defaultSortDir: 'asc' | 'desc' = 'desc'
 ) {
   // Resolve effective page size
-  const take = Math.min(Math.max(dto.size || dto.limit || 10, 1), 100);
+  const rawTake = dto.size || dto.limit;
+  const take = rawTake ? Math.min(Math.max(rawTake, 1), 1000) : 1000;
 
   // Determine if page parameter was passed as 1-indexed (e.g. page=1, size=10) or 0-indexed (page=0)
   const rawPage = dto.page ?? 0;

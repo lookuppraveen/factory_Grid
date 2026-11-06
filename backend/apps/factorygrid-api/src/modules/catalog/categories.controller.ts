@@ -23,7 +23,7 @@ import { Public, Roles } from '@factorygrid/auth';
 import { CatalogService } from './catalog.service';
 import { CreateCategoryDto, UpdateCategoryDto, CategoryQueryDto } from './dto/category-admin.dto';
 
-@ApiTags('Categories & Hierarchies')
+@ApiTags('Product Catalog & Master Data')
 @Controller('categories')
 export class CategoriesController {
   constructor(private readonly service: CatalogService) {}
@@ -42,6 +42,35 @@ export class CategoriesController {
   @ApiOperation({ summary: 'List all active product types from database' })
   listProductTypes() {
     return this.service.listProductTypes();
+  }
+
+  
+  @Public()
+  @Get('sub-categories')
+  @ApiOperation({ summary: 'List sub-categories by category query parameter' })
+  @ApiQuery({ name: 'categoryId', required: true, description: 'Category name, ID or code' })
+  getSubCategoriesByQuery(@Query('categoryId') categoryId: string) {
+    if (!categoryId) return [];
+    return this.service.getSubCategories(categoryId);
+  }
+
+  @Public()
+  @Get('sub-sub-categories')
+  @ApiOperation({ summary: 'List sub-sub-categories by category and sub-category query parameters' })
+  @ApiQuery({ name: 'categoryId', required: false, description: 'Category name, ID or code' })
+  @ApiQuery({ name: 'subCategory', required: false, description: 'Sub-category name' })
+  @ApiQuery({ name: 'subCategoryId', required: false, description: 'Sub-category name or ID' })
+  getSubSubCategoriesByQuery(
+    @Query('categoryId') categoryId?: string,
+    @Query('subCategory') subCategory?: string,
+    @Query('subCategoryId') subCategoryId?: string,
+  ) {
+    const effectiveSubCat = subCategory || subCategoryId;
+    if (!categoryId && effectiveSubCat) {
+      return this.service.getSubSubCategoriesBySubCategoryOnly(effectiveSubCat);
+    }
+    if (!categoryId || !effectiveSubCat) return [];
+    return this.service.getSubSubCategories(categoryId, effectiveSubCat);
   }
 
   @Public()

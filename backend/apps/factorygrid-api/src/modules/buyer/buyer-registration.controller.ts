@@ -45,7 +45,7 @@ import {
 } from './dto/buyer-document.dto';
 import { CustomerVerificationResponseDto } from './dto/verification.dto';
 
-@ApiTags('Buyer Onboarding & Registration')
+@ApiTags('Buyer')
 @Controller('buyer')
 export class BuyerRegistrationController {
   constructor(

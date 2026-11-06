@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Package, Plus, Search, Filter, RotateCcw, Eye, Edit3, CheckCircle2,
   AlertTriangle, Clock, Layers, X, ChevronRight, ShieldCheck,
-  Check, FileText, ToggleLeft, ToggleRight, FileSpreadsheet, UploadCloud,
-  CheckCheck, Download, RefreshCw
+  ToggleLeft, ToggleRight, FileSpreadsheet
 } from 'lucide-react';
 import {
   manufacturerProductsApi,
@@ -12,6 +11,8 @@ import {
   MasterCatalogProduct
 } from '../../services/manufacturerProductsApi';
 import { catalogApi } from '../../services/catalogApi';
+import { useAppContext } from '../../context/AppContext';
+import { BulkUploadModal } from './catalog/BulkUploadModal';
 
 interface ManufacturerProductCatalogTabProps {
   manufacturer?: any;
@@ -43,6 +44,8 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
 
   // ── 3. Modals & Drawers State ────────────────────────────────────────
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [addModalInitialTab, setAddModalInitialTab] = useState<'CREATE' | 'MAP' | 'UPLOAD'>('CREATE');
+  const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState<boolean>(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [selectedMappingForEdit, setSelectedMappingForEdit] = useState<ManufacturerProductMappingItem | null>(null);
   const [selectedMappingForDetail, setSelectedMappingForDetail] = useState<ManufacturerProductMappingItem | null>(null);
@@ -201,7 +204,7 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button
             onClick={() => fetchCatalogData(true)}
             disabled={isRefreshing || isLoading}
@@ -225,7 +228,10 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
           </button>
 
           <button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              setAddModalInitialTab('CREATE');
+              setIsAddModalOpen(true);
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -243,7 +249,52 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
             }}
           >
             <Plus size={16} />
-            + Add Product
+            + Create New Product (Manual)
+          </button>
+
+          <button
+            onClick={() => { setAddModalInitialTab('UPLOAD'); setIsAddModalOpen(true); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '10px 18px',
+              borderRadius: 8,
+              border: '1px solid #0F766E',
+              background: '#F0FDFA',
+              color: '#0F766E',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <FileSpreadsheet size={16} />
+            Bulk Upload (Excel/CSV)
+          </button>
+
+          <button
+            onClick={() => {
+              setAddModalInitialTab('MAP');
+              setIsAddModalOpen(true);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '10px 18px',
+              borderRadius: 8,
+              border: '1px solid #CBD5E1',
+              background: '#FFFFFF',
+              color: '#334155',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Layers size={16} />
+            Map Existing Master Product
           </button>
         </div>
       </div>
@@ -870,6 +921,7 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
           mfgDisplayName={mfgDisplayName}
           mfgCode={mfgCode}
           categoryTree={categoryTree}
+          initialTab={addModalInitialTab}
           onClose={() => setIsAddModalOpen(false)}
           onSuccess={() => {
             setIsAddModalOpen(false);
@@ -877,6 +929,19 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
           }}
         />
       )}
+
+      {/* ── Bulk Upload Modal ── */}
+      <BulkUploadModal
+        isOpen={isBulkUploadModalOpen}
+        onClose={() => setIsBulkUploadModalOpen(false)}
+        onSuccess={() => {
+          setIsBulkUploadModalOpen(false);
+          fetchCatalogData();
+        }}
+        type="manufacturer"
+        mfgDisplayName={mfgDisplayName}
+        mfgCode={mfgCode}
+      />
 
       {/* ── Edit Product Terms Modal ──────────────────────────────── */}
       {isEditModalOpen && selectedMappingForEdit && (
@@ -912,6 +977,7 @@ interface OriginalAddProductModalProps {
   mfgDisplayName: string;
   mfgCode: string;
   categoryTree: any[];
+  initialTab?: 'CREATE' | 'MAP' | 'UPLOAD';
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -920,22 +986,18 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
   mfgDisplayName,
   mfgCode,
   categoryTree,
+  initialTab = 'CREATE',
   onClose,
   onSuccess
 }) => {
-  const [addModalTab, setAddModalTab] = useState<'CREATE' | 'MAP' | 'UPLOAD'>('CREATE');
+  const [addModalTab, setAddModalTab] = useState<'CREATE' | 'MAP' | 'UPLOAD'>(initialTab);
   const [addFormError, setAddFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Active Categories List from DB
-  const activeCategoriesList = useMemo(() => {
-    return categoryTree.map((c) => c.category);
-  }, [categoryTree]);
-
-  // Form State 1: Create New Product (Manual)
+  // ── Form State 1: Create New Product (Manual) ───────────────────────
   const [createProductForm, setCreateProductForm] = useState({
     name: '',
-    category: 'Drugs',
+    category: '',
     subCategory: '',
     subSubCategory: '',
     subSubCategoryId: '',
@@ -955,36 +1017,377 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
     status: 'Active'
   });
 
-  // Cascading options for Manual Creation
-  const [createAvailableSubCategories, setCreateAvailableSubCategories] = useState<string[]>([]);
-  const [createAvailableSubSubCategories, setCreateAvailableSubSubCategories] = useState<string[]>([]);
+  // Dynamic Category Cascading Options from Real PostgreSQL Database
+  const [categoriesList, setCategoriesList] = useState<string[]>([]);
+  const [availableSubCategories, setAvailableSubCategories] = useState<string[]>([]);
+  const [availableSubSubCategories, setAvailableSubSubCategories] = useState<string[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(false);
+  const [isLoadingSubCategories, setIsLoadingSubCategories] = useState<boolean>(false);
+  const [isLoadingSubSubCategories, setIsLoadingSubSubCategories] = useState<boolean>(false);
 
+  // Fetch real categories from backend on modal open
   useEffect(() => {
-    if (!createProductForm.category) {
-      setCreateAvailableSubCategories([]);
-      setCreateAvailableSubSubCategories([]);
-      return;
-    }
-    manufacturerProductsApi.getSubCategories(createProductForm.category)
-      .then((subs) => {
-        setCreateAvailableSubCategories(subs);
-        setCreateAvailableSubSubCategories([]);
+    let active = true;
+    setIsLoadingCategories(true);
+    manufacturerProductsApi.getCategories()
+      .then((res: any) => {
+        if (!active) return;
+        const rawList: any[] = res?.content || res?.categories || res?.data || (Array.isArray(res) ? res : []);
+        const unique = Array.from(new Set(
+          rawList
+            .filter((c: any) => (c.lifecycleStatus || c.lifecycle_status || c.status || 'ACTIVE').toUpperCase() === 'ACTIVE')
+            .map((c: any) => (c.category || c.name || '').trim())
+            .filter(Boolean)
+        ));
+        if (unique.length > 0) {
+          setCategoriesList(unique);
+        } else if (categoryTree && categoryTree.length > 0) {
+          setCategoriesList(categoryTree.map((c: any) => c.category).filter(Boolean));
+        }
       })
-      .catch(() => setCreateAvailableSubCategories([]));
-  }, [createProductForm.category]);
+      .catch((err) => {
+        console.warn('Could not load categories:', err);
+        if (categoryTree && categoryTree.length > 0) {
+          setCategoriesList(categoryTree.map((c: any) => c.category).filter(Boolean));
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoadingCategories(false);
+      });
+    return () => { active = false; };
+  }, [categoryTree]);
 
-  useEffect(() => {
-    const currentSub = createProductForm.subCategory || createProductForm.dosageForm;
-    if (!createProductForm.category || !currentSub) {
-      setCreateAvailableSubSubCategories([]);
+  // Handle Category selection -> fetch corresponding Sub-Categories from backend
+  const handleCategoryChange = async (selectedCat: string) => {
+    setCreateProductForm(prev => ({
+      ...prev,
+      category: selectedCat,
+      subCategory: '',
+      dosageForm: '',
+      subSubCategory: '',
+      subSubCategoryId: ''
+    }));
+    setAvailableSubCategories([]);
+    setAvailableSubSubCategories([]);
+    if (!selectedCat) return;
+
+    setIsLoadingSubCategories(true);
+    try {
+      const subs = await manufacturerProductsApi.getSubCategories(selectedCat);
+      setAvailableSubCategories(subs || []);
+    } catch (err) {
+      console.error('Failed to load sub-categories:', err);
+      const matched = categoryTree.find((c: any) => c.category === selectedCat);
+      setAvailableSubCategories(matched?.subCategories?.map((s: any) => s.name || s) || []);
+    } finally {
+      setIsLoadingSubCategories(false);
+    }
+  };
+
+  // Handle Sub-Category selection -> fetch corresponding Sub-Sub-Categories from backend
+  const handleSubCategoryChange = async (selectedSub: string) => {
+    setCreateProductForm(prev => ({
+      ...prev,
+      subCategory: selectedSub,
+      dosageForm: selectedSub,
+      subSubCategory: '',
+      subSubCategoryId: ''
+    }));
+    setAvailableSubSubCategories([]);
+    if (!selectedSub || !createProductForm.category) return;
+
+    setIsLoadingSubSubCategories(true);
+    try {
+      const subSubs = await manufacturerProductsApi.getSubSubCategories(createProductForm.category, selectedSub);
+      setAvailableSubSubCategories(subSubs || []);
+    } catch (err) {
+      console.error('Failed to load sub-sub-categories:', err);
+    } finally {
+      setIsLoadingSubSubCategories(false);
+    }
+  };
+
+  // Save Flow 1: Create New Product (Manual)
+  const handleSaveCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddFormError(null);
+
+    // 1. Classification Hierarchy Validation
+    if (!createProductForm.category.trim()) {
+      setAddFormError('Category is required.');
       return;
     }
-    manufacturerProductsApi.getSubSubCategories(createProductForm.category, currentSub)
-      .then((subSubs) => setCreateAvailableSubSubCategories(subSubs))
-      .catch(() => setCreateAvailableSubSubCategories([]));
-  }, [createProductForm.category, createProductForm.subCategory, createProductForm.dosageForm]);
+    const currentSub = createProductForm.subCategory.trim();
+    if (availableSubCategories.length > 0 && !currentSub) {
+      setAddFormError('Sub-Category is required.');
+      return;
+    }
 
-  // Form State 2: Map Existing Central Master Product
+    // 2. Product Details Validation
+    if (!createProductForm.sku.trim()) {
+      setAddFormError('Product Code / SKU is required (e.g. PCM-650).');
+      return;
+    }
+    if (!createProductForm.name.trim()) {
+      setAddFormError('Product Name is required.');
+      return;
+    }
+    if (!createProductForm.packaging.trim()) {
+      setAddFormError('Packaging details are required (e.g. 10 × 1 × 10 Strip).');
+      return;
+    }
+    if (!createProductForm.moq || createProductForm.moq <= 0) {
+      setAddFormError('Valid Minimum Order Quantity (MOQ) is required.');
+      return;
+    }
+    if (!createProductForm.standardLeadTimeDays || createProductForm.standardLeadTimeDays <= 0) {
+      setAddFormError('Valid Delivery Schedule (Days) is required.');
+      return;
+    }
+
+    const cleanSku = createProductForm.sku.trim().toUpperCase();
+    setIsSubmitting(true);
+
+    try {
+      // 1. Create canonical product in Central Master (PostgreSQL catalog_products)
+      let productId = cleanSku;
+      try {
+        const created = await catalogApi.createProduct({
+          productCode: cleanSku,
+          name: createProductForm.name.trim(),
+          category: createProductForm.category.trim(),
+          subCategory: currentSub || undefined,
+          subSubCategory: createProductForm.subSubCategory?.trim() || undefined,
+          genericName: createProductForm.genericName.trim() || createProductForm.name.trim(),
+          dosageForm: createProductForm.dosageForm || currentSub || 'Tablet',
+          packSize: createProductForm.packSize.trim() || createProductForm.packaging.trim(),
+          baseUom: createProductForm.uom || 'Unit',
+          description: createProductForm.description.trim() || `${createProductForm.name} formulation`,
+          lifecycleStatus: 'ACTIVE',
+        });
+        if (created?.id) productId = created.id;
+      } catch (err: any) {
+        console.log('Central master creation check:', err?.message);
+        const existing = await manufacturerProductsApi.searchMasterProducts({ search: cleanSku });
+        const match = existing.find(p => p.productCode === cleanSku);
+        if (match) productId = match.id;
+      }
+
+      // 2. Create Manufacturer-Product Mapping in PostgreSQL manufacturer_products
+      await manufacturerProductsApi.createMapping({
+        productId,
+        manufacturerProductCode: cleanSku,
+        moq: createProductForm.moq,
+        leadTimeDays: createProductForm.standardLeadTimeDays,
+        packagingDetails: createProductForm.packaging.trim(),
+        lifecycleStatus: 'ACTIVE',
+      });
+
+      onSuccess();
+    } catch (err: any) {
+      console.error('Failed to create and map product:', err);
+      setAddFormError(err?.message || 'Failed to save product to catalog.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ── Form State 2: Bulk Upload (Excel/CSV) ───────────────────────────
+  const [bulkParsedRows, setBulkParsedRows] = useState<any[]>([]);
+  const [bulkFileName, setBulkFileName] = useState<string | null>(null);
+  const [bulkPasteText, setBulkPasteText] = useState<string>('');
+  const [bulkUploadSuccessCount, setBulkUploadSuccessCount] = useState<number | null>(null);
+  const [isProcessingBulk, setIsProcessingBulk] = useState<boolean>(false);
+  const [bulkUploadResult, setBulkUploadResult] = useState<any | null>(null);
+
+  const handleDownloadProductTemplate = () => {
+    const headers = [
+      'product_code',
+      'name',
+      'generic_name',
+      'category',
+      'sub_category',
+      'sub_sub_category',
+      'dosage_form',
+      'pack_size',
+      'uom',
+      'moq',
+      'lead_time_days',
+      'description'
+    ];
+    const sampleRows = [
+      [
+        'TEL-40-TAB',
+        'Telmisartan 40mg Tablets',
+        'Telmisartan',
+        'Drugs',
+        'Tablets',
+        'Cardiovascular',
+        'Tablets',
+        '10 x 10 Strip',
+        'Boxes',
+        '1000',
+        '14',
+        'Antihypertensive formulation for blood pressure management'
+      ],
+      [
+        'MON-LEVO-TAB',
+        'Montelukast 10mg + Levocetirizine 5mg Tablets',
+        'Montelukast + Levocetirizine',
+        'Drugs',
+        'Tablets',
+        'Respiratory',
+        'Tablets',
+        '10 x 10 Alu-Alu',
+        'Boxes',
+        '1500',
+        '14',
+        'Dual action antiallergic and bronchodilator formulation'
+      ]
+    ];
+    const csvContent = 'data:text/csv;charset=utf-8,' + [
+      headers.join(','),
+      ...sampleRows.map(r => r.map(f => `"${f.replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `FactoryGrid_Manufacturer_Product_Upload_Template_${mfgCode}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleLoadSampleProductsCSV = () => {
+    const sampleCSV = `product_code,name,generic_name,category,sub_category,sub_sub_category,dosage_form,pack_size,uom,moq,lead_time_days,description
+TEL-40-TAB,Telmisartan 40mg Tablets,Telmisartan,Drugs,Tablets,Cardiovascular,Tablets,10 x 10 Strip,Boxes,1000,14,Antihypertensive formulation
+MON-LEVO-TAB,Montelukast 10mg + Levocetirizine 5mg Tablets,Montelukast + Levocetirizine,Drugs,Tablets,Respiratory,Tablets,10 x 10 Alu-Alu,Boxes,1500,14,Dual action antiallergic
+ALB-400-CHEW,Albendazole 400mg Chewable Tablets,Albendazole,Drugs,Tablets,Anthelmintic,Chewable Tablets,1 x 1 Blister,Boxes,2000,10,Chewable deworming tablets`;
+    setBulkPasteText(sampleCSV);
+    parseAndValidateProductCSV(sampleCSV, 'Sample_Manufacturer_Products.csv');
+  };
+
+  const parseAndValidateProductCSV = (csvText: string, fileName = 'Upload.csv') => {
+    setAddFormError(null);
+    setBulkFileName(fileName);
+    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length < 2) {
+      setAddFormError('Uploaded file has no data rows.');
+      return;
+    }
+
+    const parseCsvRow = (text: string): string[] => {
+      const result: string[] = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (char === '"' || char === "'") {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(cur.trim());
+          cur = '';
+        } else {
+          cur += char;
+        }
+      }
+      result.push(cur.trim());
+      return result.map(s => s.replace(/^["']|["']$/g, '').trim());
+    };
+
+    const header = parseCsvRow(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    const findIndex = (keys: string[]) => header.findIndex(h => keys.some(k => h.includes(k)));
+
+    const idxSku = findIndex(['sku', 'productcode', 'code', 'itemcode']);
+    const idxName = findIndex(['productname', 'name', 'title']);
+    const idxGeneric = findIndex(['generic', 'genericname', 'molecule']);
+    const idxCat = findIndex(['category', 'cat']);
+    const idxSub = findIndex(['subcategory', 'subcat']);
+    const idxSubSub = findIndex(['subsubcategory', 'subsub']);
+    const idxDosage = findIndex(['dosage', 'form', 'dosageform']);
+    const idxPack = findIndex(['pack', 'packsize', 'packaging']);
+    const idxUom = findIndex(['uom', 'unit']);
+    const idxMoq = findIndex(['moq', 'minimumorder']);
+    const idxLead = findIndex(['lead', 'leadtime', 'days']);
+    const idxDesc = findIndex(['desc', 'description']);
+
+    const rows: any[] = [];
+    const seenCodes = new Set<string>();
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCsvRow(lines[i]);
+      if (cols.length === 0 || cols.every(c => !c)) continue;
+
+      const code = (cols[idxSku !== -1 ? idxSku : 0] || '').toUpperCase();
+      const name = cols[idxName !== -1 ? idxName : 1] || '';
+      const genericName = cols[idxGeneric !== -1 ? idxGeneric : 2] || name;
+      const category = cols[idxCat !== -1 ? idxCat : 3] || 'Drugs';
+      const subCategory = idxSub !== -1 ? cols[idxSub] : undefined;
+      const subSubCategory = idxSubSub !== -1 ? cols[idxSubSub] : undefined;
+      const dosageForm = idxDosage !== -1 ? cols[idxDosage] : subCategory || 'Tablets';
+      const packSize = cols[idxPack !== -1 ? idxPack : 4] || '10 x 10 Strip';
+      const uom = cols[idxUom !== -1 ? idxUom : 5] || 'Strip';
+      const moq = parseInt(cols[idxMoq !== -1 ? idxMoq : 6]?.replace(/[^0-9]/g, '') || '1000', 10);
+      const leadTimeDays = parseInt(cols[idxLead !== -1 ? idxLead : 7]?.replace(/[^0-9]/g, '') || '14', 10);
+      const description = idxDesc !== -1 ? cols[idxDesc] : undefined;
+
+      const errors: string[] = [];
+      if (!name) errors.push('Product Name is required');
+      if (!category) errors.push('Category is required');
+      if (code && seenCodes.has(code)) {
+        errors.push(`Duplicate code "${code}" in uploaded file`);
+      } else if (code) {
+        seenCodes.add(code);
+      }
+
+      rows.push({
+        rowNum: i,
+        productCode: code,
+        manufacturerProductCode: code,
+        name,
+        genericName,
+        category,
+        subCategory,
+        subSubCategory,
+        dosageForm,
+        packSize,
+        packagingDetails: packSize,
+        baseUom: uom,
+        uom,
+        moq: isNaN(moq) ? 1000 : moq,
+        leadTimeDays: isNaN(leadTimeDays) ? 14 : leadTimeDays,
+        description,
+        isValid: errors.length === 0,
+        errors,
+      });
+    }
+
+    setBulkParsedRows(rows);
+  };
+
+  const handleConfirmBulkUpload = async () => {
+    const validRows = bulkParsedRows.filter(r => r.isValid);
+    if (validRows.length === 0) {
+      setAddFormError('No valid rows to import.');
+      return;
+    }
+
+    setIsProcessingBulk(true);
+    setAddFormError(null);
+    try {
+      const res = await manufacturerProductsApi.bulkUpload(validRows);
+      setBulkUploadResult(res);
+      setBulkUploadSuccessCount(res.successfulRows ?? validRows.length);
+      onSuccess();
+    } catch (err: any) {
+      console.error('Bulk upload failed:', err);
+      setAddFormError(err?.message || 'Bulk upload failed. Please review row errors.');
+    } finally {
+      setIsProcessingBulk(false);
+    }
+  };
+
+  // ── Form State 3: Map Existing Central Master Product ────────────────
   const [centralSearchQuery, setCentralSearchQuery] = useState('');
   const [centralProductResults, setCentralProductResults] = useState<MasterCatalogProduct[]>([]);
   const [isLoadingMasterProducts, setIsLoadingMasterProducts] = useState(false);
@@ -1025,93 +1428,6 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
     });
   };
 
-  // Save Flow 1: Create New Product (Manual)
-  const handleSaveCreateProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAddFormError(null);
-
-    // 1. Classification Hierarchy Validation
-    if (!createProductForm.category.trim()) {
-      setAddFormError('Category is required.');
-      return;
-    }
-    const currentSub = createProductForm.subCategory.trim() || createProductForm.dosageForm.trim();
-    if (createAvailableSubCategories.length > 0 && !currentSub) {
-      setAddFormError('Sub-Category is required.');
-      return;
-    }
-
-    // 2. Product Details Validation
-    if (!createProductForm.sku.trim()) {
-      setAddFormError('Product Code / SKU is required (e.g. PCM-650).');
-      return;
-    }
-    if (!createProductForm.name.trim()) {
-      setAddFormError('Product Name is required.');
-      return;
-    }
-    if (!createProductForm.packaging.trim()) {
-      setAddFormError('Packaging details are required (e.g. 10 × 1 × 10 Strip).');
-      return;
-    }
-    if (!createProductForm.moq || createProductForm.moq <= 0) {
-      setAddFormError('Valid Minimum Order Quantity (MOQ) is required.');
-      return;
-    }
-    if (!createProductForm.standardLeadTimeDays || createProductForm.standardLeadTimeDays <= 0) {
-      setAddFormError('Valid Delivery Schedule (Days) is required.');
-      return;
-    }
-
-    const cleanSku = createProductForm.sku.trim().toUpperCase();
-    setIsSubmitting(true);
-
-    try {
-      // 1. Create or ensure product exists in Central Master (PostgreSQL catalog_products)
-      let productId = cleanSku;
-      try {
-        const created = await catalogApi.createProduct({
-          productCode: cleanSku,
-          name: createProductForm.name.trim(),
-          category: createProductForm.category.trim(),
-          subCategory: currentSub || undefined,
-          subSubCategory: createProductForm.subSubCategory?.trim() || undefined,
-          genericName: createProductForm.genericName.trim() || createProductForm.name.trim(),
-          dosageForm: createProductForm.dosageForm || currentSub || 'Tablet',
-          packSize: createProductForm.packSize.trim() || createProductForm.packaging.trim(),
-          baseUom: createProductForm.uom || 'Unit',
-          description: createProductForm.description.trim() || `${createProductForm.name} pharmaceutical formulation`,
-          lifecycleStatus: 'ACTIVE',
-        });
-        if (created?.id) productId = created.id;
-      } catch (err: any) {
-        console.log('Central master creation notice:', err?.message);
-        // If it already existed in master, search for its ID
-        const existing = await manufacturerProductsApi.searchMasterProducts({ search: cleanSku });
-        const match = existing.find(p => p.productCode === cleanSku);
-        if (match) productId = match.id;
-      }
-
-      // 2. Create Manufacturer-Product Mapping in PostgreSQL manufacturer_products
-      await manufacturerProductsApi.createMapping({
-        productId,
-        manufacturerProductCode: cleanSku,
-        moq: createProductForm.moq,
-        leadTimeDays: createProductForm.standardLeadTimeDays,
-        packagingDetails: createProductForm.packaging.trim(),
-        lifecycleStatus: createProductForm.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE',
-      });
-
-      onSuccess();
-    } catch (err: any) {
-      console.error('Failed to create and map product:', err);
-      setAddFormError(err?.message || 'Failed to save product to catalog.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Save Flow 2: Map Existing Central Master Product
   const handleSaveAddMapping = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCentralProduct) {
@@ -1210,7 +1526,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
           </div>
         )}
 
-        {/* Modal Tabs: Create New Product vs Map from Master */}
+        {/* Modal Tabs: Exactly 3 top action buttons */}
         <div style={{ display: 'flex', gap: 10, borderBottom: '1px solid #E2E8F0', paddingBottom: 12, marginBottom: 18 }}>
           <button
             type="button"
@@ -1227,6 +1543,25 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
             }}
           >
             + Create New Product (Manual)
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAddModalTab('UPLOAD'); setAddFormError(null); }}
+            style={{
+              padding: '7px 16px',
+              borderRadius: 6,
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: addModalTab === 'UPLOAD' ? '1px solid #0F766E' : '1px solid #CBD5E1',
+              background: addModalTab === 'UPLOAD' ? '#0F766E' : '#F8FAFC',
+              color: addModalTab === 'UPLOAD' ? '#FFFFFF' : '#475569',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <FileSpreadsheet size={14} /> Bulk Upload (Excel/CSV)
           </button>
           <button
             type="button"
@@ -1263,21 +1598,11 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                 <select
                   required
                   value={createProductForm.category}
-                  onChange={(e) => {
-                    const newCat = e.target.value;
-                    setCreateProductForm({
-                      ...createProductForm,
-                      category: newCat,
-                      subCategory: '',
-                      dosageForm: '',
-                      subSubCategory: '',
-                      subSubCategoryId: ''
-                    });
-                  }}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
                   style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none', background: '#F0FDFA', color: '#0F766E' }}
                 >
                   <option value="" disabled>-- Select Category * --</option>
-                  {activeCategoriesList.map((cat) => (
+                  {categoriesList.map((cat) => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
@@ -1289,29 +1614,22 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                   Sub-Category *
                 </label>
                 <select
-                  required={createAvailableSubCategories.length > 0}
-                  disabled={!createProductForm.category || createAvailableSubCategories.length === 0}
-                  value={createProductForm.subCategory || createProductForm.dosageForm}
-                  onChange={(e) => {
-                    const newSub = e.target.value;
-                    setCreateProductForm({
-                      ...createProductForm,
-                      subCategory: newSub,
-                      dosageForm: newSub,
-                      subSubCategory: '',
-                      subSubCategoryId: ''
-                    });
-                  }}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: (!createProductForm.category || createAvailableSubCategories.length === 0) ? '#F8FAFC' : '#FFFFFF' }}
+                  required={availableSubCategories.length > 0}
+                  disabled={!createProductForm.category || (availableSubCategories.length === 0 && !isLoadingSubCategories)}
+                  value={createProductForm.subCategory}
+                  onChange={(e) => handleSubCategoryChange(e.target.value)}
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: (!createProductForm.category || availableSubCategories.length === 0) ? '#F8FAFC' : '#FFFFFF' }}
                 >
                   {!createProductForm.category ? (
                     <option value="">-- Select Category First --</option>
-                  ) : createAvailableSubCategories.length === 0 ? (
+                  ) : isLoadingSubCategories ? (
+                    <option value="">Loading sub-categories...</option>
+                  ) : availableSubCategories.length === 0 ? (
                     <option value="">Not Applicable (No sub-categories)</option>
                   ) : (
                     <>
                       <option value="">-- Select Sub-Category * --</option>
-                      {createAvailableSubCategories.map((sub) => (
+                      {availableSubCategories.map((sub) => (
                         <option key={sub} value={sub}>{sub}</option>
                       ))}
                     </>
@@ -1319,30 +1637,27 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                 </select>
               </div>
 
-              {/* Sub-Sub-Category */}
+              {/* Sub-Sub-Category (Optional) */}
               <div>
                 <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
                   Sub-Sub-Category <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>
                 </label>
                 <select
-                  disabled={(!createProductForm.subCategory && !createProductForm.dosageForm) || createAvailableSubSubCategories.length === 0}
+                  disabled={!createProductForm.subCategory || (availableSubSubCategories.length === 0 && !isLoadingSubSubCategories)}
                   value={createProductForm.subSubCategory}
-                  onChange={(e) => {
-                    setCreateProductForm({
-                      ...createProductForm,
-                      subSubCategory: e.target.value,
-                    });
-                  }}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: ((!createProductForm.subCategory && !createProductForm.dosageForm) || createAvailableSubSubCategories.length === 0) ? '#F8FAFC' : '#FFFFFF' }}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, subSubCategory: e.target.value }))}
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: (!createProductForm.subCategory || availableSubSubCategories.length === 0) ? '#F8FAFC' : '#FFFFFF' }}
                 >
-                  {(!createProductForm.subCategory && !createProductForm.dosageForm) ? (
+                  {!createProductForm.subCategory ? (
                     <option value="">-- Select Sub-Category First --</option>
-                  ) : createAvailableSubSubCategories.length === 0 ? (
-                    <option value="">Not Applicable (None for this Sub-Category)</option>
+                  ) : isLoadingSubSubCategories ? (
+                    <option value="">Loading options...</option>
+                  ) : availableSubSubCategories.length === 0 ? (
+                    <option value="">None (Standard Formulation)</option>
                   ) : (
                     <>
-                      <option value="">-- Select Sub-Sub-Category (Optional) --</option>
-                      {createAvailableSubSubCategories.map((ss) => (
+                      <option value="">-- Optional Classification --</option>
+                      {availableSubSubCategories.map((ss) => (
                         <option key={ss} value={ss}>{ss}</option>
                       ))}
                     </>
@@ -1366,8 +1681,8 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                   required
                   placeholder="e.g. PCM-650"
                   value={createProductForm.sku}
-                  onChange={(e) => setCreateProductForm({ ...createProductForm, sku: e.target.value })}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', outline: 'none' }}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, sku: e.target.value.toUpperCase() }))}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', fontWeight: 800, color: '#0F172A', outline: 'none' }}
                 />
               </div>
 
@@ -1378,25 +1693,40 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Paracetamol 650mg ER Tablets"
+                  placeholder="e.g. Paracetamol 650mg Tablets"
                   value={createProductForm.name}
-                  onChange={(e) => setCreateProductForm({ ...createProductForm, name: e.target.value })}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, name: e.target.value }))}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none' }}
                 />
               </div>
             </div>
 
-            <div>
-              <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                Generic Molecule / Active Ingredient *
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Paracetamol IP 650mg"
-                value={createProductForm.saltCombination}
-                onChange={(e) => setCreateProductForm({ ...createProductForm, saltCombination: e.target.value, genericName: e.target.value })}
-                style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                  Generic Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Paracetamol Extended Release"
+                  value={createProductForm.genericName}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, genericName: e.target.value }))}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                  Salt Combination / Composition
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Paracetamol IP 650mg"
+                  value={createProductForm.saltCombination}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, saltCombination: e.target.value, genericName: prev.genericName || e.target.value }))}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                />
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
@@ -1408,7 +1738,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                   type="text"
                   placeholder="e.g. 650mg"
                   value={createProductForm.strength}
-                  onChange={(e) => setCreateProductForm({ ...createProductForm, strength: e.target.value })}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, strength: e.target.value }))}
                   style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
                 />
               </div>
@@ -1422,7 +1752,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                   required
                   placeholder="e.g. 10 × 1 × 10 Strip"
                   value={createProductForm.packaging}
-                  onChange={(e) => setCreateProductForm({ ...createProductForm, packaging: e.target.value, packSize: e.target.value })}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, packaging: e.target.value, packSize: e.target.value }))}
                   style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
                 />
               </div>
@@ -1433,7 +1763,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                 </label>
                 <select
                   value={createProductForm.uom}
-                  onChange={(e) => setCreateProductForm({ ...createProductForm, uom: e.target.value })}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, uom: e.target.value }))}
                   style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600 }}
                 >
                   <option value="Strip">Strip</option>
@@ -1454,7 +1784,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                 rows={2}
                 placeholder="Enter manufacturing specifications, compliance details..."
                 value={createProductForm.description}
-                onChange={(e) => setCreateProductForm({ ...createProductForm, description: e.target.value })}
+                onChange={(e) => setCreateProductForm(prev => ({ ...prev, description: e.target.value }))}
                 style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', resize: 'vertical' }}
               />
             </div>
@@ -1485,7 +1815,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                     min="1"
                     required
                     value={createProductForm.moq}
-                    onChange={(e) => setCreateProductForm({ ...createProductForm, moq: Number(e.target.value) || 0 })}
+                    onChange={(e) => setCreateProductForm(prev => ({ ...prev, moq: Number(e.target.value) || 0 }))}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', background: '#FFFFFF' }}
                   />
                 </div>
@@ -1499,7 +1829,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                     min="1"
                     required
                     value={createProductForm.standardLeadTimeDays}
-                    onChange={(e) => setCreateProductForm({ ...createProductForm, standardLeadTimeDays: Number(e.target.value) || 0 })}
+                    onChange={(e) => setCreateProductForm(prev => ({ ...prev, standardLeadTimeDays: Number(e.target.value) || 0 }))}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', background: '#FFFFFF' }}
                   />
                 </div>
@@ -1513,7 +1843,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                     min="0.5"
                     step="0.5"
                     value={createProductForm.basePrice}
-                    onChange={(e) => setCreateProductForm({ ...createProductForm, basePrice: Number(e.target.value) || 0 })}
+                    onChange={(e) => setCreateProductForm(prev => ({ ...prev, basePrice: Number(e.target.value) || 0 }))}
                     style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', background: '#FFFFFF' }}
                   />
                 </div>
@@ -1527,7 +1857,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
                   type="text"
                   placeholder="WHO-GMP, CDSCO Form 25/28, ISO 9001"
                   value={createProductForm.certificationsStr}
-                  onChange={(e) => setCreateProductForm({ ...createProductForm, certificationsStr: e.target.value })}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, certificationsStr: e.target.value }))}
                   style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', background: '#FFFFFF' }}
                 />
               </div>
@@ -1550,8 +1880,181 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
               </button>
             </div>
           </form>
+        ) : addModalTab === 'UPLOAD' ? (
+          /* SUB-FLOW 2: BULK UPLOAD EXCEL/CSV */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {bulkUploadSuccessCount !== null ? (
+              <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: 24, textAlign: 'center' }}>
+                <CheckCircle2 size={40} color="#059669" style={{ margin: '0 auto 12px' }} />
+                <h4 style={{ margin: '0 0 6px 0', fontSize: 16, fontWeight: 800, color: '#065F46' }}>
+                  Successfully Imported {bulkUploadSuccessCount} Products!
+                </h4>
+                <p style={{ margin: '0 0 16px 0', fontSize: 13, color: '#047857' }}>
+                  Products have been verified, persisted to PostgreSQL database, and mapped to {mfgDisplayName}.
+                </p>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{ padding: '8px 20px', borderRadius: 6, background: '#0F766E', color: '#FFF', border: 'none', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Close & View Catalog
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: '12px 16px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0F766E', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <UploadCloud size={16} /> Bulk Product Upload (Excel / CSV)
+                  </div>
+                  <div style={{ fontSize: 12, color: '#115E59' }}>
+                    Upload multiple products for <strong>{mfgDisplayName}</strong>. Each product must include Product Code, Name, Generic Name, Category, Sub-Category, Pack Size, MOQ, and Lead Time.
+                  </div>
+                </div>
+
+                {/* Action Bar: Download Template & Load Sample */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={handleDownloadProductTemplate}
+                    style={{ padding: '8px 14px', fontSize: 12, fontWeight: 700, borderRadius: 6, background: '#F8FAFC', border: '1px solid #CBD5E1', color: '#0F766E', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Download size={14} /> Download Sample CSV Template
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLoadSampleProductsCSV}
+                    style={{ padding: '8px 14px', fontSize: 12, fontWeight: 700, borderRadius: 6, background: '#F0FDF4', border: '1px solid #86EFAC', color: '#166534', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <RefreshCw size={13} /> Load Demo Sample Data (3 Products)
+                  </button>
+                </div>
+
+                {/* File Dropzone */}
+                <div
+                  style={{
+                    border: '2px dashed #94A3B8',
+                    borderRadius: 10,
+                    padding: '20px',
+                    textAlign: 'center',
+                    background: '#F8FAFC',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => {
+                    const fileInput = document.getElementById('fg-product-file-input');
+                    if (fileInput) fileInput.click();
+                  }}
+                >
+                  <input
+                    id="fg-product-file-input"
+                    type="file"
+                    accept=".csv, .txt, .xlsx, .xls"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                          const text = evt.target?.result as string;
+                          if (text) parseAndValidateProductCSV(text, file.name);
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                  />
+                  <UploadCloud size={28} color="#0F766E" style={{ margin: '0 auto 8px' }} />
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
+                    Click to browse or drop CSV/Excel file here
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
+                    {bulkFileName ? `Selected: ${bulkFileName}` : 'Supported formats: .csv, .xlsx, .txt'}
+                  </div>
+                </div>
+
+                {/* Paste Area Toggle */}
+                <div>
+                  <textarea
+                    rows={3}
+                    placeholder="...or paste CSV rows directly here (comma-separated with header)"
+                    value={bulkPasteText}
+                    onChange={(e) => {
+                      setBulkPasteText(e.target.value);
+                      if (e.target.value.trim()) {
+                        parseAndValidateProductCSV(e.target.value, 'Pasted_Data.csv');
+                      } else {
+                        setBulkParsedRows([]);
+                      }
+                    }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 11.5, fontFamily: 'monospace' }}
+                  />
+                </div>
+
+                {/* Parsed Preview Table */}
+                {bulkParsedRows.length > 0 && (
+                  <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
+                    <div style={{ padding: '8px 12px', background: '#F1F5F9', fontSize: 12, fontWeight: 700, color: '#334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Preview ({bulkParsedRows.length} Rows Parsed)</span>
+                      <span style={{ fontSize: 11 }}>
+                        Valid: <strong style={{ color: '#059669' }}>{bulkParsedRows.filter(r => r.isValid).length}</strong> · Errors: <strong style={{ color: '#DC2626' }}>{bulkParsedRows.filter(r => !r.isValid).length}</strong>
+                      </span>
+                    </div>
+                    <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                        <thead>
+                          <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left' }}>
+                            <th style={{ padding: '6px 10px' }}>Row</th>
+                            <th style={{ padding: '6px 10px' }}>Code</th>
+                            <th style={{ padding: '6px 10px' }}>Name</th>
+                            <th style={{ padding: '6px 10px' }}>Category</th>
+                            <th style={{ padding: '6px 10px' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkParsedRows.map((r, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', background: r.isValid ? '#FFF' : '#FEF2F2' }}>
+                              <td style={{ padding: '6px 10px' }}>#{r.rowNum}</td>
+                              <td style={{ padding: '6px 10px', fontFamily: 'monospace', fontWeight: 700 }}>{r.productCode || '—'}</td>
+                              <td style={{ padding: '6px 10px' }}>{r.name}</td>
+                              <td style={{ padding: '6px 10px' }}>{r.category}</td>
+                              <td style={{ padding: '6px 10px' }}>
+                                {r.isValid ? (
+                                  <span style={{ color: '#059669', fontWeight: 700 }}>Ready</span>
+                                ) : (
+                                  <span style={{ color: '#DC2626', fontWeight: 600 }} title={r.errors.join('; ')}>
+                                    {r.errors[0]}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4, paddingTop: 12, borderTop: '1px solid #E2E8F0' }}>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    style={{ padding: '9px 18px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isProcessingBulk || bulkParsedRows.filter(r => r.isValid).length === 0}
+                    onClick={handleConfirmBulkUpload}
+                    style={{ padding: '9px 24px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFF', fontSize: 13, fontWeight: 700, cursor: isProcessingBulk ? 'wait' : 'pointer' }}
+                  >
+                    {isProcessingBulk ? 'Uploading to PostgreSQL...' : `Import & Map (${bulkParsedRows.filter(r => r.isValid).length} Valid Products)`}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         ) : !selectedCentralProduct ? (
-          /* SUB-FLOW 2: MAP EXISTING MASTER PRODUCT */
+          /* SUB-FLOW 3: MAP EXISTING MASTER PRODUCT */
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em' }}>
               SELECT PRODUCT MASTER
@@ -1746,15 +2249,6 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
     </div>
   );
 };
-
-// =====================================================================
-// EDIT PRODUCT MODAL
-// =====================================================================
-interface EditProductModalProps {
-  mapping: ManufacturerProductMappingItem;
-  onClose: () => void;
-  onSuccess: () => void;
-}
 
 const EditProductModal: React.FC<EditProductModalProps> = ({ mapping, onClose, onSuccess }) => {
   const [mfgProductCode, setMfgProductCode] = useState<string>(mapping.manufacturerProductCode || '');

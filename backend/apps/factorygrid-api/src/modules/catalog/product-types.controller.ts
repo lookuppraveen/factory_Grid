@@ -30,7 +30,7 @@ import {
   UpdateProductTypeDto,
 } from './dto/product-type.dto';
 
-@ApiTags('Product Types')
+@ApiTags('Product Catalog & Master Data')
 @Controller('product-types')
 export class ProductTypesController {
   constructor(private readonly service: CatalogService) {}

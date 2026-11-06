@@ -1,4 +1,15 @@
 import {
+  BrandQueryDto,
+  CreateBrandDto,
+  UpdateBrandDto,
+  CreateAdminManufacturerDto,
+  UpdateAdminManufacturerDto,
+  ManufacturerQueryDto,
+  CreateProductManufacturerMappingDto,
+  UpdateProductManufacturerMappingDto,
+  ProductManufacturerMappingQueryDto,
+} from './dto/brand-mfg-mapping.dto';
+import {
   Body,
   Controller,
   Delete,
@@ -31,10 +42,24 @@ import {
 } from './dto/attribute-master.dto';
 import {
   CreateCatalogProductDto,
+  ProductBulkUploadDto,
   ProductQueryDto,
   UpdateCatalogProductDto,
 } from './dto/catalog-product.dto';
 import { CreateCategoryDto, UpdateCategoryDto, CategoryQueryDto } from './dto/category-admin.dto';
+import {
+  CreateCustomerSegmentDto,
+  CreatePriceDto,
+  CreateProductTaxDto,
+  CreateProductUomDto,
+  ProductPriceQueryDto,
+  ProductTaxQueryDto,
+  ProductUomQueryDto,
+  UpdateCustomerSegmentDto,
+  UpdatePriceDto,
+  UpdateProductTaxDto,
+  UpdateProductUomDto,
+} from './dto/pricing-tax-uom.dto';
 import {
   BulkProductTypeAttributesDto,
   CreateProductTypeDto,
@@ -44,7 +69,7 @@ import {
   UpdateProductTypeDto,
 } from './dto/product-type.dto';
 
-@ApiTags('Product Catalog & Category Master')
+@ApiTags('Product Catalog & Master Data')
 @Controller('catalog')
 export class CatalogController {
   constructor(private readonly service: CatalogService) {}
@@ -90,6 +115,15 @@ export class CatalogController {
   createProduct(@Body() dto: CreateCatalogProductDto) {
     return this.service.createProduct(dto);
   }
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post('products/bulk-upload')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Admin: Bulk upload products into central catalog' })
+  bulkUploadProducts(@Body() dto: ProductBulkUploadDto) {
+    return this.service.bulkUploadProducts(dto);
+  }
+
 
   @Roles('ADMIN', 'ROLE_ADMIN')
   @ApiBearerAuth()
@@ -340,6 +374,30 @@ export class CatalogController {
     return this.service.toggleCategoryStatus(id);
   }
 
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Delete('categories/:id')
+  @ApiOperation({ summary: 'Admin: Delete Category record' })
+  @ApiParam({ name: 'id', description: 'Category ID or category code' })
+  deleteCategory(@Param('id') id: string) {
+    return this.service.deleteCategory(id);
+  }
+
+  @Public()
+  @Get('categories/product-type/:productTypeId')
+  @ApiOperation({ summary: 'List categories by Product Type ID' })
+  @ApiParam({ name: 'productTypeId', description: 'Product Type ID (e.g. pt_med, pt_nut)' })
+  listCategoriesByProductType(@Param('productTypeId') productTypeId: string) {
+    return this.service.listCategories(productTypeId);
+  }
+
+  @Public()
+  @Get('categories/hierarchy-options')
+  @ApiOperation({ summary: 'Get available categories, sub-categories and sub-sub-categories options grouped by Product Type' })
+  getCategoryHierarchyOptions(@Query('productTypeId') productTypeId?: string) {
+    return this.service.getCategoryHierarchyOptions(productTypeId);
+  }
+
   // -------------------------------------------------------------------
   // ATTRIBUTE MASTER (/api/v1/catalog/attributes)
   // -------------------------------------------------------------------
@@ -413,4 +471,390 @@ export class CatalogController {
   ) {
     return this.service.removeProductTypeAttribute(productTypeId, id);
   }
+
+  // -------------------------------------------------------------------
+  // PRODUCT PRICES (/api/v1/catalog/prices)
+  // -------------------------------------------------------------------
+
+  @Public()
+  @Get('prices')
+  @ApiOperation({ summary: 'List product prices with filtering by product, manufacturer, segment and status' })
+  listPrices(@Query() query: ProductPriceQueryDto) {
+    return this.service.listAllProductPrices(query);
+  }
+
+  @Public()
+  @Get('prices/:id')
+  @ApiOperation({ summary: 'Get single price record details' })
+  @ApiParam({ name: 'id', description: 'Price record ID' })
+  getPrice(@Param('id') id: string) {
+    return this.service.getProductPriceById(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN', 'MANUFACTURER')
+  @ApiBearerAuth()
+  @Post('prices')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create new product price rule' })
+  createPrice(@Body() dto: CreatePriceDto) {
+    return this.service.createProductPrice(dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN', 'MANUFACTURER')
+  @ApiBearerAuth()
+  @Put('prices/:id')
+  @ApiOperation({ summary: 'Update product price rule' })
+  @ApiParam({ name: 'id', description: 'Price record ID' })
+  updatePrice(@Param('id') id: string, @Body() dto: UpdatePriceDto) {
+    return this.service.updateProductPrice(id, dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN', 'MANUFACTURER')
+  @ApiBearerAuth()
+  @Patch('prices/:id/status')
+  @ApiOperation({ summary: 'Toggle product price status between ACTIVE and INACTIVE' })
+  @ApiParam({ name: 'id', description: 'Price record ID' })
+  togglePriceStatus(@Param('id') id: string) {
+    return this.service.toggleProductPriceStatus(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Delete('prices/:id')
+  @ApiOperation({ summary: 'Delete product price rule' })
+  @ApiParam({ name: 'id', description: 'Price record ID' })
+  deletePrice(@Param('id') id: string) {
+    return this.service.deleteProductPrice(id);
+  }
+
+  // -------------------------------------------------------------------
+  // PRODUCT TAXES (/api/v1/catalog/taxes)
+  // -------------------------------------------------------------------
+
+  @Public()
+  @Get('taxes')
+  @ApiOperation({ summary: 'List product tax mappings with product and status filtering' })
+  listTaxes(@Query() query: ProductTaxQueryDto) {
+    return this.service.listAllProductTaxes(query);
+  }
+
+  @Public()
+  @Get('taxes/:id')
+  @ApiOperation({ summary: 'Get single product tax mapping details' })
+  @ApiParam({ name: 'id', description: 'Tax record ID' })
+  getTax(@Param('id') id: string) {
+    return this.service.getProductTaxById(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post('taxes')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create product tax mapping' })
+  createTax(@Body() dto: CreateProductTaxDto) {
+    return this.service.createProductTax(dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Put('taxes/:id')
+  @ApiOperation({ summary: 'Update product tax mapping' })
+  @ApiParam({ name: 'id', description: 'Tax record ID' })
+  updateTax(@Param('id') id: string, @Body() dto: UpdateProductTaxDto) {
+    return this.service.updateProductTax(id, dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Patch('taxes/:id/status')
+  @ApiOperation({ summary: 'Toggle product tax mapping status' })
+  @ApiParam({ name: 'id', description: 'Tax record ID' })
+  toggleTaxStatus(@Param('id') id: string) {
+    return this.service.toggleProductTaxStatus(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Delete('taxes/:id')
+  @ApiOperation({ summary: 'Delete product tax mapping' })
+  @ApiParam({ name: 'id', description: 'Tax record ID' })
+  deleteTax(@Param('id') id: string) {
+    return this.service.deleteProductTax(id);
+  }
+
+  // -------------------------------------------------------------------
+  // PRODUCT UOMS (/api/v1/catalog/uoms)
+  // -------------------------------------------------------------------
+
+  @Public()
+  @Get('uoms')
+  @ApiOperation({ summary: 'List product UOM configurations' })
+  listUoms(@Query() query: ProductUomQueryDto) {
+    return this.service.listAllProductUoms(query);
+  }
+
+  @Public()
+  @Get('uoms/:id')
+  @ApiOperation({ summary: 'Get single product UOM details' })
+  @ApiParam({ name: 'id', description: 'UOM record ID' })
+  getUom(@Param('id') id: string) {
+    return this.service.getProductUomById(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post('uoms')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create product UOM configuration' })
+  createUom(@Body() dto: CreateProductUomDto) {
+    return this.service.createProductUom(dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Put('uoms/:id')
+  @ApiOperation({ summary: 'Update product UOM configuration' })
+  @ApiParam({ name: 'id', description: 'UOM record ID' })
+  updateUom(@Param('id') id: string, @Body() dto: UpdateProductUomDto) {
+    return this.service.updateProductUom(id, dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Patch('uoms/:id/status')
+  @ApiOperation({ summary: 'Toggle product UOM active status' })
+  @ApiParam({ name: 'id', description: 'UOM record ID' })
+  toggleUomStatus(@Param('id') id: string) {
+    return this.service.toggleProductUomStatus(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Delete('uoms/:id')
+  @ApiOperation({ summary: 'Delete product UOM configuration' })
+  @ApiParam({ name: 'id', description: 'UOM record ID' })
+  deleteUom(@Param('id') id: string) {
+    return this.service.deleteProductUom(id);
+  }
+
+  // -------------------------------------------------------------------
+  // CUSTOMER SEGMENTS (/api/v1/catalog/customer-segments)
+  // -------------------------------------------------------------------
+
+  @Public()
+  @Get('customer-segments')
+  @ApiOperation({ summary: 'List all customer segments' })
+  listCustomerSegments() {
+    return this.service.listCustomerSegments();
+  }
+
+  @Public()
+  @Get('customer-segments/:id')
+  @ApiOperation({ summary: 'Get single customer segment' })
+  @ApiParam({ name: 'id', description: 'Customer segment ID' })
+  getCustomerSegment(@Param('id') id: string) {
+    return this.service.getCustomerSegmentById(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post('customer-segments')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create customer segment' })
+  createCustomerSegment(@Body() dto: CreateCustomerSegmentDto) {
+    return this.service.createCustomerSegment(dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Put('customer-segments/:id')
+  @ApiOperation({ summary: 'Update customer segment' })
+  @ApiParam({ name: 'id', description: 'Customer segment ID' })
+  updateCustomerSegment(@Param('id') id: string, @Body() dto: UpdateCustomerSegmentDto) {
+    return this.service.updateCustomerSegment(id, dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Delete('customer-segments/:id')
+  @ApiOperation({ summary: 'Delete customer segment' })
+  @ApiParam({ name: 'id', description: 'Customer segment ID' })
+  deleteCustomerSegment(@Param('id') id: string) {
+    return this.service.deleteCustomerSegment(id);
+  }
+
+  // -------------------------------------------------------------------
+  // BRAND MASTER
+  // -------------------------------------------------------------------
+
+  @Public()
+  @Get('brands')
+  @ApiOperation({ summary: 'List all brands with optional search and status filter' })
+  listBrands(@Query() query: BrandQueryDto) {
+    return this.service.listBrands(query);
+  }
+
+  @Public()
+  @Get('brands/:id')
+  @ApiOperation({ summary: 'Get brand by ID or Code' })
+  @ApiParam({ name: 'id', description: 'Brand ID or Brand Code' })
+  getBrandById(@Param('id') id: string) {
+    return this.service.getBrandById(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post('brands')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create brand in Brand Master' })
+  createBrand(@Body() dto: CreateBrandDto) {
+    return this.service.createBrand(dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Put('brands/:id')
+  @ApiOperation({ summary: 'Update brand in Brand Master' })
+  @ApiParam({ name: 'id', description: 'Brand ID or Code' })
+  updateBrand(@Param('id') id: string, @Body() dto: UpdateBrandDto) {
+    return this.service.updateBrand(id, dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Patch('brands/:id/status')
+  @ApiOperation({ summary: 'Toggle brand active/inactive status' })
+  @ApiParam({ name: 'id', description: 'Brand ID or Code' })
+  toggleBrandStatus(@Param('id') id: string) {
+    return this.service.toggleBrandStatus(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Delete('brands/:id')
+  @ApiOperation({ summary: 'Delete brand from Brand Master' })
+  @ApiParam({ name: 'id', description: 'Brand ID or Code' })
+  deleteBrand(@Param('id') id: string) {
+    return this.service.deleteBrand(id);
+  }
+
+  // -------------------------------------------------------------------
+  // MANUFACTURER MASTER (ADMIN)
+  // -------------------------------------------------------------------
+
+  @Public()
+  @Get('manufacturers')
+  @ApiOperation({ summary: 'List all verified manufacturers with search and filter' })
+  listAdminManufacturers(@Query() query: ManufacturerQueryDto) {
+    return this.service.listAdminManufacturers(query);
+  }
+
+  @Public()
+  @Get('manufacturers/:id')
+  @ApiOperation({ summary: 'Get manufacturer details by ID or code' })
+  @ApiParam({ name: 'id', description: 'Manufacturer ID or Code' })
+  getAdminManufacturerById(@Param('id') id: string) {
+    return this.service.getAdminManufacturerById(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post('manufacturers')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create manufacturer in Manufacturer Master' })
+  createAdminManufacturer(@Body() dto: CreateAdminManufacturerDto) {
+    return this.service.createAdminManufacturer(dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Put('manufacturers/:id')
+  @ApiOperation({ summary: 'Update manufacturer details in Manufacturer Master' })
+  @ApiParam({ name: 'id', description: 'Manufacturer ID or Code' })
+  updateAdminManufacturer(@Param('id') id: string, @Body() dto: UpdateAdminManufacturerDto) {
+    return this.service.updateAdminManufacturer(id, dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Patch('manufacturers/:id/status')
+  @ApiOperation({ summary: 'Toggle manufacturer lifecycle status' })
+  @ApiParam({ name: 'id', description: 'Manufacturer ID or Code' })
+  toggleAdminManufacturerStatus(@Param('id') id: string) {
+    return this.service.toggleAdminManufacturerStatus(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Delete('manufacturers/:id')
+  @ApiOperation({ summary: 'Delete manufacturer from Manufacturer Master' })
+  @ApiParam({ name: 'id', description: 'Manufacturer ID or Code' })
+  deleteAdminManufacturer(@Param('id') id: string) {
+    return this.service.deleteAdminManufacturer(id);
+  }
+
+  // -------------------------------------------------------------------
+  // PRODUCT MANUFACTURER MAPPINGS (ADMIN)
+  // -------------------------------------------------------------------
+
+  @Public()
+  @Get('product-manufacturers')
+  @ApiOperation({ summary: 'List product-to-manufacturer mappings across catalog' })
+  listProductManufacturerMappings(@Query() query: ProductManufacturerMappingQueryDto) {
+    return this.service.listAdminProductManufacturerMappings(query);
+  }
+
+  @Public()
+  @Get('product-manufacturers/:id')
+  @ApiOperation({ summary: 'Get product-manufacturer mapping details by ID' })
+  @ApiParam({ name: 'id', description: 'Mapping ID' })
+  getProductManufacturerMappingById(@Param('id') id: string) {
+    return this.service.getAdminProductManufacturerMappingById(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Post('product-manufacturers')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create new product-to-manufacturer mapping' })
+  createProductManufacturerMapping(@Body() dto: CreateProductManufacturerMappingDto) {
+    return this.service.createAdminProductManufacturerMapping(dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Put('product-manufacturers/:id')
+  @ApiOperation({ summary: 'Update product-to-manufacturer mapping' })
+  @ApiParam({ name: 'id', description: 'Mapping ID' })
+  updateProductManufacturerMapping(@Param('id') id: string, @Body() dto: UpdateProductManufacturerMappingDto) {
+    return this.service.updateAdminProductManufacturerMapping(id, dto);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Patch('product-manufacturers/:id/preferred')
+  @ApiOperation({ summary: 'Set mapping as preferred manufacturer for product' })
+  @ApiParam({ name: 'id', description: 'Mapping ID' })
+  setPreferredManufacturerMapping(@Param('id') id: string) {
+    return this.service.setPreferredManufacturerMapping(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Patch('product-manufacturers/:id/status')
+  @ApiOperation({ summary: 'Toggle product-manufacturer mapping active/inactive status' })
+  @ApiParam({ name: 'id', description: 'Mapping ID' })
+  toggleProductManufacturerMappingStatus(@Param('id') id: string) {
+    return this.service.toggleAdminProductManufacturerMappingStatus(id);
+  }
+
+  @Roles('ADMIN', 'ROLE_ADMIN')
+  @ApiBearerAuth()
+  @Delete('product-manufacturers/:id')
+  @ApiOperation({ summary: 'Remove product-to-manufacturer mapping' })
+  @ApiParam({ name: 'id', description: 'Mapping ID' })
+  deleteProductManufacturerMapping(@Param('id') id: string) {
+    return this.service.deleteAdminProductManufacturerMapping(id);
+  }
+
 }

@@ -8,6 +8,7 @@ import { AuthUser } from '@factorygrid/auth';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateManufacturerProductDto,
+  ManufacturerProductBulkUploadDto,
   ManufacturerProductQueryDto,
   UpdateManufacturerProductDto,
 } from './dto/manufacturer-product.dto';
@@ -20,7 +21,7 @@ export class ManufacturerProductService {
    * Authoritatively resolves the authenticated manufacturer registration from PostgreSQL.
    * Guarantees strict data isolation: caller identity is NEVER taken from request body or query params.
    */
-  async resolveManufacturer(user: AuthUser) {
+  async resolveManufacturer(user: AuthUser, explicitMfgId?: string) {
     let reg = await this.prisma.manufacturerRegistration.findFirst({
       where: { userId: BigInt(user.id) },
       orderBy: { id: 'desc' },
@@ -44,10 +45,41 @@ export class ManufacturerProductService {
       }
     }
 
+    const isAdmin =
+      (user as any).roles?.includes('ADMIN') ||
+      (user as any).roles?.includes('ROLE_ADMIN') ||
+      (user as any).role === 'ADMIN';
+
+    if (explicitMfgId) {
+      if (isAdmin) {
+        const targetReg = await this.prisma.manufacturerRegistration.findFirst({
+          where: {
+            OR: [
+              { registrationCode: explicitMfgId },
+              ...(isNaN(Number(explicitMfgId)) ? [] : [{ id: BigInt(explicitMfgId) }]),
+            ],
+          },
+        });
+        if (targetReg) return targetReg;
+      } else if (reg) {
+        // Enforce Manufacturer Isolation: A manufacturer cannot access another manufacturer's catalog
+        const isMatch =
+          (reg.registrationCode === explicitMfgId || reg.manufacturerCode === explicitMfgId) ||
+          String(reg.id) === explicitMfgId;
+        if (!isMatch) {
+          throw new ForbiddenException(
+            'Manufacturer Isolation: You do not have permission to view or modify products for another facility.',
+          );
+        }
+      }
+    }
+
+    if (!reg && isAdmin) {
+      reg = await this.prisma.manufacturerRegistration.findFirst({ orderBy: { id: 'asc' } });
+    }
+
     if (!reg) {
-      throw new ForbiddenException(
-        'No manufacturer registration is associated with this account. Please complete facility onboarding first.',
-      );
+      throw new NotFoundException('Authenticated user is not registered as a verified manufacturer.');
     }
 
     return reg;
@@ -56,8 +88,8 @@ export class ManufacturerProductService {
   /**
    * Retrieves summary counts for the authenticated manufacturer
    */
-  async getSummary(user: AuthUser) {
-    const reg = await this.resolveManufacturer(user);
+  async getSummary(user: AuthUser, explicitMfgId?: string) {
+    const reg = await this.resolveManufacturer(user, explicitMfgId);
 
     const [totalMapped, activeCount, inactiveCount, allMapped] = await Promise.all([
       this.prisma.manufacturerProduct.count({
@@ -99,8 +131,8 @@ export class ManufacturerProductService {
   /**
    * Lists mapped products exclusively for the logged-in manufacturer with filtering & pagination
    */
-  async listMappedProducts(user: AuthUser, query: ManufacturerProductQueryDto) {
-    const reg = await this.resolveManufacturer(user);
+  async listMappedProducts(user: AuthUser, query: ManufacturerProductQueryDto, explicitMfgId?: string) {
+    const reg = await this.resolveManufacturer(user, explicitMfgId);
 
     const where: any = {
       registrationId: reg.id,
@@ -210,16 +242,55 @@ export class ManufacturerProductService {
   /**
    * Creates a new PRODUCT_MANUFACTURER mapping from the master catalogue
    */
-  async createMapping(user: AuthUser, dto: CreateManufacturerProductDto) {
-    const reg = await this.resolveManufacturer(user);
+  async createMapping(user: AuthUser, dto: CreateManufacturerProductDto, explicitMfgId?: string) {
+    const reg = await this.resolveManufacturer(user, explicitMfgId);
 
-    // 1. Verify that product exists in central catalog
-    const product = await this.prisma.catalogProduct.findUnique({
-      where: { id: dto.productId },
-    });
+    // 1. Resolve or create central product in catalog_products
+    let product: any = null;
+    if (dto.productId) {
+      product = await this.prisma.catalogProduct.findFirst({
+        where: {
+          OR: [
+            { id: dto.productId },
+            { productCode: { equals: dto.productId.trim(), mode: 'insensitive' } },
+          ],
+        },
+      });
+    }
+
+    if (!product && dto.name && dto.category) {
+      const targetCode = (dto.manufacturerProductCode || dto.productCode || `PRD${Date.now()}`).trim().toUpperCase();
+      product = await this.prisma.catalogProduct.findFirst({
+        where: { productCode: { equals: targetCode, mode: 'insensitive' } },
+      });
+
+      if (!product) {
+        product = await this.prisma.catalogProduct.create({
+          data: {
+            id: `prd_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            productCode: targetCode,
+            name: dto.name.trim(),
+            genericName: dto.genericName?.trim() || dto.name.trim(),
+            category: dto.category.trim(),
+            subCategory: dto.subCategory?.trim() || null,
+            subSubCategory: dto.subSubCategory?.trim() || null,
+            dosageForm: dto.dosageForm?.trim() || dto.subCategory?.trim() || 'Standard Form',
+            packSize: dto.packagingDetails?.trim() || dto.packSize?.trim() || '10 x 10 Strip',
+            packUom: dto.uom?.trim() || 'Strip',
+            baseUom: dto.baseUom?.trim() || 'Unit',
+            description: dto.description?.trim() || null,
+            productTypeId: dto.productTypeId?.trim() || 'pt_med',
+            lifecycleStatus: 'ACTIVE',
+            isSellable: true,
+            active: true,
+          },
+        });
+      }
+    }
+
     if (!product) {
       throw new NotFoundException(
-        `Central product with ID "${dto.productId}" not found in master catalogue.`,
+        `Product could not be resolved. Please provide a valid productId or product Name and Category.`,
       );
     }
 
@@ -228,7 +299,7 @@ export class ManufacturerProductService {
       where: {
         registrationId_productId: {
           registrationId: reg.id,
-          productId: dto.productId,
+          productId: product.id,
         },
       },
     });
@@ -242,13 +313,13 @@ export class ManufacturerProductService {
     const created = await this.prisma.manufacturerProduct.create({
       data: {
         registrationId: reg.id,
-        productId: dto.productId,
-        manufacturerProductCode: dto.manufacturerProductCode?.trim() || null,
+        productId: product.id,
+        manufacturerProductCode: dto.manufacturerProductCode?.trim() || product.productCode,
         manufacturerPartNumber: dto.manufacturerPartNumber?.trim() || null,
-        manufacturerSku: dto.manufacturerSku?.trim() || null,
+        manufacturerSku: dto.manufacturerSku?.trim() || dto.manufacturerProductCode?.trim() || product.productCode,
         moq: dto.moq ?? 1000,
         leadTimeDays: dto.leadTimeDays ?? 14,
-        packagingDetails: dto.packagingDetails?.trim() || null,
+        packagingDetails: dto.packagingDetails?.trim() || dto.packSize?.trim() || null,
         effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : null,
         effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
         isPreferred: dto.isPreferred ?? false,
@@ -261,6 +332,247 @@ export class ManufacturerProductService {
 
     return this.toResponseDto(created);
   }
+  /**
+   * Bulk upload products and map them to the authenticated manufacturer facility
+   */
+  
+  parseCsvProducts(csvText: string): any[] {
+    const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return [];
+
+    const headers = this.parseCsvLine(lines[0]).map((h) => h.toLowerCase().trim().replace(/[^a-z0-9]/g, ''));
+    const rows: any[] = [];
+
+    const findIndex = (aliases: string[]) => headers.findIndex((h) => aliases.some((a) => h.includes(a)));
+    const idxName = findIndex(['name', 'productname', 'title']);
+    const idxSku = findIndex(['sku', 'code', 'productcode', 'mfgcode', 'itemcode']);
+    const idxGeneric = findIndex(['generic', 'molecule', 'activeingredient']);
+    const idxCat = findIndex(['category', 'cat']);
+    const idxSub = findIndex(['subcategory', 'subcat']);
+    const idxSubSub = findIndex(['subsubcategory', 'subsub', 'classification']);
+    const idxPack = findIndex(['pack', 'packaging', 'packsize']);
+    const idxUom = findIndex(['uom', 'unit']);
+    const idxMoq = findIndex(['moq', 'minimumorder']);
+    const idxLead = findIndex(['lead', 'leadtime', 'days']);
+    const idxDesc = findIndex(['desc', 'description']);
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = this.parseCsvLine(lines[i]);
+      if (cols.length === 0 || cols.every((c) => !c.trim())) continue;
+
+      const name = cols[idxName !== -1 ? idxName : 0] || '';
+      const sku = (cols[idxSku !== -1 ? idxSku : 1] || '').toUpperCase();
+      const genericName = cols[idxGeneric !== -1 ? idxGeneric : 2] || name;
+      const category = cols[idxCat !== -1 ? idxCat : 3] || 'Drugs';
+      const subCategory = idxSub !== -1 ? cols[idxSub] : undefined;
+      const subSubCategory = idxSubSub !== -1 ? cols[idxSubSub] : undefined;
+      const packSize = cols[idxPack !== -1 ? idxPack : 4] || '10 x 10 Strip';
+      const baseUom = cols[idxUom !== -1 ? idxUom : 5] || 'Unit';
+      const moq = parseInt(cols[idxMoq !== -1 ? idxMoq : 6]?.replace(/[^0-9]/g, '') || '1000', 10);
+      const leadTimeDays = parseInt(cols[idxLead !== -1 ? idxLead : 7]?.replace(/[^0-9]/g, '') || '14', 10);
+      const description = idxDesc !== -1 ? cols[idxDesc] : undefined;
+
+      rows.push({
+        name,
+        productCode: sku,
+        manufacturerProductCode: sku,
+        genericName,
+        category,
+        subCategory,
+        subSubCategory,
+        packSize,
+        packagingDetails: packSize,
+        baseUom,
+        moq: isNaN(moq) ? 1000 : moq,
+        leadTimeDays: isNaN(leadTimeDays) ? 14 : leadTimeDays,
+        description,
+      });
+    }
+
+    return rows;
+  }
+
+  private parseCsvLine(line: string): string[] {
+    const result: string[] = [];
+    let insideQuotes = false;
+    let current = '';
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (insideQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+      } else if (char === ',' && !insideQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  }
+
+  async bulkUpload(user: AuthUser, dto: ManufacturerProductBulkUploadDto, explicitMfgId?: string) {
+    const reg = await this.resolveManufacturer(user, explicitMfgId);
+    const rows = dto.rows || [];
+    const totalRows = rows.length;
+    let successfulRows = 0;
+    let failedRows = 0;
+    let duplicateRows = 0;
+    const errors: Array<{ row: number; field: string; message: string }> = [];
+    const imported: Array<any> = [];
+
+    const existingMappings = await this.prisma.manufacturerProduct.findMany({
+      where: { registrationId: reg.id },
+      select: { productId: true, manufacturerProductCode: true, manufacturerSku: true },
+    });
+    const mappedProductIds = new Set(existingMappings.map((m) => m.productId));
+    const seenMfgCodesInBatch = new Set<string>();
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 1;
+      let hasError = false;
+
+      if (!row.name || !row.name!.trim()) {
+        errors.push({
+          row: rowNum,
+          field: 'name',
+          message: 'Product Name is required.',
+        });
+        hasError = true;
+      }
+
+      if (!row.category || !row.category!.trim()) {
+        errors.push({
+          row: rowNum,
+          field: 'category',
+          message: 'Category is required.',
+        });
+        hasError = true;
+      }
+
+      const mfgCodeClean = (row.manufacturerProductCode || row.productCode || '').trim().toUpperCase();
+      if (mfgCodeClean) {
+        if (seenMfgCodesInBatch.has(mfgCodeClean)) {
+          errors.push({
+            row: rowNum,
+            field: 'manufacturerProductCode',
+            message: `Duplicate Product Code/SKU "${mfgCodeClean}" in uploaded batch.`,
+          });
+          hasError = true;
+          duplicateRows++;
+        } else {
+          seenMfgCodesInBatch.add(mfgCodeClean);
+        }
+      }
+
+      if (hasError) {
+        failedRows++;
+        continue;
+      }
+
+      try {
+        let product: any = null;
+        const codeToFind = row.productCode?.trim() || mfgCodeClean;
+        if (codeToFind) {
+          product = await this.prisma.catalogProduct.findFirst({
+            where: {
+              OR: [
+                { productCode: { equals: codeToFind, mode: 'insensitive' } },
+                { id: codeToFind },
+              ],
+            },
+          });
+        }
+
+        if (!product) {
+          const targetCode = codeToFind || `PRD${Date.now()}${String(i + 1).padStart(3, '0')}`;
+          const targetId = `prd_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          const subCategory = row.subCategory?.trim() || null;
+          const subSubCategory = row.subSubCategory?.trim() || null;
+          const genericName = row.genericName?.trim() || row.name!.trim();
+          const dosageForm = row.dosageForm?.trim() || subCategory || 'Standard Form';
+          const packSize = row.packSize?.trim() || '10 x 10 Strip';
+          const baseUom = row.baseUom?.trim() || 'Unit';
+
+          product = await this.prisma.catalogProduct.create({
+            data: {
+              id: targetId,
+              productCode: targetCode,
+              name: row.name!.trim(),
+              genericName,
+              dosageForm,
+              productTypeId: row.productTypeId?.trim() || 'pt_med',
+              category: row.category!.trim(),
+              subCategory,
+              subSubCategory,
+              description: row.description?.trim() || null,
+              baseUom,
+              packSize,
+              packUom: 'Strip',
+              lifecycleStatus: 'ACTIVE',
+              isSellable: true,
+              active: true,
+            },
+          });
+        }
+
+        if (mappedProductIds.has(product.id)) {
+          errors.push({
+            row: rowNum,
+            field: 'productCode',
+            message: `Product "${product.name}" (${product.productCode}) is already mapped to your facility.`,
+          });
+          failedRows++;
+          duplicateRows++;
+          continue;
+        }
+
+        const mapping = await this.prisma.manufacturerProduct.create({
+          data: {
+            registrationId: reg.id,
+            productId: product.id,
+            manufacturerProductCode: row.manufacturerProductCode?.trim() || product.productCode,
+            moq: row.moq ? Number(row.moq) : 1000,
+            leadTimeDays: row.leadTimeDays ? Number(row.leadTimeDays) : 14,
+            packagingDetails: row.packagingDetails?.trim() || row.packSize?.trim() || null,
+            lifecycleStatus: 'ACTIVE',
+          },
+          include: {
+            product: true,
+          },
+        });
+
+        mappedProductIds.add(product.id);
+        successfulRows++;
+        imported.push(this.toResponseDto(mapping));
+      } catch (err: any) {
+        failedRows++;
+        errors.push({
+          row: rowNum,
+          field: 'general',
+          message: err?.message || 'Database error processing row.',
+        });
+      }
+    }
+
+    return {
+      totalRows,
+      successfulRows,
+      failedRows,
+      duplicateRows,
+      errors,
+      importedCount: successfulRows,
+      items: imported,
+    };
+  }
+
 
   /**
    * Updates an existing mapping

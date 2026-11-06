@@ -10,7 +10,8 @@ import {
   CustomerClassification, AdvanceMethod, AdvanceStatus, AdvancePaymentRecord,
   ProductType, Brand, Category, AttributeMaster, ProductAttribute, CategoryAttribute, ProductTypeAttribute, CustomerSegment,
   ProductPrice, ProductTax, ProductUom, ManufacturerDirectOrderEligibility,
-  CustomerQuote, CustomerQuoteLine, CustomerQuoteStatus, OrderLine, ProductManufacturer
+  CustomerQuote, CustomerQuoteLine, CustomerQuoteStatus, OrderLine, ProductManufacturer,
+  InvoiceStatus, LifecycleStatus, PaymentRecord
 } from '../types';
 import {
   mockCustomers, mockManufacturers, mockProducts, mockRFQs,
@@ -34,6 +35,7 @@ import { authApi, AuthUser } from '../services/authApi';
 import { adminVerificationApi } from '../services/adminVerificationApi';
 import { catalogApi } from '../services/catalogApi';
 import { rfqApi } from '../services/rfqApi';
+import * as marginApi from '../services/marginApi';
 
 export interface TwoFactorState {
   isEnabled: boolean;
@@ -57,6 +59,9 @@ interface AppContextType {
   deleteUnifiedCategory: (id: string) => Promise<any> | void;
   toggleUnifiedCategoryStatus: (id: string) => Promise<any> | void;
   brands: Brand[];
+  refreshBrands: () => Promise<void>;
+  refreshManufacturers: () => Promise<void>;
+  refreshMappings: () => Promise<void>;
   addBrand: (newBrand: Brand) => void;
   updateBrand: (id: string, updates: Partial<Brand>) => void;
   deleteBrand: (id: string) => void;
@@ -89,22 +94,29 @@ interface AppContextType {
   getCategoryAttributes: (categoryId: string) => CategoryAttribute[];
   getCategoryConfiguredAttributes: (categoryId: string) => { attribute: AttributeMaster; remark?: string; category_attribute_id: string }[];
   customerSegments: CustomerSegment[];
-  addCustomerSegment: (segment: CustomerSegment) => void;
-  updateCustomerSegment: (id: string, updates: Partial<CustomerSegment>) => void;
-  removeCustomerSegment: (id: string) => void;
+  addCustomerSegment: (segment: CustomerSegment) => Promise<any> | void;
+  updateCustomerSegment: (id: string, updates: Partial<CustomerSegment>) => Promise<any> | void;
+  removeCustomerSegment: (id: string) => Promise<any> | void;
+  refreshCustomerSegments: () => Promise<void>;
   productPrices: ProductPrice[];
-  addProductPrice: (price: ProductPrice) => void;
-  updateProductPrice: (id: string, updates: Partial<ProductPrice>) => void;
-  removeProductPrice: (id: string) => void;
+  addProductPrice: (price: ProductPrice) => Promise<any> | void;
+  updateProductPrice: (id: string, updates: Partial<ProductPrice>) => Promise<any> | void;
+  removeProductPrice: (id: string) => Promise<any> | void;
+  toggleProductPriceStatus: (id: string) => Promise<any> | void;
   getProductPrices: (productId: string, segmentId?: string) => ProductPrice[];
+  refreshProductPrices: () => Promise<void>;
   productTaxes: ProductTax[];
-  addProductTax: (tax: ProductTax) => void;
-  updateProductTax: (id: string, updates: Partial<ProductTax>) => void;
-  removeProductTax: (id: string) => void;
+  addProductTax: (tax: ProductTax) => Promise<any> | void;
+  updateProductTax: (id: string, updates: Partial<ProductTax>) => Promise<any> | void;
+  removeProductTax: (id: string) => Promise<any> | void;
+  toggleProductTaxStatus: (id: string) => Promise<any> | void;
+  refreshProductTaxes: () => Promise<void>;
   productUoms: ProductUom[];
-  addProductUom: (uom: ProductUom) => void;
-  updateProductUom: (id: string, updates: Partial<ProductUom>) => void;
-  removeProductUom: (id: string) => void;
+  addProductUom: (uom: ProductUom) => Promise<any> | void;
+  updateProductUom: (id: string, updates: Partial<ProductUom>) => Promise<any> | void;
+  removeProductUom: (id: string) => Promise<any> | void;
+  toggleProductUomStatus: (id: string) => Promise<any> | void;
+  refreshProductUoms: () => Promise<void>;
   directOrderEligibilities: ManufacturerDirectOrderEligibility[];
   isManufacturerDirectOrderEligible: (mfgId: string, productId?: string) => boolean;
   checkProductSellability: (productId: string) => {
@@ -1236,17 +1248,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch(e) {}
   }, [manufacturers]);
 
-  const addManufacturer = (newMfg: Manufacturer) => {
+  const refreshManufacturers = useCallback(async () => {
+    try {
+      const data = await catalogApi.listManufacturers({ size: 100 });
+      if (Array.isArray(data)) {
+        setManufacturers(data);
+        try { localStorage.setItem('fg_manufacturers_v3', JSON.stringify(data)); } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Failed to refresh manufacturers from API:', err);
+    }
+  }, []);
+
+  const addManufacturer = async (newMfg: Manufacturer) => {
     setManufacturers(prev => {
       const cleanCode = (newMfg.manufacturer_code || newMfg.code || '').toUpperCase().trim();
       const exists = prev.some(m => (m.manufacturer_code || m.code || '').toUpperCase().trim() === cleanCode);
       if (exists) return prev;
       return [newMfg, ...prev];
     });
-    addAuditLog('CREATE_MANUFACTURER', `Created Manufacturer: ${newMfg.manufacturer_name || newMfg.companyName} (${newMfg.manufacturer_code || newMfg.code})`);
+    try {
+      const saved = await catalogApi.createManufacturer(newMfg);
+      setManufacturers(prev => [saved, ...prev.filter(m => m.id !== saved.id && m.manufacturer_id !== saved.manufacturer_id && (m.manufacturer_code || m.code) !== (saved.manufacturer_code || saved.code))]);
+      addAuditLog('CREATE_MANUFACTURER', `Created Manufacturer: ${saved.companyName || newMfg.companyName} (${saved.code || newMfg.code}) in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to persist manufacturer in database:', err);
+      addAuditLog('CREATE_MANUFACTURER', `Created Manufacturer: ${newMfg.manufacturer_name || newMfg.companyName} (${newMfg.manufacturer_code || newMfg.code}) locally`);
+    }
   };
 
-  const updateManufacturer = (id: string, updates: Partial<Manufacturer>) => {
+  const updateManufacturer = async (id: string, updates: Partial<Manufacturer>) => {
     setManufacturers(prev => prev.map(m => (m.id === id || m.manufacturer_id === id) ? {
       ...m,
       ...updates,
@@ -1255,15 +1287,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       code: updates.manufacturer_code || updates.code || m.code,
       updated_at: new Date().toISOString().split('T')[0]
     } : m));
-    addAuditLog('UPDATE_MANUFACTURER', `Updated Manufacturer ID: ${id}`);
+    try {
+      const saved = await catalogApi.updateManufacturer(id, updates);
+      setManufacturers(prev => prev.map(m => (m.id === id || m.manufacturer_id === id) ? { ...m, ...saved } : m));
+      addAuditLog('UPDATE_MANUFACTURER', `Updated Manufacturer ID: ${id} in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to update manufacturer in database:', err);
+      addAuditLog('UPDATE_MANUFACTURER', `Updated Manufacturer ID: ${id} locally`);
+    }
   };
 
-  const deleteManufacturer = (id: string) => {
+  const deleteManufacturer = async (id: string) => {
     setManufacturers(prev => prev.filter(m => m.id !== id && m.manufacturer_id !== id));
-    addAuditLog('DELETE_MANUFACTURER', `Deleted Manufacturer ID: ${id}`);
+    try {
+      await catalogApi.deleteManufacturer(id);
+      addAuditLog('DELETE_MANUFACTURER', `Deleted Manufacturer ID: ${id} from database`);
+    } catch (err) {
+      console.error('Failed to delete manufacturer from database:', err);
+      addAuditLog('DELETE_MANUFACTURER', `Deleted Manufacturer ID: ${id} locally`);
+    }
   };
 
-  const toggleManufacturerStatus = (id: string) => {
+  const toggleManufacturerStatus = async (id: string) => {
     setManufacturers(prev => prev.map(m => {
       if (m.id === id || m.manufacturer_id === id) {
         const current = m.lifecycle_status || (m.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE');
@@ -1277,6 +1323,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return m;
     }));
+    try {
+      const saved = await catalogApi.toggleManufacturerStatus(id);
+      setManufacturers(prev => prev.map(m => (m.id === id || m.manufacturer_id === id) ? { ...m, ...saved } : m));
+      addAuditLog('TOGGLE_MANUFACTURER_STATUS', `Toggled Manufacturer ID: ${id} status in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to toggle manufacturer status in database:', err);
+    }
   };
 
   const setPreferredManufacturer = (productId: string, manufacturerId: string) => {
@@ -1374,14 +1428,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { categories: unifiedCategories, tree: [] };
   };
 
-  // Background hydration: Load live catalog products and category master from PostgreSQL
+  // Background hydration: Load live catalog products, categories, pricing, taxes, UOMs, segments, and margins from PostgreSQL
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [liveProds, liveCats] = await Promise.all([
+        const [
+          liveProds, liveCats, livePrices, liveTaxes, liveUoms, liveSegs, liveBrands, liveMfgs, liveMappings,
+          liveCatMargins, liveMfgMargins, liveProdMargins, livePlatformFee
+        ] = await Promise.all([
           catalogApi.listProducts({ size: 100, sort: 'createdAt,desc' }).catch(() => null),
           catalogApi.listCategories({ size: 100, sort: 'createdAt,desc' }).catch(() => null),
+          catalogApi.listPrices({ size: 100, sort: 'createdAt,desc' }).catch(() => null),
+          catalogApi.listTaxes({ size: 100, sort: 'createdAt,desc' }).catch(() => null),
+          catalogApi.listUoms({ size: 100, sort: 'createdAt,desc' }).catch(() => null),
+          catalogApi.listCustomerSegments().catch(() => null),
+          catalogApi.listBrands({ size: 100 }).catch(() => null),
+          catalogApi.listManufacturers({ size: 100 }).catch(() => null),
+          catalogApi.listMappings({ size: 200 }).catch(() => null),
+          marginApi.fetchCategoryMargins().catch(() => null),
+          marginApi.fetchManufacturerMargins().catch(() => null),
+          marginApi.fetchProductMargins({ size: 100 }).catch(() => null),
+          marginApi.fetchPlatformFee().catch(() => null),
         ]);
         if (!mounted) return;
         if (liveProds && Array.isArray(liveProds) && liveProds.length > 0) {
@@ -1389,6 +1457,115 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         if (liveCats?.categories && Array.isArray(liveCats.categories) && liveCats.categories.length > 0) {
           setUnifiedCategories(liveCats.categories);
+        }
+        if (livePrices && Array.isArray(livePrices) && livePrices.length > 0) {
+          setProductPrices(livePrices);
+        }
+        if (liveTaxes && Array.isArray(liveTaxes) && liveTaxes.length > 0) {
+          setProductTaxes(liveTaxes);
+        }
+        if (liveUoms && Array.isArray(liveUoms) && liveUoms.length > 0) {
+          setProductUoms(liveUoms);
+        }
+        if (liveSegs && Array.isArray(liveSegs) && liveSegs.length > 0) {
+          setCustomerSegments(liveSegs);
+        }
+        if (liveBrands && Array.isArray(liveBrands) && liveBrands.length > 0) {
+          setBrands(liveBrands);
+        }
+        if (liveMfgs && Array.isArray(liveMfgs) && liveMfgs.length > 0) {
+          setManufacturers(liveMfgs);
+        }
+        if (liveMappings && Array.isArray(liveMappings) && liveMappings.length > 0) {
+          setMappings(liveMappings);
+        }
+
+        // Hydrate Margin Engine from PostgreSQL database
+        if (liveCatMargins && Array.isArray(liveCatMargins) && liveCatMargins.length > 0) {
+          const mappedCats: CategoryMargin[] = liveCatMargins.map(c => ({
+            categoryId: c.categoryId,
+            categoryName: c.categoryName,
+            categoryCode: c.categoryId,
+            marginType: c.marginMode,
+            marginPercentage: c.marginMode === 'PERCENTAGE' ? c.marginValue : 0,
+            marginRate: c.marginMode === 'FIXED_RATE' ? c.marginValue : undefined,
+            status: c.status === 'ACTIVE' ? 'Active' : 'Inactive',
+            updatedAt: c.updatedAt?.split('T')[0],
+            updatedBy: c.updatedBy,
+          }));
+          setCategoryMargins(mappedCats);
+        }
+
+        if (livePlatformFee) {
+          setPlatformFeeConfig(livePlatformFee);
+        }
+
+        const liveProdRules: MarginRule[] = (liveProdMargins?.items || []).map(p => ({
+          margin_rule_id: `mr_p_${p.productId}_${p.manufacturerId}`,
+          scope_type: 'PRODUCT' as const,
+          product_id: p.productId,
+          sku_id: p.sku || p.productId,
+          manufacturer_id: p.manufacturerId,
+          manufacturer_name: p.manufacturerName || null,
+          margin_type: p.marginMode,
+          margin_value: p.marginValue,
+          margin_percentage: p.marginMode === 'PERCENTAGE' ? p.marginValue : 0,
+          margin_rate: p.marginMode === 'FIXED_RATE' ? p.marginValue : undefined,
+          priority: 1,
+          status: p.status === 'ACTIVE' ? 'Active' : 'Inactive',
+          created_by: p.createdBy,
+          created_at: p.createdAt,
+          updated_at: p.updatedAt,
+        }));
+
+        const liveMfgRules: MarginRule[] = (liveMfgMargins || []).map(m => ({
+          margin_rule_id: `mr_m_${m.manufacturerId}`,
+          scope_type: 'MANUFACTURER' as const,
+          manufacturer_id: m.manufacturerId,
+          manufacturer_name: m.manufacturerName,
+          category_id: null,
+          category_name: null,
+          margin_type: m.marginMode,
+          margin_value: m.marginValue,
+          margin_percentage: m.marginMode === 'PERCENTAGE' ? m.marginValue : 0,
+          margin_rate: m.marginMode === 'FIXED_RATE' ? m.marginValue : undefined,
+          priority: 3,
+          status: m.status === 'ACTIVE' ? 'Active' : 'Inactive',
+          created_by: m.createdBy,
+          created_at: m.createdAt,
+          updated_at: m.updatedAt,
+        }));
+
+        const liveCatRules: MarginRule[] = (liveCatMargins || []).map(c => ({
+          margin_rule_id: `mr_c_${c.categoryId}`,
+          scope_type: 'CATEGORY' as const,
+          category_id: c.categoryId,
+          category_name: c.categoryName,
+          margin_type: c.marginMode,
+          margin_value: c.marginValue,
+          margin_percentage: c.marginMode === 'PERCENTAGE' ? c.marginValue : 0,
+          margin_rate: c.marginMode === 'FIXED_RATE' ? c.marginValue : undefined,
+          priority: 4,
+          status: c.status === 'ACTIVE' ? 'Active' : 'Inactive',
+          created_by: c.createdBy,
+          created_at: c.createdAt,
+          updated_at: c.updatedAt,
+        }));
+
+        const defaultRule: MarginRule = {
+          margin_rule_id: 'mr_default',
+          scope_type: 'DEFAULT',
+          margin_type: 'PERCENTAGE',
+          margin_value: 10,
+          margin_percentage: 10,
+          priority: 5,
+          status: 'Active',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        if (liveProdRules.length > 0 || liveMfgRules.length > 0 || liveCatRules.length > 0) {
+          setMarginRules([...liveProdRules, ...liveMfgRules, ...liveCatRules, defaultRule]);
         }
       } catch (err) {
         console.warn('Background catalog hydration warning:', err);
@@ -1605,6 +1782,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const displayUnit = ruleData.margin_type === 'FIXED_RATE' ? `₹${ruleData.margin_value || ruleData.margin_rate}/unit` : `${ruleData.margin_value ?? ruleData.margin_percentage}%`;
     addAuditLog('MARGIN_ENGINE', `Configured margin rule (${ruleData.manufacturer_name || ruleData.sku_id || ruleData.category_name || 'Margin'}: ${displayUnit})`);
+
+    // Persist to PostgreSQL database
+    const finalType: MarginType = ruleData.margin_type || 'PERCENTAGE';
+    const finalVal = ruleData.margin_value !== undefined
+      ? ruleData.margin_value
+      : (finalType === 'FIXED_RATE' ? (ruleData.margin_rate ?? 0) : (ruleData.margin_percentage ?? 10));
+
+    if (ruleData.manufacturer_id && !ruleData.product_id && !ruleData.sku_id && !ruleData.category_id) {
+      marginApi.saveManufacturerMargin(
+        ruleData.manufacturer_id,
+        finalVal,
+        finalType,
+        ruleData.manufacturer_name || undefined,
+        ruleData.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'
+      ).catch(err => console.warn('Failed to persist manufacturer margin to backend:', err));
+    } else if (ruleData.product_id || ruleData.sku_id) {
+      const pId = ruleData.product_id || ruleData.sku_id || '';
+      const mId = ruleData.manufacturer_id || 'mfg_fg_direct';
+      marginApi.saveProductMargin(
+        pId,
+        mId,
+        finalType,
+        finalVal,
+        {
+          sku: ruleData.sku_id || undefined,
+          manufacturerName: ruleData.manufacturer_name || undefined,
+          status: ruleData.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'
+        }
+      ).catch(err => console.warn('Failed to persist product margin to backend:', err));
+    } else if (ruleData.category_id || ruleData.category_name) {
+      const cId = ruleData.category_id || ruleData.category_name || '';
+      marginApi.saveCategoryMargin(
+        cId,
+        finalVal,
+        finalType,
+        ruleData.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'
+      ).catch(err => console.warn('Failed to persist category margin to backend:', err));
+    }
   };
 
   const deleteMarginRule = (ruleId: string) => {
@@ -2071,9 +2286,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {}
   }, [mappings]);
 
-  const addMapping = (newMapping: ManufacturerProductMapping) => {
+  const refreshMappings = useCallback(async () => {
+    try {
+      const data = await catalogApi.listMappings({ size: 200 });
+      if (Array.isArray(data)) {
+        setMappings(data);
+        try { localStorage.setItem('fg_mappings_v3', JSON.stringify(data)); } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Failed to refresh mappings from API:', err);
+    }
+  }, []);
+
+  const addMapping = async (newMapping: ManufacturerProductMapping) => {
     setMappings(prev => {
-      // Check duplicate for same manufacturer & product
       const targetPid = newMapping.product_id || newMapping.productId;
       const targetMid = newMapping.manufacturer_id || newMapping.manufacturerId;
       const exists = prev.some(m => {
@@ -2084,22 +2310,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (exists) return prev;
       return [newMapping, ...prev];
     });
+    try {
+      const saved = await catalogApi.createMapping(newMapping);
+      setMappings(prev => [saved, ...prev.filter(m => m.id !== saved.id && m.product_manufacturer_id !== saved.product_manufacturer_id)]);
+      addAuditLog('CREATE_PRODUCT_MANUFACTURER', `Created mapping ${saved.productName} -> ${saved.manufacturerName} in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to persist mapping in database:', err);
+    }
   };
 
-  const updateMapping = (productId: string, manufacturerId: string, updatedFields: Partial<ManufacturerProductMapping>) => {
+  const updateMapping = async (productId: string, manufacturerId: string, updatedFields: Partial<ManufacturerProductMapping>) => {
     setMappings(prev => prev.map(m => {
       const matchPid = m.productId === productId || m.product_id === productId;
       const matchMid = m.manufacturerId === manufacturerId || m.manufacturer_id === manufacturerId || !m.manufacturerId;
       return (matchPid && matchMid) ? { ...m, ...updatedFields } : m;
     }));
+    try {
+      const target = mappings.find(m => (m.productId === productId || m.product_id === productId) && (m.manufacturerId === manufacturerId || m.manufacturer_id === manufacturerId));
+      if (target) {
+        const targetId = target.id || target.product_manufacturer_id;
+        const saved = await catalogApi.updateMapping(targetId, updatedFields);
+        setMappings(prev => prev.map(m => (m.id === targetId || m.product_manufacturer_id === targetId) ? { ...m, ...saved } : m));
+      }
+    } catch (err) {
+      console.error('Failed to update mapping in database:', err);
+    }
   };
 
-  const removeMapping = (productId: string, manufacturerId: string) => {
+  const removeMapping = async (productId: string, manufacturerId: string) => {
+    const target = mappings.find(m => (m.productId === productId || m.product_id === productId) && (m.manufacturerId === manufacturerId || m.manufacturer_id === manufacturerId));
     setMappings(prev => prev.filter(m => {
       const matchPid = m.productId === productId || m.product_id === productId;
       const matchMid = m.manufacturerId === manufacturerId || m.manufacturer_id === manufacturerId || !m.manufacturerId;
       return !(matchPid && matchMid);
     }));
+    try {
+      if (target) {
+        const targetId = target.id || target.product_manufacturer_id;
+        await catalogApi.deleteMapping(targetId);
+      }
+    } catch (err) {
+      console.error('Failed to delete mapping from database:', err);
+    }
   };
 
   // ── PLATFORM FEE STATE & HANDLERS (COMPLETELY SEPARATE FROM MARGIN) ────
@@ -2130,6 +2383,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString().split('T')[0]
     }));
     addAuditLog('PLATFORM_FEE', `Updated platform fee config: ${updates.feeValue !== undefined ? `${updates.feeValue}${updates.feeType === 'FIXED_RATE' ? '₹' : '%'}` : 'modified'}`);
+
+    // Persist to PostgreSQL backend
+    marginApi.savePlatformFee(updates).catch(err => {
+      console.warn('Failed to persist platform fee config to PostgreSQL:', err);
+    });
   };
 
   // ── PRODUCT-LEVEL MARGIN ENGINE HANDLERS (STRICT PRODUCT LEVEL) ────────
@@ -2198,6 +2456,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateProductMaster(productId, { marginPercentage: marginValue });
     }
 
+    // 4. Persist to PostgreSQL backend
+    marginApi.saveProductMargin(
+      productId,
+      manufacturerId,
+      marginType,
+      marginValue,
+      {
+        sku: targetPrd?.sku || targetPrd?.code || productId,
+        productName: targetPrd?.name,
+        manufacturerName: targetMfg?.companyName || targetMfg?.name || manufacturerId,
+        status: 'ACTIVE'
+      }
+    ).catch(err => {
+      console.warn('Failed to persist product margin to PostgreSQL:', err);
+    });
+
     const displayUnit = marginType === 'FIXED_RATE' ? `₹${marginValue}/unit` : `${marginValue}%`;
     addAuditLog('MARGIN_ENGINE', `Admin configured product margin for ${targetPrd?.name || productId} (${targetMfg?.brandName || targetMfg?.companyName || manufacturerId}): ${displayUnit}`);
   };
@@ -2213,6 +2487,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch (err: any) {
         errors.push(`Failed to update ${row.productId}: ${err?.message || 'Unknown error'}`);
       }
+    });
+
+    // Persist batch to PostgreSQL backend
+    marginApi.bulkImportProductMargins(rows.map(r => ({
+      productId: r.productId,
+      manufacturerId: r.manufacturerId,
+      marginMode: r.marginType,
+      marginValue: r.marginValue,
+      sku: r.mfgProductCode
+    }))).catch(err => {
+      console.warn('Failed to bulk persist product margins to PostgreSQL:', err);
     });
 
     addAuditLog('MARGIN_ENGINE', `Admin bulk updated ${updatedCount} product margins via Excel upload.`);
@@ -2855,25 +3140,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return mockBrands;
   });
 
-  const addBrand = (newBrand: Brand) => {
-    setBrands(prev => [newBrand, ...prev.filter(b => b.brand_id !== newBrand.brand_id)]);
-    addAuditLog('Brand Master', `Added brand ${newBrand.brand_name} (${newBrand.brand_code})`);
-  };
+  const refreshBrands = useCallback(async () => {
+    try {
+      const data = await catalogApi.listBrands({ size: 100 });
+      if (Array.isArray(data)) {
+        setBrands(data);
+        try { localStorage.setItem('fg_brands', JSON.stringify(data)); } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Failed to refresh brands from API:', err);
+    }
+  }, []);
 
-  const updateBrand = (id: string, updates: Partial<Brand>) => {
-    setBrands(prev => prev.map(b => (b.brand_id === id || b.id === id) ? { ...b, ...updates, updated_at: new Date().toISOString() } : b));
-    addAuditLog('Brand Master', `Updated brand ID ${id}`);
-  };
-
-  const deleteBrand = (id: string) => {
-    const b = brands.find(item => item.brand_id === id || item.id === id);
-    setBrands(prev => prev.filter(item => item.brand_id !== id && item.id !== id));
-    if (b) {
-      addAuditLog('Brand Master', `Deleted brand ${b.brand_name || b.name} (${b.brand_code || b.code})`);
+  const addBrand = async (newBrand: Brand) => {
+    setBrands(prev => [newBrand, ...prev.filter(b => b.brand_id !== newBrand.brand_id && b.id !== newBrand.id)]);
+    try {
+      const saved = await catalogApi.createBrand(newBrand);
+      setBrands(prev => [saved, ...prev.filter(b => b.brand_id !== saved.brand_id && b.id !== saved.id)]);
+      addAuditLog('Brand Master', `Created Brand ${saved.brand_name || newBrand.brand_name} (${saved.brand_code || newBrand.brand_code}) in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to create brand in database:', err);
+      addAuditLog('Brand Master', `Added brand ${newBrand.brand_name} (${newBrand.brand_code}) locally`);
     }
   };
 
-  const toggleBrandStatus = (id: string) => {
+  const updateBrand = async (id: string, updates: Partial<Brand>) => {
+    setBrands(prev => prev.map(b => (b.brand_id === id || b.id === id) ? { ...b, ...updates, updated_at: new Date().toISOString() } : b));
+    try {
+      const saved = await catalogApi.updateBrand(id, updates);
+      setBrands(prev => prev.map(b => (b.brand_id === id || b.id === id) ? { ...b, ...saved } : b));
+      addAuditLog('Brand Master', `Updated brand ID ${id} in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to update brand in database:', err);
+      addAuditLog('Brand Master', `Updated brand ID ${id} locally`);
+    }
+  };
+
+  const deleteBrand = async (id: string) => {
+    const b = brands.find(item => item.brand_id === id || item.id === id);
+    setBrands(prev => prev.filter(item => item.brand_id !== id && item.id !== id));
+    try {
+      await catalogApi.deleteBrand(id);
+      addAuditLog('Brand Master', `Deleted brand ${b?.brand_name || id} from database`);
+    } catch (err) {
+      console.error('Failed to delete brand from database:', err);
+    }
+  };
+
+  const toggleBrandStatus = async (id: string) => {
     setBrands(prev => prev.map(b => {
       if (b.brand_id === id || b.id === id) {
         const newStatus: LifecycleStatus = (b.lifecycle_status === 'ACTIVE' || b.status === 'ACTIVE') ? 'INACTIVE' : 'ACTIVE';
@@ -2881,6 +3197,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return b;
     }));
+    try {
+      const saved = await catalogApi.toggleBrandStatus(id);
+      setBrands(prev => prev.map(b => (b.brand_id === id || b.id === id) ? { ...b, ...saved } : b));
+      addAuditLog('Brand Master', `Toggled brand ${id} status in database`);
+      return saved;
+    } catch (err) {
+      console.error('Failed to toggle brand status in database:', err);
+    }
   };
 
   useEffect(() => {
@@ -3311,7 +3635,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return [];
   };
 
-  // ── Customer Segments & Product Pricing ──
+  // ── Customer Segments & Product Pricing (PostgreSQL Database-Backed) ──
   const [customerSegments, setCustomerSegments] = useState<CustomerSegment[]>(() => {
     try {
       const stored = localStorage.getItem('fg_customer_segments_v1');
@@ -3322,28 +3646,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return mockCustomerSegments;
   });
 
-  const addCustomerSegment = (segment: CustomerSegment) => {
-    setCustomerSegments(prev => {
-      const next = [segment, ...prev.filter(s => s.customer_segment_id !== segment.customer_segment_id && s.segment_code !== segment.segment_code)];
-      try { localStorage.setItem('fg_customer_segments_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const refreshCustomerSegments = async () => {
+    try {
+      const data = await catalogApi.listCustomerSegments();
+      if (data && Array.isArray(data)) {
+        setCustomerSegments(data);
+        try { localStorage.setItem('fg_customer_segments_v1', JSON.stringify(data)); } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Failed to refresh customer segments:', err);
+    }
   };
 
-  const updateCustomerSegment = (id: string, updates: Partial<CustomerSegment>) => {
-    setCustomerSegments(prev => {
-      const next = prev.map(s => (s.customer_segment_id === id || s.id === id) ? { ...s, ...updates, updated_at: new Date().toISOString().split('T')[0] } : s);
-      try { localStorage.setItem('fg_customer_segments_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const addCustomerSegment = async (segment: CustomerSegment) => {
+    try {
+      const saved = await catalogApi.createCustomerSegment(segment);
+      setCustomerSegments(prev => [saved, ...prev.filter(s => s.customer_segment_id !== saved.customer_segment_id && s.id !== saved.id)]);
+      return saved;
+    } catch (err) {
+      console.error('Failed to add customer segment via API, falling back to local:', err);
+      setCustomerSegments(prev => [segment, ...prev.filter(s => s.customer_segment_id !== segment.customer_segment_id)]);
+      return segment;
+    }
   };
 
-  const removeCustomerSegment = (id: string) => {
-    setCustomerSegments(prev => {
-      const next = prev.filter(s => s.customer_segment_id !== id && s.id !== id);
-      try { localStorage.setItem('fg_customer_segments_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const updateCustomerSegment = async (id: string, updates: Partial<CustomerSegment>) => {
+    try {
+      const saved = await catalogApi.updateCustomerSegment(id, updates);
+      setCustomerSegments(prev => prev.map(s => (s.customer_segment_id === id || s.id === id) ? { ...s, ...saved } : s));
+      return saved;
+    } catch (err) {
+      console.error('Failed to update customer segment via API, falling back to local:', err);
+      setCustomerSegments(prev => prev.map(s => (s.customer_segment_id === id || s.id === id) ? { ...s, ...updates } : s));
+    }
+  };
+
+  const removeCustomerSegment = async (id: string) => {
+    try {
+      await catalogApi.deleteCustomerSegment(id);
+      setCustomerSegments(prev => prev.filter(s => s.customer_segment_id !== id && s.id !== id));
+    } catch (err) {
+      console.error('Failed to delete customer segment via API, removing locally:', err);
+      setCustomerSegments(prev => prev.filter(s => s.customer_segment_id !== id && s.id !== id));
+    }
   };
 
   const [productPrices, setProductPrices] = useState<ProductPrice[]>(() => {
@@ -3356,28 +3701,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return mockProductPrices;
   });
 
-  const addProductPrice = (price: ProductPrice) => {
-    setProductPrices(prev => {
-      const next = [price, ...prev.filter(p => p.product_price_id !== price.product_price_id)];
-      try { localStorage.setItem('fg_product_prices_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const refreshProductPrices = async () => {
+    try {
+      const data = await catalogApi.listPrices({ size: 200 });
+      if (data && Array.isArray(data)) {
+        setProductPrices(data);
+        try { localStorage.setItem('fg_product_prices_v1', JSON.stringify(data)); } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Failed to refresh product prices:', err);
+    }
   };
 
-  const updateProductPrice = (id: string, updates: Partial<ProductPrice>) => {
-    setProductPrices(prev => {
-      const next = prev.map(p => (p.product_price_id === id || p.id === id) ? { ...p, ...updates, updated_at: new Date().toISOString().split('T')[0] } : p);
-      try { localStorage.setItem('fg_product_prices_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const addProductPrice = async (price: ProductPrice) => {
+    try {
+      const saved = await catalogApi.createPrice(price);
+      setProductPrices(prev => [saved, ...prev.filter(p => p.product_price_id !== saved.product_price_id && p.id !== saved.id)]);
+      return saved;
+    } catch (err) {
+      console.error('Failed to create product price via API, falling back to local:', err);
+      setProductPrices(prev => [price, ...prev.filter(p => p.product_price_id !== price.product_price_id)]);
+      return price;
+    }
   };
 
-  const removeProductPrice = (id: string) => {
-    setProductPrices(prev => {
-      const next = prev.filter(p => p.product_price_id !== id && p.id !== id);
-      try { localStorage.setItem('fg_product_prices_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const updateProductPrice = async (id: string, updates: Partial<ProductPrice>) => {
+    try {
+      const saved = await catalogApi.updatePrice(id, updates);
+      setProductPrices(prev => prev.map(p => (p.product_price_id === id || p.id === id) ? { ...p, ...saved } : p));
+      return saved;
+    } catch (err) {
+      console.error('Failed to update product price via API, falling back to local:', err);
+      setProductPrices(prev => prev.map(p => (p.product_price_id === id || p.id === id) ? { ...p, ...updates } : p));
+    }
+  };
+
+  const removeProductPrice = async (id: string) => {
+    try {
+      await catalogApi.deletePrice(id);
+      setProductPrices(prev => prev.filter(p => p.product_price_id !== id && p.id !== id));
+    } catch (err) {
+      console.error('Failed to delete product price via API, removing locally:', err);
+      setProductPrices(prev => prev.filter(p => p.product_price_id !== id && p.id !== id));
+    }
+  };
+
+  const toggleProductPriceStatus = async (id: string) => {
+    try {
+      const saved = await catalogApi.togglePriceStatus(id);
+      setProductPrices(prev => prev.map(p => (p.product_price_id === id || p.id === id) ? { ...p, ...saved } : p));
+      return saved;
+    } catch (err) {
+      console.error('Failed to toggle price status via API, toggling locally:', err);
+      setProductPrices(prev => prev.map(p => {
+        if (p.product_price_id === id || p.id === id) {
+          const next = p.price_status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+          return { ...p, price_status: next as any, status: next };
+        }
+        return p;
+      }));
+    }
   };
 
   const getProductPrices = (productId: string, segmentId?: string): ProductPrice[] => {
@@ -3388,7 +3771,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // ── Product Tax & Product UOM ──
+  // ── Product Tax & Product UOM (PostgreSQL Database-Backed) ──
   const [productTaxes, setProductTaxes] = useState<ProductTax[]>(() => {
     try {
       const stored = localStorage.getItem('fg_product_taxes_v1');
@@ -3399,28 +3782,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return mockProductTaxes;
   });
 
-  const addProductTax = (tax: ProductTax) => {
-    setProductTaxes(prev => {
-      const next = [tax, ...prev.filter(t => t.product_tax_id !== tax.product_tax_id)];
-      try { localStorage.setItem('fg_product_taxes_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const refreshProductTaxes = async () => {
+    try {
+      const data = await catalogApi.listTaxes({ size: 200 });
+      if (data && Array.isArray(data)) {
+        setProductTaxes(data);
+        try { localStorage.setItem('fg_product_taxes_v1', JSON.stringify(data)); } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Failed to refresh product taxes:', err);
+    }
   };
 
-  const updateProductTax = (id: string, updates: Partial<ProductTax>) => {
-    setProductTaxes(prev => {
-      const next = prev.map(t => (t.product_tax_id === id || t.id === id) ? { ...t, ...updates, updated_at: new Date().toISOString().split('T')[0] } : t);
-      try { localStorage.setItem('fg_product_taxes_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const addProductTax = async (tax: ProductTax) => {
+    try {
+      const saved = await catalogApi.createTax(tax);
+      setProductTaxes(prev => [saved, ...prev.filter(t => t.product_tax_id !== saved.product_tax_id && t.id !== saved.id)]);
+      return saved;
+    } catch (err) {
+      console.error('Failed to add product tax via API, falling back to local:', err);
+      setProductTaxes(prev => [tax, ...prev.filter(t => t.product_tax_id !== tax.product_tax_id)]);
+      return tax;
+    }
   };
 
-  const removeProductTax = (id: string) => {
-    setProductTaxes(prev => {
-      const next = prev.filter(t => t.product_tax_id !== id && t.id !== id);
-      try { localStorage.setItem('fg_product_taxes_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const updateProductTax = async (id: string, updates: Partial<ProductTax>) => {
+    try {
+      const saved = await catalogApi.updateTax(id, updates);
+      setProductTaxes(prev => prev.map(t => (t.product_tax_id === id || t.id === id) ? { ...t, ...saved } : t));
+      return saved;
+    } catch (err) {
+      console.error('Failed to update product tax via API, falling back to local:', err);
+      setProductTaxes(prev => prev.map(t => (t.product_tax_id === id || t.id === id) ? { ...t, ...updates } : t));
+    }
+  };
+
+  const removeProductTax = async (id: string) => {
+    try {
+      await catalogApi.deleteTax(id);
+      setProductTaxes(prev => prev.filter(t => t.product_tax_id !== id && t.id !== id));
+    } catch (err) {
+      console.error('Failed to delete product tax via API, removing locally:', err);
+      setProductTaxes(prev => prev.filter(t => t.product_tax_id !== id && t.id !== id));
+    }
+  };
+
+  const toggleProductTaxStatus = async (id: string) => {
+    try {
+      const saved = await catalogApi.toggleTaxStatus(id);
+      setProductTaxes(prev => prev.map(t => (t.product_tax_id === id || t.id === id) ? { ...t, ...saved } : t));
+      return saved;
+    } catch (err) {
+      console.error('Failed to toggle product tax status via API, toggling locally:', err);
+      setProductTaxes(prev => prev.map(t => {
+        if (t.product_tax_id === id || t.id === id) {
+          const next = t.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+          return { ...t, status: next as any };
+        }
+        return t;
+      }));
+    }
   };
 
   const [productUoms, setProductUoms] = useState<ProductUom[]>(() => {
@@ -3433,31 +3854,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return mockProductUoms;
   });
 
-  const addProductUom = (uom: ProductUom) => {
-    setProductUoms(prev => {
-      const next = [uom, ...prev.filter(u => u.product_uom_id !== uom.product_uom_id)];
-      try { localStorage.setItem('fg_product_uoms_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const refreshProductUoms = async () => {
+    try {
+      const data = await catalogApi.listUoms({ size: 200 });
+      if (data && Array.isArray(data)) {
+        setProductUoms(data);
+        try { localStorage.setItem('fg_product_uoms_v1', JSON.stringify(data)); } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Failed to refresh product uoms:', err);
+    }
   };
 
-  const updateProductUom = (id: string, updates: Partial<ProductUom>) => {
-    setProductUoms(prev => {
-      const next = prev.map(u => (u.product_uom_id === id || u.id === id) ? { ...u, ...updates, updated_at: new Date().toISOString().split('T')[0] } : u);
-      try { localStorage.setItem('fg_product_uoms_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const addProductUom = async (uom: ProductUom) => {
+    try {
+      const saved = await catalogApi.createUom(uom);
+      setProductUoms(prev => {
+        // If saved is base UOM, unset base on others of same product
+        let next = prev.filter(u => u.product_uom_id !== saved.product_uom_id && u.id !== saved.id);
+        if (saved.is_base_uom || saved.isBaseUom) {
+          next = next.map(u => (u.product_id === saved.product_id || u.productId === saved.productId) ? { ...u, is_base_uom: false, isBaseUom: false } : u);
+        }
+        return [saved, ...next];
+      });
+      return saved;
+    } catch (err) {
+      console.error('Failed to add product UOM via API, falling back to local:', err);
+      setProductUoms(prev => [uom, ...prev.filter(u => u.product_uom_id !== uom.product_uom_id)]);
+      return uom;
+    }
   };
 
-  const removeProductUom = (id: string) => {
-    setProductUoms(prev => {
-      const next = prev.filter(u => u.product_uom_id !== id && u.id !== id);
-      try { localStorage.setItem('fg_product_uoms_v1', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
+  const updateProductUom = async (id: string, updates: Partial<ProductUom>) => {
+    try {
+      const saved = await catalogApi.updateUom(id, updates);
+      setProductUoms(prev => {
+        let next = prev.map(u => (u.product_uom_id === id || u.id === id) ? { ...u, ...saved } : u);
+        if (saved.is_base_uom || saved.isBaseUom) {
+          next = next.map(u => ((u.product_id === saved.product_id || u.productId === saved.productId) && u.product_uom_id !== id && u.id !== id) ? { ...u, is_base_uom: false, isBaseUom: false } : u);
+        }
+        return next;
+      });
+      return saved;
+    } catch (err) {
+      console.error('Failed to update product UOM via API, falling back to local:', err);
+      setProductUoms(prev => prev.map(u => (u.product_uom_id === id || u.id === id) ? { ...u, ...updates } : u));
+    }
   };
 
-  // ── Direct Order Eligibility ──
+  const removeProductUom = async (id: string) => {
+    try {
+      await catalogApi.deleteUom(id);
+      setProductUoms(prev => prev.filter(u => u.product_uom_id !== id && u.id !== id));
+    } catch (err) {
+      console.error('Failed to delete product UOM via API, removing locally:', err);
+      setProductUoms(prev => prev.filter(u => u.product_uom_id !== id && u.id !== id));
+    }
+  };
+
+  const toggleProductUomStatus = async (id: string) => {
+    try {
+      const saved = await catalogApi.toggleUomStatus(id);
+      setProductUoms(prev => prev.map(u => (u.product_uom_id === id || u.id === id) ? { ...u, ...saved } : u));
+      return saved;
+    } catch (err) {
+      console.error('Failed to toggle product UOM status via API, toggling locally:', err);
+      setProductUoms(prev => prev.map(u => {
+        if (u.product_uom_id === id || u.id === id) {
+          const next = !Boolean(u.is_active ?? u.isActive);
+          return { ...u, is_active: next, isActive: next };
+        }
+        return u;
+      }));
+    }
+  };
+// ── Direct Order Eligibility ──
   const [directOrderEligibilities] = useState<ManufacturerDirectOrderEligibility[]>(mockDirectOrderEligibilities);
 
   const isManufacturerDirectOrderEligible = (mfgId: string, productId?: string): boolean => {
@@ -5036,6 +5507,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         url: d.url || '#'
       })) || []
     });
+
+    const newCase: ComplianceCase = {
+      id: 'comp_' + Date.now(),
+      caseNumber: 'CMP-2026-' + (100 + complianceCases.length),
+      entityType: 'BUYER',
+      entityId: newBuyer.id,
+      entityName: newBuyer.companyName,
+      caseType: 'DRUG_LICENSE',
+      status: 'UNDER_REVIEW',
+      assignedOfficer: 'Compliance Desk Officer',
+      createdDate: new Date().toISOString().split('T')[0],
+      updatedDate: new Date().toISOString().split('T')[0],
+      riskScore: 'LOW',
+      checklist: [
+        { title: 'Form 20B / 21B License Audit', mandatory: true, passed: true },
+        { title: 'GST Registration Audit', mandatory: true, passed: true },
+        { title: 'Financial & Credit Verification', mandatory: true, passed: true }
+      ],
+      documents: (newBuyer.documents || []).map((d: any) => ({ name: d.name, url: d.url || '#', verified: false }))
+    };
+
     setComplianceCases(prev => [newCase, ...prev]);
     addAuditLog('Buyer Onboarding', `Submitted onboarding application for ${newBuyer.companyName}`);
   };
@@ -5670,7 +6162,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateBrand,
         deleteBrand,
         toggleBrandStatus,
-        unifiedCategories,
         attributeMasters,
         productAttributes,
         addAttributeMaster,
@@ -5701,19 +6192,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addCustomerSegment,
         updateCustomerSegment,
         removeCustomerSegment,
+        refreshCustomerSegments,
         productPrices,
         addProductPrice,
         updateProductPrice,
         removeProductPrice,
+        toggleProductPriceStatus,
         getProductPrices,
+        refreshProductPrices,
         productTaxes,
         addProductTax,
         updateProductTax,
         removeProductTax,
+        toggleProductTaxStatus,
+        refreshProductTaxes,
         productUoms,
         addProductUom,
         updateProductUom,
         removeProductUom,
+        toggleProductUomStatus,
+        refreshProductUoms,
         directOrderEligibilities,
         isManufacturerDirectOrderEligible,
         checkProductSellability,
@@ -5770,6 +6268,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 };
 
+export const useAppContext = () => useApp();
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) throw new Error('useApp must be used within AppProvider');

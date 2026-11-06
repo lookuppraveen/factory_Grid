@@ -332,6 +332,10 @@ class WorkspaceErrorBoundary extends React.Component<
   }
 }
 
+interface DashboardLayoutProps {
+  onNavigate?: (tab: string) => void;
+}
+
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) => {
   const { currentRole, setCurrentRole, activeTab, setActiveTab, complianceCases, rfqs, orders, notifications, isCreateRfqDrawerOpen, customerVerifications, logout, userProfile, orgProfile, openProfileTab, manufacturers, activeBuyerAccount, setActiveBuyerAccount, resetDemoState, authUser } = useApp();
   const { theme, toggleTheme } = useTheme();

@@ -48,8 +48,8 @@ export const IntegrationsSettingsModule: React.FC<{ initialCategory?: 'SHIPMENT'
 
   // Per-Provider Environment Storage for GST Providers
   const [gstProviderConfigs, setGstProviderConfigs] = useState<Record<string, {
-    sandboxConfig?: EnvGSTCredentials;
-    productionConfig?: EnvGSTCredentials;
+    sandboxConfig?: GSTCredentials;
+    productionConfig?: GSTCredentials;
   }>>({});
 
   // Open Shipment Provider Config

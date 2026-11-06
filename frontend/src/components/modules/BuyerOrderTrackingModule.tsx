@@ -4,7 +4,8 @@ import { ViewModeToggle } from '../common/ViewModeToggle';
 import {
   ShoppingBag, CheckCircle2, Clock, Truck, FileText, Download, 
   Package, ChevronRight, Eye, AlertCircle, ShieldCheck, X, Search, Filter,
-  ArrowLeft, ArrowRight, Building2, Calendar, DollarSign, Receipt, Check, FileCheck, Layers, AlertTriangle, Upload, File, Star
+  ArrowLeft, ArrowRight, Building2, Calendar, DollarSign, Receipt, Check, FileCheck, Layers, AlertTriangle, Upload, File, Star,
+  CreditCard
 } from 'lucide-react';
 import { MasterOrder, Invoice } from '../../types';
 import { UNIFIED_STORAGE_KEY } from './ProductionExecutionModule';
@@ -682,7 +683,6 @@ export const BuyerOrderTrackingModule: React.FC<BuyerOrderTrackingModuleProps> =
       console.error(e);
     }
 
-    setReplacingArtworkSubOrders(prev => ({ ...prev, [subCode]: false }));
     addAuditLog('Artwork Workflow', `Buyer uploaded artwork file ${fileName} for Sub-Order ${subCode}`);
     alert(`✔ Artwork Uploaded Successfully!\n\nSub-Order: ${subCode}\nArtwork File: ${fileName}\nStatus: Artwork Completed ✓\nDelivery Schedule: Finalized & Confirmed`);
   };

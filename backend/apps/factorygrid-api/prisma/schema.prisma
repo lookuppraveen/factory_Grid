@@ -227,6 +227,8 @@ model CatalogProduct {
   rfqLines             RfqLine[]
   productAttributes    ProductAttribute[]
   productPrices        ProductPrice[]
+  productTaxes         ProductTax[]
+  productUoms          ProductUom[]
 
   @@index([category], map: "idx_catalog_products_category")
   @@index([categoryId], map: "idx_catalog_products_category_id")
@@ -279,6 +281,10 @@ model ManufacturerRegistration {
   rejectionReason  String?                @map("rejection_reason") @db.VarChar(500)
   manufacturerCode String?                @map("manufacturer_code") @db.VarChar(50)
   whoGmpApplicable Boolean                @default(true) @map("who_gmp_applicable")
+  description      String?                @db.VarChar(500)
+  lifecycleStatus  String                 @default("ACTIVE") @map("lifecycle_status") @db.VarChar(50)
+  effectiveFrom    DateTime?              @map("effective_from") @db.Timestamptz(6)
+  discontinuedOn   DateTime?              @map("discontinued_on") @db.Timestamptz(6)
   createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   user             User?                  @relation(fields: [userId], references: [id])
@@ -340,7 +346,7 @@ model ManufacturerProduct {
   updatedAt               DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   registration            ManufacturerRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   product                 CatalogProduct           @relation(fields: [productId], references: [id])
-  productPrices           ProductPrice[]
+  productPrices        ProductPrice[]
 
   @@unique([registrationId, productId], map: "uq_mfg_product_registration_product")
   @@map("manufacturer_products")
@@ -627,9 +633,11 @@ model ProductPrice {
   updatedAt             DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   product               CatalogProduct       @relation(fields: [productId], references: [id], onDelete: Cascade)
   manufacturerProduct   ManufacturerProduct? @relation(fields: [productManufacturerId], references: [id], onDelete: SetNull)
+  customerSegment       CustomerSegment?     @relation(fields: [customerSegmentId], references: [id], onDelete: SetNull)
 
   @@index([productId], map: "idx_prod_prices_product_id")
   @@index([productManufacturerId], map: "idx_prod_prices_mfg_id")
+  @@index([customerSegmentId], map: "idx_prod_prices_cust_seg_id")
   @@map("product_prices")
 }
 
@@ -647,4 +655,148 @@ model ProductType {
   @@index([productTypeCode], map: "idx_product_types_code")
   @@index([lifecycleStatus], map: "idx_product_types_status")
   @@map("product_types")
+}
+
+model CustomerSegment {
+  id              String         @id @db.VarChar(50)
+  segmentCode     String         @unique @map("segment_code") @db.VarChar(50)
+  segmentName     String         @map("segment_name") @db.VarChar(150)
+  description     String?        @db.VarChar(500)
+  lifecycleStatus String         @default("ACTIVE") @map("lifecycle_status") @db.VarChar(30)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  productPrices   ProductPrice[]
+
+  @@index([segmentCode], map: "idx_cust_seg_code")
+  @@index([lifecycleStatus], map: "idx_cust_seg_status")
+  @@map("customer_segments")
+}
+
+model ProductTax {
+  id            BigInt         @id @default(autoincrement())
+  productId     String         @map("product_id") @db.VarChar(50)
+  taxCode       String         @map("tax_code") @db.VarChar(50)
+  taxRate       Decimal        @map("tax_rate") @db.Decimal(5, 2)
+  effectiveFrom DateTime?      @map("effective_from") @db.Date
+  effectiveTo   DateTime?      @map("effective_to") @db.Date
+  status        String         @default("ACTIVE") @db.VarChar(30)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  product       CatalogProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId], map: "idx_prod_taxes_product_id")
+  @@index([status], map: "idx_prod_taxes_status")
+  @@map("product_taxes")
+}
+
+model ProductUom {
+  id               BigInt         @id @default(autoincrement())
+  productId        String         @map("product_id") @db.VarChar(50)
+  uom              String         @db.VarChar(50)
+  conversionFactor Decimal        @default(1.0000) @map("conversion_factor") @db.Decimal(10, 4)
+  isBaseUom        Boolean        @default(false) @map("is_base_uom")
+  isOrderUom       Boolean        @default(true) @map("is_order_uom")
+  isActive         Boolean        @default(true) @map("is_active")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  product          CatalogProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, uom], map: "uq_product_uom")
+  @@index([productId], map: "idx_prod_uoms_product_id")
+  @@index([isActive], map: "idx_prod_uoms_active")
+  @@map("product_uoms")
+}
+
+model Brand {
+  id              String           @id @db.VarChar(50)
+  brandId         String           @unique @map("brand_id") @db.VarChar(50)
+  brandCode       String           @unique @map("brand_code") @db.VarChar(50)
+  brandName       String           @map("brand_name") @db.VarChar(150)
+  description     String?          @db.VarChar(500)
+  lifecycleStatus String           @default("ACTIVE") @map("lifecycle_status") @db.VarChar(50)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([brandCode], map: "idx_brands_brand_code")
+  @@index([brandName], map: "idx_brands_brand_name")
+  @@index([lifecycleStatus], map: "idx_brands_lifecycle_status")
+  @@map("brands")
+}
+
+model CategoryMarginConfig {
+  id            String    @id @db.VarChar(50)
+  categoryId    String    @unique @map("category_id") @db.VarChar(50)
+  categoryName  String    @map("category_name") @db.VarChar(150)
+  marginMode    String    @default("PERCENTAGE") @map("margin_mode") @db.VarChar(30)
+  marginValue   Decimal   @map("margin_value") @db.Decimal(12, 2)
+  effectiveFrom DateTime? @map("effective_from") @db.Timestamptz(6)
+  effectiveTo   DateTime? @map("effective_to") @db.Timestamptz(6)
+  status        String    @default("ACTIVE") @db.VarChar(30)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy     String?   @default("Admin") @map("created_by") @db.VarChar(100)
+  updatedBy     String?   @default("Admin") @map("updated_by") @db.VarChar(100)
+
+  @@index([categoryId], map: "idx_cat_margin_cat_id")
+  @@index([status], map: "idx_cat_margin_status")
+  @@map("category_margin_configs")
+}
+
+model ManufacturerMarginConfig {
+  id               String    @id @db.VarChar(50)
+  manufacturerId   String    @unique @map("manufacturer_id") @db.VarChar(50)
+  manufacturerName String    @map("manufacturer_name") @db.VarChar(150)
+  marginMode       String    @default("PERCENTAGE") @map("margin_mode") @db.VarChar(30)
+  marginValue      Decimal   @map("margin_value") @db.Decimal(12, 2)
+  effectiveFrom    DateTime? @map("effective_from") @db.Timestamptz(6)
+  effectiveTo      DateTime? @map("effective_to") @db.Timestamptz(6)
+  status           String    @default("ACTIVE") @db.VarChar(30)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy        String?   @default("Admin") @map("created_by") @db.VarChar(100)
+  updatedBy        String?   @default("Admin") @map("updated_by") @db.VarChar(100)
+
+  @@index([manufacturerId], map: "idx_mfg_margin_mfg_id")
+  @@index([status], map: "idx_mfg_margin_status")
+  @@map("manufacturer_margin_configs")
+}
+
+model ProductMarginConfig {
+  id               String    @id @db.VarChar(50)
+  productId        String    @map("product_id") @db.VarChar(50)
+  sku              String?   @db.VarChar(100)
+  productName      String?   @map("product_name") @db.VarChar(250)
+  manufacturerId   String?   @map("manufacturer_id") @db.VarChar(50)
+  manufacturerName String?   @map("manufacturer_name") @db.VarChar(150)
+  marginMode       String    @default("PERCENTAGE") @map("margin_mode") @db.VarChar(30)
+  marginValue      Decimal   @map("margin_value") @db.Decimal(12, 2)
+  effectiveFrom    DateTime? @map("effective_from") @db.Timestamptz(6)
+  effectiveTo      DateTime? @map("effective_to") @db.Timestamptz(6)
+  status           String    @default("ACTIVE") @db.VarChar(30)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy        String?   @default("Admin") @map("created_by") @db.VarChar(100)
+  updatedBy        String?   @default("Admin") @map("updated_by") @db.VarChar(100)
+
+  @@unique([productId, manufacturerId], map: "uq_product_manufacturer_margin")
+  @@index([productId], map: "idx_prod_margin_prod_id")
+  @@index([manufacturerId], map: "idx_prod_margin_mfg_id")
+  @@index([status], map: "idx_prod_margin_status")
+  @@map("product_margin_configs")
+}
+
+model PlatformFeeConfig {
+  id            String    @id @db.VarChar(50)
+  feeMode       String    @default("PERCENTAGE") @map("fee_mode") @db.VarChar(30)
+  feeValue      Decimal   @default(2.0) @map("fee_value") @db.Decimal(12, 2)
+  feeName       String    @default("Platform Facilitation & Escrow Fee") @map("fee_name") @db.VarChar(150)
+  effectiveFrom DateTime? @map("effective_from") @db.Timestamptz(6)
+  effectiveTo   DateTime? @map("effective_to") @db.Timestamptz(6)
+  status        String    @default("Active") @db.VarChar(30)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy     String?   @default("Admin") @map("created_by") @db.VarChar(100)
+  updatedBy     String?   @default("Admin") @map("updated_by") @db.VarChar(100)
+
+  @@map("platform_fee_configs")
 }
