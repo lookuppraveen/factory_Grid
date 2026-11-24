@@ -2342,7 +2342,8 @@ export interface paths {
         /** Admin: Update Category record */
         put: operations["CatalogController_updateCategory"];
         post?: never;
-        delete?: never;
+        /** Admin: Delete Category record */
+        delete: operations["CatalogController_deleteCategory"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2456,6 +2457,40 @@ export interface paths {
         patch: operations["CatalogController_toggleCategoryStatus"];
         trace?: never;
     };
+    "/api/v1/catalog/categories/product-type/{productTypeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List categories by Product Type ID */
+        get: operations["CatalogController_listCategoriesByProductType"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/categories/hierarchy-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get available categories, sub-categories and sub-sub-categories options grouped by Product Type */
+        get: operations["CatalogController_getCategoryHierarchyOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/catalog/attributes": {
         parameters: {
             query?: never;
@@ -2522,6 +2557,205 @@ export interface paths {
         post: operations["CatalogController_assignAttributeToProductType"];
         /** Admin: Remove attribute from Product Type */
         delete: operations["CatalogController_removeAttributeFromProductType"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List product prices with filtering by product, manufacturer, segment and status */
+        get: operations["CatalogController_listPrices"];
+        put?: never;
+        /** Create new product price rule */
+        post: operations["CatalogController_createPrice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/prices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get single price record details */
+        get: operations["CatalogController_getPrice"];
+        /** Update product price rule */
+        put: operations["CatalogController_updatePrice"];
+        post?: never;
+        /** Delete product price rule */
+        delete: operations["CatalogController_deletePrice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/prices/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Toggle product price status between ACTIVE and INACTIVE */
+        patch: operations["CatalogController_togglePriceStatus"];
+        trace?: never;
+    };
+    "/api/v1/catalog/taxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List product tax mappings with product and status filtering */
+        get: operations["CatalogController_listTaxes"];
+        put?: never;
+        /** Create product tax mapping */
+        post: operations["CatalogController_createTax"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/taxes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get single product tax mapping details */
+        get: operations["CatalogController_getTax"];
+        /** Update product tax mapping */
+        put: operations["CatalogController_updateTax"];
+        post?: never;
+        /** Delete product tax mapping */
+        delete: operations["CatalogController_deleteTax"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/taxes/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Toggle product tax mapping status */
+        patch: operations["CatalogController_toggleTaxStatus"];
+        trace?: never;
+    };
+    "/api/v1/catalog/uoms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List product UOM configurations */
+        get: operations["CatalogController_listUoms"];
+        put?: never;
+        /** Create product UOM configuration */
+        post: operations["CatalogController_createUom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/uoms/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get single product UOM details */
+        get: operations["CatalogController_getUom"];
+        /** Update product UOM configuration */
+        put: operations["CatalogController_updateUom"];
+        post?: never;
+        /** Delete product UOM configuration */
+        delete: operations["CatalogController_deleteUom"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/uoms/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Toggle product UOM active status */
+        patch: operations["CatalogController_toggleUomStatus"];
+        trace?: never;
+    };
+    "/api/v1/catalog/customer-segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all customer segments */
+        get: operations["CatalogController_listCustomerSegments"];
+        put?: never;
+        /** Create customer segment */
+        post: operations["CatalogController_createCustomerSegment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/customer-segments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get single customer segment */
+        get: operations["CatalogController_getCustomerSegment"];
+        /** Update customer segment */
+        put: operations["CatalogController_updateCustomerSegment"];
+        post?: never;
+        /** Delete customer segment */
+        delete: operations["CatalogController_deleteCustomerSegment"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2648,6 +2882,42 @@ export interface paths {
         put?: never;
         /** Map product to manufacturer */
         post: operations["ProductsController_mapProductManufacturer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{id}/taxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get tax list for product */
+        get: operations["ProductsController_getProductTaxes"];
+        put?: never;
+        /** Add product tax definition */
+        post: operations["ProductsController_createProductTax"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{id}/uoms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get UOM list for product */
+        get: operations["ProductsController_getProductUoms"];
+        put?: never;
+        /** Add product UOM definition */
+        post: operations["ProductsController_createProductUom"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3885,52 +4155,142 @@ export interface components {
             remarks?: string;
         };
         BuyerRegistrationDto: {
-            /** @example buyer_pharma_01 */
+            /**
+             * @description Desired username (3 to 50 characters)
+             * @example pharma_buyer_01
+             */
             username: string;
             /**
              * Format: email
-             * @example buyer@pharmaco.in
+             * @description Official corporate email address
+             * @example buyer01@testpharma.com
              */
             email: string;
+            /**
+             * Format: password
+             * @description Account password (minimum 8 characters)
+             * @example Buyer12345678
+             */
             password: string;
+            /**
+             * @description Full legal name of the user
+             * @example Vikramaditya Sharma
+             */
             fullName: string;
+            /**
+             * @description Contact telephone number
+             * @example +919876543210
+             */
             phone?: string;
+            /**
+             * @description Company or business legal name
+             * @example Apex Healthcare Pvt Ltd
+             */
             companyName: string;
-            /** @description Generated when omitted. */
+            /**
+             * @description Company registration or tracking code (auto-generated if omitted)
+             * @example APEX-HC-001
+             */
             companyCode?: string;
+            /**
+             * @description Department within company
+             * @example Central Procurement
+             */
             department?: string;
+            /**
+             * @description Official job title
+             * @example Head of Sourcing
+             */
             jobTitle?: string;
         };
         UserProfileDto: {
+            /**
+             * @description Internal numeric user ID
+             * @example 2
+             */
             id: number;
+            /**
+             * @description Business user code
+             * @example USR-ADM-001
+             */
             userCode: string;
+            /**
+             * @description Unique username
+             * @example admin
+             */
             username: string;
+            /**
+             * @description User corporate email
+             * @example admin@factorygrid.com
+             */
             email: string;
+            /**
+             * @description Full user legal name
+             * @example System Administrator
+             */
             fullName: string;
-            phone: string | null;
-            companyName: string | null;
-            companyCode: string | null;
-            department: string | null;
-            jobTitle: string | null;
-            /** @example ACTIVE */
+            /** @example +919876543210 */
+            phone?: string | null;
+            /** @example FactoryGrid Platform */
+            companyName?: string | null;
+            /** @example FG-HQ-001 */
+            companyCode?: string | null;
+            /** @example Executive IT & Security */
+            department?: string | null;
+            /** @example Super Administrator */
+            jobTitle?: string | null;
+            /**
+             * @description Account lifecycle status
+             * @example ACTIVE
+             */
             accountStatus: string;
             /**
+             * @description Assigned platform RBAC roles
              * @example [
-             *       "ROLE_BUYER"
+             *       "ROLE_ADMIN"
              *     ]
              */
             roles: string[];
-            lastLoginAt: string | null;
+            /** @example 2026-11-05T11:03:38.110Z */
+            lastLoginAt?: string | null;
         };
         RegistrationResponseDto: {
+            /** @example true */
             success: boolean;
+            /** @example User account created successfully */
             message: string;
             user: components["schemas"]["UserProfileDto"];
+            /** @example 2026-11-05T11:03:38.110Z */
             timestamp: string;
         };
         ErrorResponseDto: {
             /**
-             * @description Field-level messages, only on validation failures.
+             * @description HTTP status code
+             * @example 401
+             */
+            status: number;
+            /**
+             * @description HTTP error title
+             * @example Unauthorized
+             */
+            error: string;
+            /**
+             * @description Human-readable error message
+             * @example Invalid credentials or expired JWT token
+             */
+            message: string;
+            /**
+             * @description ISO 8601 error timestamp
+             * @example 2026-11-05T11:03:38.110Z
+             */
+            timestamp: string;
+            /**
+             * @description Request URI path
+             * @example /api/v1/auth/login
+             */
+            path: string;
+            /**
+             * @description Field-level validation error messages (present on 400 Bad Request)
              * @example {
              *       "email": "Please provide a valid email address"
              *     }
@@ -3938,77 +4298,160 @@ export interface components {
             errors?: {
                 [key: string]: string;
             };
-            /** @example 401 */
-            status: number;
-            /** @example Unauthorized */
-            error: string;
-            message: string;
-            timestamp: string;
-            path: string;
         };
         ManufacturerRegistrationDto: {
-            /** @example buyer_pharma_01 */
+            /**
+             * @description Desired username (3 to 50 characters)
+             * @example pharma_buyer_01
+             */
             username: string;
             /**
              * Format: email
-             * @example buyer@pharmaco.in
+             * @description Official corporate email address
+             * @example buyer01@testpharma.com
              */
             email: string;
+            /**
+             * Format: password
+             * @description Account password (minimum 8 characters)
+             * @example Buyer12345678
+             */
             password: string;
+            /**
+             * @description Full legal name of the user
+             * @example Vikramaditya Sharma
+             */
             fullName: string;
+            /**
+             * @description Contact telephone number
+             * @example +919876543210
+             */
             phone?: string;
+            /**
+             * @description Company or business legal name
+             * @example Apex Healthcare Pvt Ltd
+             */
             companyName: string;
-            /** @description Generated when omitted. */
+            /**
+             * @description Company registration or tracking code (auto-generated if omitted)
+             * @example APEX-HC-001
+             */
             companyCode?: string;
+            /**
+             * @description Department within company
+             * @example Central Procurement
+             */
             department?: string;
+            /**
+             * @description Official job title
+             * @example Head of Sourcing
+             */
             jobTitle?: string;
-            /** @description Accepted for compatibility; stored by the partner module in Phase 2. */
+            /**
+             * @description Manufacturing facility details and plant location notes
+             * @example Plant 1: Formulation unit at Baddi, Himachal Pradesh. WHO-GMP accredited.
+             */
             factoryDetails?: string;
         };
         LoginDto: {
-            /** @example admin */
+            /**
+             * @description Username or registered email address
+             * @example admin@factorygrid.com
+             */
             usernameOrEmail: string;
+            /**
+             * Format: password
+             * @description Account password (minimum 8 characters)
+             * @example Admin12345678
+             */
             password: string;
-            /** @description Optional portal check: BUYER, MANUFACTURER, SUPPLIER, FG_STAFF, STAFF or ADMIN. */
+            /**
+             * @description Optional portal check: BUYER, MANUFACTURER, SUPPLIER, or ADMIN
+             * @example ADMIN
+             */
             portalType?: string;
         };
         AuthResponseDto: {
+            /**
+             * @description Signed JWT Bearer access token
+             * @example eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...
+             */
             accessToken: string;
+            /**
+             * @description Secure refresh token UUID
+             * @example 0dcf40ed-cbc8-4432-aec0-f054e2747a30
+             */
             refreshToken: string;
-            /** @example Bearer */
+            /**
+             * @description Token scheme type
+             * @example Bearer
+             */
             tokenType: string;
-            /** @description Access token lifetime in milliseconds. */
+            /**
+             * @description Access token lifetime in milliseconds (24 hours)
+             * @example 86400000
+             */
             expiresIn: number;
+            /** @description Authenticated user profile */
             user: components["schemas"]["UserProfileDto"];
         };
         RefreshTokenDto: {
+            /**
+             * @description Cryptographically secure refresh token UUID received from login or refresh
+             * @example 0dcf40ed-cbc8-4432-aec0-f054e2747a30
+             */
             refreshToken: string;
         };
         TokenRefreshResponseDto: {
+            /**
+             * @description Newly generated signed JWT Bearer access token
+             * @example eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9...
+             */
             accessToken: string;
+            /**
+             * @description Newly rotated refresh token UUID
+             * @example e3f01b17-7a89-498c-bc5d-6e9a03970fd1
+             */
             refreshToken: string;
             /** @example Bearer */
             tokenType: string;
-            /** @description Access token lifetime in milliseconds. */
+            /**
+             * @description Access token lifetime in milliseconds
+             * @example 86400000
+             */
             expiresIn: number;
         };
         LogoutDto: {
+            /**
+             * @description Optional refresh token to revoke upon logout
+             * @example 0dcf40ed-cbc8-4432-aec0-f054e2747a30
+             */
             refreshToken?: string;
         };
         MessageResponseDto: {
+            /** @example true */
+            success: boolean;
+            /** @example Operation completed successfully */
+            message: string;
             /** @example null */
             data: Record<string, never> | null;
-            success: boolean;
-            message: string;
+            /** @example 2026-11-05T11:03:38.110Z */
             timestamp: string;
         };
         UserListResponseDto: {
+            /** @example true */
             success: boolean;
+            /** @example Users retrieved successfully */
             message: string;
             data: components["schemas"]["UserProfileDto"][];
+            /** @example 2026-11-05T11:03:38.110Z */
             timestamp: string;
         };
         PortalAccessDataDto: {
+            /** @example BUYER */
+            portal: string;
+            /** @example buyer_pharma_01 */
+            accessibleBy: string;
             /**
              * @example [
              *       {
@@ -4019,18 +4462,23 @@ export interface components {
             authorities: {
                 authority?: string;
             }[];
-            /** @example BUYER */
-            portal: string;
-            accessibleBy: string;
+            /** @example Welcome to Buyer Procurement Portal. */
             message: string;
         };
         PortalAccessResponseDto: {
+            /** @example true */
             success: boolean;
+            /** @example Portal access granted */
             message: string;
             data: components["schemas"]["PortalAccessDataDto"];
+            /** @example 2026-11-05T11:03:38.110Z */
             timestamp: string;
         };
         PortalProfileResponseDto: {
+            /** @example true */
+            success: boolean;
+            /** @example Profile accessed */
+            message: string;
             /**
              * @example {
              *       "username": "buyer_pharma_01",
@@ -4040,8 +4488,7 @@ export interface components {
             data: {
                 [key: string]: string;
             };
-            success: boolean;
-            message: string;
+            /** @example 2026-11-05T11:03:38.110Z */
             timestamp: string;
         };
         CreateCatalogProductDto: {
@@ -4792,6 +5239,191 @@ export interface components {
             isActive?: boolean;
             /** @example true */
             is_active?: boolean;
+        };
+        CreatePriceDto: {
+            /**
+             * @description Catalog Product ID or Product Code
+             * @example p1
+             */
+            productId: string;
+            /**
+             * @description Optional Manufacturer Product Mapping ID
+             * @example 1
+             */
+            productManufacturerId?: number | null;
+            /**
+             * @description Customer Segment ID
+             * @example seg_dist
+             */
+            customerSegmentId?: string | null;
+            /**
+             * @default BASE
+             * @example TIERED
+             */
+            priceType: string;
+            /**
+             * @default INR
+             * @example INR
+             */
+            currency: string;
+            /**
+             * @description Unit price
+             * @example 45.5
+             */
+            unitPrice: number;
+            /**
+             * @default 1
+             * @example 100
+             */
+            minQuantity: number;
+            /** @example 10000 */
+            maxQuantity?: number | null;
+            /** @example 2025-01-01 */
+            effectiveFrom?: string | null;
+            /** @example 2027-12-31 */
+            effectiveTo?: string | null;
+            /**
+             * @default ACTIVE
+             * @example ACTIVE
+             */
+            priceStatus: string;
+        };
+        UpdatePriceDto: {
+            /** @example 1 */
+            productManufacturerId?: number | null;
+            /** @example seg_dist */
+            customerSegmentId?: string | null;
+            /** @example TIERED */
+            priceType?: string;
+            /** @example INR */
+            currency?: string;
+            /** @example 45.5 */
+            unitPrice?: number;
+            /** @example 100 */
+            minQuantity?: number;
+            /** @example 10000 */
+            maxQuantity?: number | null;
+            /** @example 2025-01-01 */
+            effectiveFrom?: string | null;
+            /** @example 2027-12-31 */
+            effectiveTo?: string | null;
+            /** @example ACTIVE */
+            priceStatus?: string;
+        };
+        CreateProductTaxDto: {
+            /**
+             * @description Product ID or Code
+             * @example p1
+             */
+            productId: string;
+            /**
+             * @description Tax or HSN code
+             * @example HSN-3004-10
+             */
+            taxCode: string;
+            /**
+             * @description Tax percentage rate (e.g. 12, 18)
+             * @example 12
+             */
+            taxRate: number;
+            /** @example 2025-01-01 */
+            effectiveFrom?: string | null;
+            /** @example 2027-12-31 */
+            effectiveTo?: string | null;
+            /**
+             * @default ACTIVE
+             * @example ACTIVE
+             */
+            status: string;
+        };
+        UpdateProductTaxDto: {
+            /** @example HSN-3004-10 */
+            taxCode?: string;
+            /** @example 12 */
+            taxRate?: number;
+            /** @example 2025-01-01 */
+            effectiveFrom?: string | null;
+            /** @example 2027-12-31 */
+            effectiveTo?: string | null;
+            /** @example ACTIVE */
+            status?: string;
+        };
+        CreateProductUomDto: {
+            /**
+             * @description Product ID or Code
+             * @example p1
+             */
+            productId: string;
+            /**
+             * @description Unit of measure name
+             * @example Box
+             */
+            uom: string;
+            /**
+             * @description Positive conversion factor relative to base unit
+             * @example 10
+             */
+            conversionFactor: number;
+            /**
+             * @description Whether this is the single base UOM
+             * @default false
+             * @example false
+             */
+            isBaseUom: boolean;
+            /**
+             * @description Whether this UOM is orderable by buyers
+             * @default true
+             * @example true
+             */
+            isOrderUom: boolean;
+            /**
+             * @default true
+             * @example true
+             */
+            isActive: boolean;
+        };
+        UpdateProductUomDto: {
+            /** @example Box */
+            uom?: string;
+            /** @example 10 */
+            conversionFactor?: number;
+            /** @example false */
+            isBaseUom?: boolean;
+            /** @example true */
+            isOrderUom?: boolean;
+            /** @example true */
+            isActive?: boolean;
+        };
+        CreateCustomerSegmentDto: {
+            /** @example seg_corp */
+            id?: string;
+            /**
+             * @description Unique segment code
+             * @example CORP
+             */
+            segmentCode: string;
+            /**
+             * @description Segment display name
+             * @example Corporate Procurement
+             */
+            segmentName: string;
+            /** @example Direct institutional and corporate agreements */
+            description?: string;
+            /**
+             * @default ACTIVE
+             * @example ACTIVE
+             */
+            lifecycleStatus: string;
+        };
+        UpdateCustomerSegmentDto: {
+            /** @example CORP */
+            segmentCode?: string;
+            /** @example Corporate Procurement */
+            segmentName?: string;
+            /** @example Direct institutional agreements */
+            description?: string;
+            /** @example ACTIVE */
+            lifecycleStatus?: string;
         };
         CreateRfqLineDto: {
             /** @description Catalog Product ID (if selected from master catalog) */
@@ -8564,6 +9196,26 @@ export interface operations {
             };
         };
     };
+    CatalogController_deleteCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Category ID or category code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     CatalogController_listProductTypes: {
         parameters: {
             query?: {
@@ -8833,6 +9485,47 @@ export interface operations {
             };
         };
     };
+    CatalogController_listCategoriesByProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product Type ID (e.g. pt_med, pt_nut) */
+                productTypeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getCategoryHierarchyOptions: {
+        parameters: {
+            query?: {
+                productTypeId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
     CatalogController_listAttributes: {
         parameters: {
             query?: {
@@ -8980,6 +9673,514 @@ export interface operations {
                 id: string;
                 /** @description Product Type ID or code */
                 productTypeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_listPrices: {
+        parameters: {
+            query?: {
+                /** @description Filter by Product ID or Code */
+                productId?: string;
+                /** @description Filter by Manufacturer Registration ID or Mapping ID */
+                manufacturerId?: string;
+                /** @description Filter by Customer Segment ID */
+                customerSegmentId?: string;
+                /** @description Filter by status: ACTIVE, INACTIVE, EXPIRED, DRAFT */
+                status?: string;
+                /** @description Search keyword */
+                search?: string;
+                page?: number;
+                limit?: number;
+                size?: number;
+                /** @description Sort e.g. createdAt,desc */
+                sort?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_createPrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePriceDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getPrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Price record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_updatePrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Price record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePriceDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_deletePrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Price record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_togglePriceStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Price record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_listTaxes: {
+        parameters: {
+            query?: {
+                /** @description Filter by Product ID or Code */
+                productId?: string;
+                /** @description Filter by status: ALL, ACTIVE, INACTIVE */
+                status?: string;
+                /** @description Search keyword */
+                search?: string;
+                page?: number;
+                limit?: number;
+                size?: number;
+                /** @description Sort e.g. createdAt,desc */
+                sort?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_createTax: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductTaxDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getTax: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tax record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_updateTax: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tax record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductTaxDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_deleteTax: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tax record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_toggleTaxStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tax record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_listUoms: {
+        parameters: {
+            query?: {
+                /** @description Filter by Product ID or Code */
+                productId?: string;
+                /** @description Filter active status */
+                active?: string;
+                /** @description Search keyword */
+                search?: string;
+                page?: number;
+                limit?: number;
+                size?: number;
+                /** @description Sort e.g. createdAt,desc */
+                sort?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_createUom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductUomDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getUom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UOM record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_updateUom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UOM record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductUomDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_deleteUom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UOM record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_toggleUomStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UOM record ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_listCustomerSegments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_createCustomerSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCustomerSegmentDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_getCustomerSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Customer segment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_updateCustomerSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Customer segment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCustomerSegmentDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CatalogController_deleteCustomerSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Customer segment ID */
+                id: string;
             };
             cookie?: never;
         };
@@ -9285,6 +10486,94 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MapProductManufacturerDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_getProductTaxes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_createProductTax: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductTaxDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_getProductUoms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ProductsController_createProductUom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Product ID or Product Code */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductUomDto"];
             };
         };
         responses: {
