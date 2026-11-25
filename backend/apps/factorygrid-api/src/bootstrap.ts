@@ -29,6 +29,16 @@ export async function createApp(options: { logger?: boolean } = {}): Promise<Nes
     reply.header('x-request-id', request.id);
   });
 
+  // Gracefully handle empty or body-less JSON requests to avoid FST_ERR_CTP_EMPTY_JSON_BODY
+  adapter.getInstance().addHook('preParsing', async (request, _reply, payload) => {
+    const ct = request.headers['content-type'];
+    const cl = request.headers['content-length'];
+    if (ct && ct.includes('application/json') && (!cl || cl === '0')) {
+      delete request.headers['content-type'];
+    }
+    return payload;
+  });
+
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
     logger: options.logger === false ? false : undefined,
   });
@@ -49,7 +59,14 @@ export async function createApp(options: { logger?: boolean } = {}): Promise<Nes
     exposedHeaders: ['x-request-id'],
     maxAge: 3600,
   });
-  app.setGlobalPrefix(API_PREFIX, { exclude: [{ path: 'health', method: RequestMethod.GET }, { path: 'actuator/health', method: RequestMethod.GET }] });
+  app.setGlobalPrefix(API_PREFIX, {
+    exclude: [
+      { path: 'health', method: RequestMethod.GET },
+      { path: 'actuator/health', method: RequestMethod.GET },
+      { path: 'api/v1/health', method: RequestMethod.GET },
+      { path: 'api/v1/actuator/health', method: RequestMethod.GET },
+    ],
+  });
   app.useGlobalPipes(createValidationPipe());
   app.useGlobalFilters(new HttpExceptionFilter());
   app.enableShutdownHooks();

@@ -170,15 +170,22 @@ export async function fetchCategoryMargins(): Promise<BackendCategoryMargin[]> {
   return request<BackendCategoryMargin[]>(`${BASE}/categories`);
 }
 
+export async function getCategoryMargin(idOrName: string): Promise<BackendCategoryMargin | null> {
+  return request<BackendCategoryMargin | null>(`${BASE}/categories/${encodeURIComponent(idOrName)}`);
+}
+
 export async function saveCategoryMargin(
   idOrName: string,
   marginValue: number,
   marginMode: MarginType = 'PERCENTAGE',
   status: 'ACTIVE' | 'INACTIVE' = 'ACTIVE',
+  categoryName?: string,
 ): Promise<BackendCategoryMargin> {
   return request<BackendCategoryMargin>(`${BASE}/categories/${encodeURIComponent(idOrName)}`, {
     method: 'PUT',
     body: JSON.stringify({
+      categoryId: idOrName,
+      categoryName,
       marginMode,
       marginValue: Number(marginValue),
       status,

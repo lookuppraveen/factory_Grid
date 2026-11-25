@@ -12,10 +12,8 @@ import { usePagination } from '../../hooks/usePagination';
 
 export const MANDATORY_MFR_CERTIFICATIONS = [
   { key: 'mfgLicense', name: 'Manufacturing License' },
-  { key: 'gmpCert', name: 'GMP Certificate' },
+  { key: 'gmpCert', name: 'GLP Certificate' },
   { key: 'whoGmpCert', name: 'WHO-GMP Certificate' },
-  { key: 'isoCert', name: 'ISO Certification' },
-  { key: 'pollutionCert', name: 'Pollution Certificate' },
 ];
 
 /** Safe GPS coordinate formatter that prevents "Cannot read properties of undefined (reading 'toFixed')" */
@@ -80,7 +78,6 @@ export const ManufacturerVerificationModule: React.FC = () => {
   const [isDetailLoading, setIsDetailLoading] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
   // Status Filter Tabs (matching Customer Verification KPI strip)
   const [activeStatusTab, setActiveStatusTab] = useState<'ALL' | 'UNDER_REVIEW' | 'NEED_MORE_DOCS' | 'APPROVED' | 'REJECTED'>('ALL');
@@ -125,7 +122,6 @@ export const ManufacturerVerificationModule: React.FC = () => {
       const list = await adminVerificationApi.listManufacturerVerifications();
       const safeList = Array.isArray(list) ? list : [];
       setRecords(safeList);
-      setLastRefreshedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     } catch (err: any) {
       setApiError(err.message || 'Failed to load manufacturer verification cases.');
       setRecords([]);
@@ -369,11 +365,40 @@ export const ManufacturerVerificationModule: React.FC = () => {
     try {
       await adminVerificationApi.reviewManufacturerDocument(selectedRecord.registrationCode, docId, decision, reason);
       showToast(`Document "${docName}" marked as ${decision === 'APPROVED' ? 'Approved' : decision === 'REJECTED' ? 'Rejected' : 'Needs Replacement'}.`, 'success');
+
+      const newStatus = decision === 'APPROVED' ? 'VALID' : decision;
       setViewingDoc((prev: any) => (prev && prev.id === docId ? {
         ...prev,
-        status: decision === 'APPROVED' ? 'VALID' : decision,
-        rejectionReason: reason || null,
+        status: newStatus,
+        verificationStatus: newStatus,
+        verification_status: newStatus,
+        reviewDecision: decision,
+        rejectionReason: decision === 'APPROVED' ? null : reason || null,
+        adminRemarks: decision === 'APPROVED' ? null : reason || null,
       } : prev));
+
+      setSelectedDetail((prev: any) => {
+        if (!prev) return prev;
+        const updatedDocs = (prev.documents || []).map((d: any) => {
+          if (d.id === docId) {
+            return {
+              ...d,
+              status: newStatus,
+              verificationStatus: newStatus,
+              verification_status: newStatus,
+              reviewDecision: decision,
+              rejectionReason: decision === 'APPROVED' ? null : reason || null,
+              adminRemarks: decision === 'APPROVED' ? null : reason || null,
+            };
+          }
+          return d;
+        });
+        return {
+          ...prev,
+          documents: updatedDocs,
+        };
+      });
+
       await loadList();
       if (selectedRecordId) {
         const refreshed = await adminVerificationApi.getManufacturerVerification(selectedRecordId);
@@ -488,7 +513,7 @@ export const ManufacturerVerificationModule: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 48, background: '#F8FAFC', minHeight: '100vh', fontFamily: 'inherit' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 48, background: '#F8FAFC', minHeight: '100vh', fontFamily: 'inherit' }}>
 
       {/* Floating Toast Notification */}
       {toastMessage && (
@@ -519,323 +544,275 @@ export const ManufacturerVerificationModule: React.FC = () => {
         </div>
       )}
 
-      {/* ── 1. TOP HEADER BAR (MATCHES CUSTOMER VERIFICATION) ────── */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 14, padding: '20px 24px', boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
-            <Factory size={24} />
+      {/* ── Breadcrumbs Bar (Matching Product Type & Category Master) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#64748B', fontWeight: 600, padding: '4px 0' }}>
+        <span>Compliance &amp; Verification</span>
+        <span style={{ color: '#CBD5E1' }}>/</span>
+        <span style={{ color: '#0F766E', fontWeight: 700 }}>Manufacturer Onboarding Verification</span>
+      </div>
+
+      {/* ── Main Page Header Bar ── */}
+      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: '#F0FDFA', border: '1px solid #CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F766E' }}>
+            <Factory size={18} />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748B', fontWeight: 500 }}>
-              <span>Compliance Workflow</span>
-              <ChevronRight size={12} />
-              <span style={{ color: '#2563EB', fontWeight: 600 }}>Manufacturer Verification</span>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#0F766E' }}>
+              COMPLIANCE &amp; VERIFICATION
             </div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0F172A', margin: '2px 0 0', letterSpacing: '-0.02em' }}>
+            <h1 style={{ margin: '2px 0 0 0', fontSize: 20, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
               Manufacturer Onboarding Verification
             </h1>
-            <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
               Manufacturer registration → Document submission → Compliance review → Regulatory validation → Active provisioning
             </div>
           </div>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {lastRefreshedAt && (
-            <span style={{ fontSize: 11.5, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Clock size={12} /> Refreshed: <strong>{lastRefreshedAt}</strong>
-            </span>
-          )}
-
-          <button
-            onClick={loadList}
-            disabled={isLoading}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 14px',
-              borderRadius: 8,
-              border: '1px solid #CBD5E1',
-              background: '#FFFFFF',
-              color: '#0F172A',
-              fontSize: 12.5,
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-            {isLoading ? 'Syncing...' : '↻ Refresh from Database'}
-          </button>
-        </div>
       </div>
 
-      {/* ── 2. KPI STRIP (MATCHES CUSTOMER VERIFICATION SUMMARY CARDS) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
-        <div
-          onClick={() => setActiveStatusTab('ALL')}
-          style={{
-            background: '#FFFFFF',
-            border: activeStatusTab === 'ALL' ? '2px solid #2563EB' : '1px solid #E2E8F0',
-            borderRadius: 12,
-            padding: '16px 18px',
-            cursor: 'pointer',
-            boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-            transition: 'all 120ms ease'
-          }}
-        >
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Total Requests</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#0F172A', marginTop: 6, fontFamily: 'monospace' }}>{counts.total}</div>
-          <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>All manufacturer registrations</div>
-        </div>
-
-        <div
-          onClick={() => setActiveStatusTab('UNDER_REVIEW')}
-          style={{
-            background: '#FFFFFF',
-            border: activeStatusTab === 'UNDER_REVIEW' ? '2px solid #D97706' : '1px solid #E2E8F0',
-            borderRadius: 12,
-            padding: '16px 18px',
-            cursor: 'pointer',
-            boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-            transition: 'all 120ms ease'
-          }}
-        >
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#D97706', textTransform: 'uppercase' }}>Under Review</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#D97706', marginTop: 6, fontFamily: 'monospace' }}>{counts.underReview}</div>
-          <div style={{ fontSize: 11, color: '#D97706', marginTop: 4 }}>Assigned for compliance audit</div>
-        </div>
-
-        <div
-          onClick={() => setActiveStatusTab('NEED_MORE_DOCS')}
-          style={{
-            background: '#FFFFFF',
-            border: activeStatusTab === 'NEED_MORE_DOCS' ? '2px solid #DB2777' : '1px solid #E2E8F0',
-            borderRadius: 12,
-            padding: '16px 18px',
-            cursor: 'pointer',
-            boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-            transition: 'all 120ms ease'
-          }}
-        >
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#DB2777', textTransform: 'uppercase' }}>Need More Docs</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#DB2777', marginTop: 6, fontFamily: 'monospace' }}>{counts.needMoreDocs}</div>
-          <div style={{ fontSize: 11, color: '#DB2777', marginTop: 4 }}>Action required / replacements</div>
-        </div>
-
-        <div
-          onClick={() => setActiveStatusTab('APPROVED')}
-          style={{
-            background: '#FFFFFF',
-            border: activeStatusTab === 'APPROVED' ? '2px solid #16A34A' : '1px solid #E2E8F0',
-            borderRadius: 12,
-            padding: '16px 18px',
-            cursor: 'pointer',
-            boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-            transition: 'all 120ms ease'
-          }}
-        >
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#16A34A', textTransform: 'uppercase' }}>Approved / Active</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#16A34A', marginTop: 6, fontFamily: 'monospace' }}>{counts.approved}</div>
-          <div style={{ fontSize: 11, color: '#16A34A', marginTop: 4 }}>Manufacturer code &amp; login active</div>
-        </div>
-
-        <div
-          onClick={() => setActiveStatusTab('REJECTED')}
-          style={{
-            background: '#FFFFFF',
-            border: activeStatusTab === 'REJECTED' ? '2px solid #DC2626' : '1px solid #E2E8F0',
-            borderRadius: 12,
-            padding: '16px 18px',
-            cursor: 'pointer',
-            boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-            transition: 'all 120ms ease'
-          }}
-        >
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#DC2626', textTransform: 'uppercase' }}>Rejected</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#DC2626', marginTop: 6, fontFamily: 'monospace' }}>{counts.rejected}</div>
-          <div style={{ fontSize: 11, color: '#DC2626', marginTop: 4 }}>Statutory non-compliance ended</div>
-        </div>
-      </div>
-
+      {/* ── Database Error Alert ── */}
       {apiError && (
-        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '12px 16px', color: '#991B1B', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <AlertCircle size={16} />
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '12px 16px', color: '#991B1B', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AlertCircle size={16} style={{ color: '#DC2626', flexShrink: 0 }} />
           <span>{apiError}</span>
         </div>
       )}
 
-      {/* ── 3. SEARCH & FILTERS BAR (MATCHES CUSTOMER VERIFICATION) ─ */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 14, padding: '14px 20px', boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto' }}>
+      {/* ── Professional Horizontal Navigation Tabs (Matching Product Type & Category Master) ── */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        borderBottom: '1px solid #E2E8F0',
+        paddingBottom: 0,
+        gap: 16,
+        flexWrap: 'wrap'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {[
-            { id: 'ALL', label: `All (${counts.total})` },
-            { id: 'UNDER_REVIEW', label: `Under Review (${counts.underReview})` },
-            { id: 'NEED_MORE_DOCS', label: `Need More Docs (${counts.needMoreDocs})` },
-            { id: 'APPROVED', label: `Approved / Active (${counts.approved})` },
-            { id: 'REJECTED', label: `Rejected (${counts.rejected})` },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveStatusTab(tab.id as any)}
-              style={{
-                height: 34,
-                padding: '0 14px',
-                borderRadius: 8,
-                fontSize: 12.5,
-                fontWeight: activeStatusTab === tab.id ? 700 : 500,
-                background: activeStatusTab === tab.id ? '#2563EB' : 'transparent',
-                color: activeStatusTab === tab.id ? '#FFFFFF' : '#475569',
-                border: activeStatusTab === tab.id ? 'none' : '1px solid #E2E8F0',
-                cursor: 'pointer',
-                transition: 'all 150ms ease',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
+            { id: 'ALL', label: 'All Requests', count: counts.total },
+            { id: 'UNDER_REVIEW', label: 'Under Review', count: counts.underReview },
+            { id: 'NEED_MORE_DOCS', label: 'Need More Docs', count: counts.needMoreDocs },
+            { id: 'APPROVED', label: 'Approved / Active', count: counts.approved },
+            { id: 'REJECTED', label: 'Rejected', count: counts.rejected },
+          ].map(tab => {
+            const isActive = activeStatusTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveStatusTab(tab.id as any)}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: 13,
+                  fontWeight: isActive ? 700 : 500,
+                  color: isActive ? '#0F766E' : '#64748B',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: isActive ? '2px solid #0F766E' : '2px solid transparent',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  transition: 'all 0.15s ease',
+                  marginBottom: -1
+                }}
+              >
+                <span>{tab.label}</span>
+                <span style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: '1px 7px',
+                  borderRadius: 10,
+                  background: isActive ? '#CCFBF1' : '#F1F5F9',
+                  color: isActive ? '#0F766E' : '#64748B'
+                }}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-            <input
-              type="text"
-              placeholder="Search company, code, city, email..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              style={{
-                width: 260,
-                height: 36,
-                paddingLeft: 34,
-                paddingRight: 12,
-                borderRadius: 8,
-                border: '1px solid #CBD5E1',
-                fontSize: 12.5,
-                outline: 'none',
-                background: '#FFFFFF',
-                color: '#0F172A',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
+        <div style={{ fontSize: 12, color: '#64748B', paddingBottom: 8 }}>
+          Showing {filteredRecords.length} of {records.length} records
         </div>
       </div>
 
-      {/* ── 4. STRUCTURED MANUFACTURER TABLE (MATCHES CUSTOMER VERIFICATION) ─ */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <th style={{ padding: '14px 18px' }}>Manufacturer Name</th>
-              <th style={{ padding: '14px 18px' }}>Registration Code</th>
-              <th style={{ padding: '14px 18px' }}>Location</th>
-              <th style={{ padding: '14px 18px' }}>Registration Date</th>
-              <th style={{ padding: '14px 18px' }}>Verification Status</th>
-              <th style={{ padding: '14px 18px' }}>Account Status</th>
-              <th style={{ padding: '14px 18px', textAlign: 'right' }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && records.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B', fontSize: 13 }}>
-                  <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px', color: '#2563EB' }} />
-                  <div>Loading live manufacturer records from database...</div>
-                </td>
-              </tr>
-            ) : filteredRecords.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B', fontSize: 13 }}>
-                  No manufacturer verification records found matching your filters.
-                </td>
-              </tr>
-            ) : (
-              paginatedRecords.map(record => {
-                const isSelected = record.registrationCode === selectedRecordId;
-                const isActive = record.status === 'APPROVED';
+      {/* ── Search Toolbar (Matching Category Master Toolbar Style) ── */}
+      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, padding: '8px 12px', minWidth: 280, flex: '1 1 280px' }}>
+          <Search size={15} style={{ color: '#64748B' }} />
+          <input
+            type="text"
+            placeholder="Search company, code, city, email..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            style={{ border: 'none', background: 'transparent', width: '100%', fontSize: 13, outline: 'none', color: '#0F172A' }}
+          />
+          {searchTerm && (
+            <button onClick={() => setSearchTerm('')} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 0 }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
 
-                return (
-                  <tr
-                    key={record.registrationCode}
-                    style={{
-                      borderBottom: '1px solid #F1F5F9',
-                      background: isSelected ? '#EFF6FF' : 'transparent',
-                      transition: 'background 120ms ease'
-                    }}
-                    className="hover:bg-slate-50"
-                  >
-                    <td style={{ padding: '16px 18px', fontSize: 13, fontWeight: 600, color: '#0F172A' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: '50%',
-                          background: '#EFF6FF',
-                          color: '#2563EB',
-                          display: 'flex',
+        {searchTerm && (
+          <button
+            type="button"
+            onClick={() => setSearchTerm('')}
+            style={{
+              padding: '7px 12px',
+              borderRadius: 6,
+              border: '1px dashed #CBD5E1',
+              background: 'transparent',
+              color: '#64748B',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            Reset Search
+          </button>
+        )}
+      </div>
+
+      {/* ── Manufacturer Verification Master Table (Matching Product Type & Category Master) ── */}
+      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+        <div style={{ padding: '14px 20px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>Registered Manufacturers (MANUFACTURER_VERIFICATION)</div>
+            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Review plant licenses, WHO-GMP certifications, and activate supplier accounts</div>
+          </div>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0F766E', background: '#F0FDFA', padding: '4px 10px', borderRadius: 6, border: '1px solid #CCFBF1' }}>
+            {filteredRecords.length} Available
+          </span>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>MANUFACTURER NAME</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 150 }}>REGISTRATION CODE</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 140 }}>LOCATION</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>REGISTRATION DATE</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>STATUS</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 120 }}>ACCOUNT STATUS</th>
+                <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', textAlign: 'right', width: 110 }}>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading && records.length === 0 ? (
+                [...Array(5)].map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 160, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 120, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 100, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 90, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 90, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 80, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 16px', textAlign: 'right' }}><div style={{ width: 70, height: 28, background: '#F1F5F9', borderRadius: 4, marginLeft: 'auto' }} /></td>
+                  </tr>
+                ))
+              ) : filteredRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                    <Factory size={36} style={{ color: '#94A3B8', margin: '0 auto 10px', display: 'block' }} />
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No manufacturer verification records found.</div>
+                    <div style={{ fontSize: 13, color: '#64748B', marginTop: 4 }}>
+                      {searchTerm || activeStatusTab !== 'ALL'
+                        ? 'Try resetting your search query or filter criteria.'
+                        : 'No manufacturer registration cases are currently available in the database.'}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedRecords.map(record => {
+                  const isSelected = record.registrationCode === selectedRecordId;
+                  const isActive = record.status === 'APPROVED';
+
+                  return (
+                    <tr
+                      key={record.registrationCode}
+                      style={{
+                        borderBottom: '1px solid #F1F5F9',
+                        background: isSelected ? '#F0FDFA' : '#FFFFFF',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#F8FAFC'; }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = '#FFFFFF'; }}
+                    >
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: '50%',
+                            background: '#F0FDFA',
+                            color: '#0F766E',
+                            border: '1px solid #CCFBF1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            flexShrink: 0
+                          }}>
+                            {(record.companyName || 'M').charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, color: '#0F172A', fontSize: 13 }}>{record.companyName}</div>
+                            <div style={{ fontSize: 11.5, color: '#64748B', fontWeight: 400 }}>{record.contactPerson} • {record.email}</div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '12px 14px', fontSize: 12, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace' }}>
+                        <div>{record.registrationCode}</div>
+                        {record.manufacturerCode && (
+                          <div style={{ fontSize: 10.5, color: '#15803D', fontWeight: 700 }}>
+                            ID: {record.manufacturerCode}
+                          </div>
+                        )}
+                      </td>
+
+                      <td style={{ padding: '12px 14px', fontSize: 12.5, color: '#475569' }}>
+                        {record.city ? `${record.city}, ${record.state}` : 'Location N/A'}
+                      </td>
+
+                      <td style={{ padding: '12px 14px', fontSize: 12.5, color: '#475569', whiteSpace: 'nowrap' }}>
+                        {formatDate(record.submittedAt)}
+                      </td>
+
+                      <td style={{ padding: '12px 14px' }}>
+                        {renderStatusBadge(record.status)}
+                      </td>
+
+                      <td style={{ padding: '12px 14px' }}>
+                        <span style={{
+                          display: 'inline-flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
+                          gap: 4,
+                          padding: '3px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
                           fontWeight: 700,
-                          fontSize: 12
+                          background: isActive ? '#ECFDF5' : '#F1F5F9',
+                          color: isActive ? '#059669' : '#64748B',
+                          border: `1px solid ${isActive ? '#A7F3D0' : '#E2E8F0'}`
                         }}>
-                          {(record.companyName || 'M').charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 700, color: '#1E293B' }}>{record.companyName}</div>
-                          <div style={{ fontSize: 11, color: '#64748B', fontWeight: 400 }}>{record.contactPerson} • {record.email}</div>
-                        </div>
-                      </div>
-                    </td>
+                          {isActive ? 'ACTIVE' : 'INACTIVE'}
+                        </span>
+                      </td>
 
-                    <td style={{ padding: '16px 18px', fontSize: 12, fontWeight: 700, color: '#1D4ED8', fontFamily: 'monospace' }}>
-                      <div>{record.registrationCode}</div>
-                      {record.manufacturerCode && (
-                        <div style={{ fontSize: 10.5, color: '#16A34A', fontWeight: 700 }}>
-                          ID: {record.manufacturerCode}
-                        </div>
-                      )}
-                    </td>
-
-                    <td style={{ padding: '16px 18px', fontSize: 12.5, color: '#475569' }}>
-                      {record.city ? `${record.city}, ${record.state}` : 'Location N/A'}
-                    </td>
-
-                    <td style={{ padding: '16px 18px', fontSize: 12.5, color: '#475569' }}>
-                      {formatDate(record.submittedAt)}
-                    </td>
-
-                    <td style={{ padding: '16px 18px' }}>
-                      {renderStatusBadge(record.status)}
-                    </td>
-
-                    <td style={{ padding: '16px 18px' }}>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '3px 8px',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        background: isActive ? '#ECFDF5' : '#F1F5F9',
-                        color: isActive ? '#059669' : '#64748B',
-                        border: `1px solid ${isActive ? '#A7F3D0' : '#E2E8F0'}`
-                      }}>
-                        {isActive ? 'ACTIVE' : 'INACTIVE'}
-                      </span>
-                    </td>
-
-                    <td style={{ padding: '16px 18px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                         <button
                           onClick={() => setSelectedRecordId(record.registrationCode)}
                           style={{
-                            height: 32,
-                            padding: '0 16px',
+                            padding: '6px 14px',
                             borderRadius: 6,
-                            background: '#1D4ED8',
+                            background: '#0F766E',
                             color: '#FFFFFF',
                             border: 'none',
                             fontSize: 12,
@@ -844,19 +821,19 @@ export const ManufacturerVerificationModule: React.FC = () => {
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 6,
-                            boxShadow: '0 1px 2px rgba(29, 78, 216, 0.2)'
+                            boxShadow: '0 1px 2px rgba(15,118,110,0.15)'
                           }}
                         >
-                          <FileCheck size={14} /> Review
+                          <FileCheck size={13} /> Review
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
       <PaginationControl {...pagination.paginationProps} itemName="manufacturer registrations" />
 
@@ -1008,9 +985,11 @@ export const ManufacturerVerificationModule: React.FC = () => {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {selectedDetail?.documents?.map(doc => {
-                      const isApproved = doc.status === 'APPROVED' || doc.status === 'VALID';
-                      const isRejected = doc.status === 'REJECTED';
-                      const isReplacement = doc.status === 'NEEDS_REPLACEMENT';
+                      const normStatus = (doc.status || doc.verificationStatus || doc.verification_status || doc.reviewDecision || '').toString().trim().toUpperCase();
+                      const isApproved = normStatus === 'APPROVED' || normStatus === 'VALID' || normStatus === 'VERIFIED';
+                      const isRejected = !isApproved && (normStatus === 'REJECTED' || normStatus === 'INVALID');
+                      const isReplacement = !isApproved && !isRejected && (normStatus === 'NEEDS_REPLACEMENT' || normStatus === 'NEED_REPLACEMENT' || normStatus === 'REPLACEMENT_REQUESTED');
+                      const isPending = !isApproved && !isRejected && !isReplacement;
                       const isExpired = doc.expiryDate && new Date(doc.expiryDate) < new Date();
 
                       return (
@@ -1095,45 +1074,62 @@ export const ManufacturerVerificationModule: React.FC = () => {
                               <Eye size={12} /> View
                             </button>
 
-                            {!isApproved && (
-                              <button
-                                onClick={() => handleReviewDocument(doc.id, doc.categoryDisplayName || doc.category, 'APPROVED')}
-                                disabled={isActionPending}
-                                style={{
-                                  padding: '4px 10px',
-                                  background: '#16A34A',
-                                  border: 'none',
-                                  borderRadius: 5,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  color: '#FFFFFF',
-                                  cursor: isActionPending ? 'not-allowed' : 'pointer'
-                                }}
-                              >
-                                ✓ Verify
-                              </button>
+                            {isPending && (
+                              <>
+                                <button
+                                  onClick={() => handleReviewDocument(doc.id, doc.categoryDisplayName || doc.category, 'APPROVED')}
+                                  disabled={isActionPending}
+                                  style={{
+                                    padding: '4px 10px',
+                                    background: '#16A34A',
+                                    border: 'none',
+                                    borderRadius: 5,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: '#FFFFFF',
+                                    cursor: isActionPending ? 'not-allowed' : 'pointer'
+                                  }}
+                                >
+                                  ✓ Verify
+                                </button>
+
+                                <button
+                                  onClick={() => handleReviewDocument(doc.id, doc.categoryDisplayName || doc.category, 'REJECTED')}
+                                  disabled={isActionPending}
+                                  style={{
+                                    padding: '4px 8px',
+                                    background: '#FEF2F2',
+                                    border: '1px solid #FECACA',
+                                    borderRadius: 5,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: '#991B1B',
+                                    cursor: isActionPending ? 'not-allowed' : 'pointer'
+                                  }}
+                                >
+                                  ✕ Reject
+                                </button>
+
+                                <button
+                                  onClick={() => handleReviewDocument(doc.id, doc.categoryDisplayName || doc.category, 'NEEDS_REPLACEMENT')}
+                                  disabled={isActionPending}
+                                  style={{
+                                    padding: '4px 8px',
+                                    background: '#FDF2F8',
+                                    border: '1px solid #FBCFE8',
+                                    borderRadius: 5,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: '#9D174D',
+                                    cursor: isActionPending ? 'not-allowed' : 'pointer'
+                                  }}
+                                >
+                                  Replacement
+                                </button>
+                              </>
                             )}
 
-                            {!isRejected && (
-                              <button
-                                onClick={() => handleReviewDocument(doc.id, doc.categoryDisplayName || doc.category, 'REJECTED')}
-                                disabled={isActionPending}
-                                style={{
-                                  padding: '4px 8px',
-                                  background: '#FEF2F2',
-                                  border: '1px solid #FECACA',
-                                  borderRadius: 5,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  color: '#991B1B',
-                                  cursor: isActionPending ? 'not-allowed' : 'pointer'
-                                }}
-                              >
-                                ✕ Reject
-                              </button>
-                            )}
-
-                            {!isReplacement && (
+                            {isRejected && (
                               <button
                                 onClick={() => handleReviewDocument(doc.id, doc.categoryDisplayName || doc.category, 'NEEDS_REPLACEMENT')}
                                 disabled={isActionPending}
@@ -1514,9 +1510,24 @@ export const ManufacturerVerificationModule: React.FC = () => {
               <div>
                 <div style={{ fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span>{viewingDoc.categoryDisplayName || viewingDoc.category}</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.15)', color: '#FFF' }}>
-                    {viewingDoc.status}
-                  </span>
+                  {(() => {
+                    const vs = (viewingDoc.status || viewingDoc.verificationStatus || viewingDoc.verification_status || viewingDoc.reviewDecision || '').toString().toUpperCase();
+                    const isV = vs === 'APPROVED' || vs === 'VALID' || vs === 'VERIFIED';
+                    const isR = !isV && (vs === 'REJECTED' || vs === 'INVALID');
+                    const isRep = !isV && !isR && vs.includes('REPLACEMENT');
+                    return (
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        color: isV ? '#10B981' : isR ? '#EF4444' : isRep ? '#F472B6' : '#F59E0B',
+                        background: isV ? 'rgba(16, 185, 129, 0.2)' : isR ? 'rgba(239, 68, 68, 0.2)' : isRep ? 'rgba(244, 114, 182, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                      }}>
+                        {isV ? '✓ Verified' : isR ? '✗ Rejected' : isRep ? '⚠ Replacement Requested' : '⏳ Pending Review'}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div style={{ fontSize: 11.5, color: '#94A3B8', marginTop: 2 }}>
                   File: <strong style={{ color: '#E2E8F0' }}>{viewingDoc.fileName}</strong> • Expiry: {formatDate(viewingDoc.expiryDate)}
@@ -1585,71 +1596,127 @@ export const ManufacturerVerificationModule: React.FC = () => {
             </div>
 
             {/* Review Action Controls Bar */}
-            <div style={{ padding: '12px 20px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
-                Compliance Officer Action:
-              </div>
+            {(() => {
+              const vs = (viewingDoc.status || viewingDoc.verificationStatus || viewingDoc.verification_status || viewingDoc.reviewDecision || '').toString().toUpperCase();
+              const isV = vs === 'APPROVED' || vs === 'VALID' || vs === 'VERIFIED';
+              const isR = !isV && (vs === 'REJECTED' || vs === 'INVALID');
+              const isRep = !isV && !isR && vs.includes('REPLACEMENT');
+              const isP = !isV && !isR && !isRep;
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.categoryDisplayName || viewingDoc.category, 'APPROVED')}
-                  disabled={(viewingDoc.status === 'APPROVED' || viewingDoc.status === 'VALID') || isActionPending}
-                  style={{
-                    padding: '7px 16px',
-                    background: (viewingDoc.status === 'APPROVED' || viewingDoc.status === 'VALID') ? '#94A3B8' : '#16A34A',
-                    color: '#FFF',
-                    border: 'none',
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: ((viewingDoc.status === 'APPROVED' || viewingDoc.status === 'VALID') || isActionPending) ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {(viewingDoc.status === 'APPROVED' || viewingDoc.status === 'VALID') ? '✓ Verified' : 'Verify Document'}
-                </button>
+              return (
+                <div style={{ padding: '12px 20px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                  <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
+                    Compliance Officer Action:
+                  </div>
 
-                <button
-                  onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.categoryDisplayName || viewingDoc.category, 'REJECTED')}
-                  disabled={viewingDoc.status === 'REJECTED' || isActionPending}
-                  style={{
-                    padding: '7px 14px',
-                    background: '#FEF2F2',
-                    color: '#991B1B',
-                    border: '1px solid #FECACA',
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: (viewingDoc.status === 'REJECTED' || isActionPending) ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  ✕ Reject
-                </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {isV && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: '#DCFCE7', color: '#15803D', border: '1px solid #BBF7D0' }}>
+                        <CheckCircle2 size={14} /> Document Verified
+                      </span>
+                    )}
 
-                <button
-                  onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.categoryDisplayName || viewingDoc.category, 'NEEDS_REPLACEMENT')}
-                  disabled={isActionPending}
-                  style={{
-                    padding: '7px 14px',
-                    background: '#FDF2F8',
-                    color: '#9D174D',
-                    border: '1px solid #FBCFE8',
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: isActionPending ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  Request Replacement
-                </button>
+                    {isP && (
+                      <>
+                        <button
+                          onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.categoryDisplayName || viewingDoc.category, 'APPROVED')}
+                          disabled={isActionPending}
+                          style={{
+                            padding: '7px 16px',
+                            background: '#16A34A',
+                            color: '#FFF',
+                            border: 'none',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: isActionPending ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5
+                          }}
+                        >
+                          <CheckCircle2 size={13} /> Verify Document
+                        </button>
 
-                <button
-                  onClick={() => setViewingDoc(null)}
-                  style={{ padding: '7px 16px', background: '#FFFFFF', color: '#334155', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Close Viewer
-                </button>
-              </div>
-            </div>
+                        <button
+                          onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.categoryDisplayName || viewingDoc.category, 'REJECTED')}
+                          disabled={isActionPending}
+                          style={{
+                            padding: '7px 14px',
+                            background: '#FEF2F2',
+                            color: '#991B1B',
+                            border: '1px solid #FECACA',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: isActionPending ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5
+                          }}
+                        >
+                          <XCircle size={13} /> Reject
+                        </button>
+
+                        <button
+                          onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.categoryDisplayName || viewingDoc.category, 'NEEDS_REPLACEMENT')}
+                          disabled={isActionPending}
+                          style={{
+                            padding: '7px 14px',
+                            background: '#FDF2F8',
+                            color: '#9D174D',
+                            border: '1px solid #FBCFE8',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: isActionPending ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Request Replacement
+                        </button>
+                      </>
+                    )}
+
+                    {isR && (
+                      <>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: '#FEE2E2', color: '#DC2626', border: '1px solid #FECACA' }}>
+                          <XCircle size={14} /> Rejected
+                        </span>
+                        <button
+                          onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.categoryDisplayName || viewingDoc.category, 'NEEDS_REPLACEMENT')}
+                          disabled={isActionPending}
+                          style={{
+                            padding: '7px 14px',
+                            background: '#FDF2F8',
+                            color: '#9D174D',
+                            border: '1px solid #FBCFE8',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: isActionPending ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Request Replacement
+                        </button>
+                      </>
+                    )}
+
+                    {isRep && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: '#FCE7F3', color: '#9D174D', border: '1px solid #FBCFE8' }}>
+                        Replacement Requested
+                      </span>
+                    )}
+
+                    <button
+                      onClick={() => setViewingDoc(null)}
+                      style={{ padding: '7px 16px', background: '#FFFFFF', color: '#334155', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Close Viewer
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

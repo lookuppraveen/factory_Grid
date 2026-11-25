@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Package, Plus, Search, Filter, RotateCcw, Eye, Edit3, CheckCircle2,
   AlertTriangle, Clock, Layers, X, ChevronRight, ShieldCheck,
-  ToggleLeft, ToggleRight, FileSpreadsheet
+  ToggleLeft, ToggleRight, FileSpreadsheet, UploadCloud, Download, RefreshCw
 } from 'lucide-react';
 import {
   manufacturerProductsApi,
@@ -469,12 +469,13 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
             </select>
           </div>
 
-          {/* Cascading Sub-Category Dropdown */}
+          {/* Cascading Sub-Category Dropdown: Progressive Disclosure */}
+          {(selectedCategory === 'ALL' || filterSubCategories.length > 0) && (
           <div style={{ minWidth: 160 }}>
             <select
               value={selectedSubCategory}
               onChange={(e) => setSelectedSubCategory(e.target.value)}
-              disabled={selectedCategory === 'ALL' || filterSubCategories.length === 0}
+              disabled={selectedCategory === 'ALL'}
               style={{
                 width: '100%',
                 padding: '9px 12px',
@@ -496,12 +497,15 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
             </select>
           </div>
 
-          {/* Cascading Sub-Sub-Category Dropdown */}
+          )}
+
+          {/* Cascading Sub-Sub-Category Dropdown: Progressive Disclosure */}
+          {((selectedCategory === 'ALL' && selectedSubCategory === 'ALL') || filterSubSubCategories.length > 0) && (
           <div style={{ minWidth: 180 }}>
             <select
               value={selectedSubSubCategory}
               onChange={(e) => setSelectedSubSubCategory(e.target.value)}
-              disabled={selectedSubCategory === 'ALL' || filterSubSubCategories.length === 0}
+              disabled={selectedSubCategory === 'ALL'}
               style={{
                 width: '100%',
                 padding: '9px 12px',
@@ -522,6 +526,8 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
               ))}
             </select>
           </div>
+
+          )}
 
           {/* Status Dropdown */}
           <div style={{ minWidth: 130 }}>
@@ -729,21 +735,15 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
                         <div style={{ fontWeight: 600, color: '#0F172A', fontSize: 14 }}>
                           {p.name || 'Unnamed Formulation'}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            background: '#F1F5F9',
-                            color: '#475569',
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                            fontWeight: 600,
-                          }}>
-                            {p.productCode}
-                          </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                           {p.genericName && (
                             <span style={{ fontSize: 12, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
                               {p.genericName}
+                            </span>
+                          )}
+                          {(p.pharmaReference || p.pharma_reference) && (
+                            <span style={{ fontSize: 10.5, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#F0FDFA', color: '#0F766E', border: '1px solid #99F6E4' }}>
+                              Ref: {p.pharmaReference || p.pharma_reference}
                             </span>
                           )}
                         </div>
@@ -990,6 +990,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
   onClose,
   onSuccess
 }) => {
+  const { unifiedCategories, productTypes } = useAppContext();
   const [addModalTab, setAddModalTab] = useState<'CREATE' | 'MAP' | 'UPLOAD'>(initialTab);
   const [addFormError, setAddFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -1004,6 +1005,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
     sku: '',
     genericName: '',
     saltCombination: '',
+    pharmaReference: '',
     strength: '',
     dosageForm: '',
     packSize: '10 × 1 × 10 Strip',
@@ -1114,14 +1116,10 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
 
     // 1. Classification Hierarchy Validation
     if (!createProductForm.category.trim()) {
-      setAddFormError('Category is required.');
+      setAddFormError('Category is required. Please select a category from the hierarchy tree.');
       return;
     }
     const currentSub = createProductForm.subCategory.trim();
-    if (availableSubCategories.length > 0 && !currentSub) {
-      setAddFormError('Sub-Category is required.');
-      return;
-    }
 
     // 2. Product Details Validation
     if (!createProductForm.sku.trim()) {
@@ -1158,6 +1156,7 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
           category: createProductForm.category.trim(),
           subCategory: currentSub || undefined,
           subSubCategory: createProductForm.subSubCategory?.trim() || undefined,
+          pharmaReference: createProductForm.pharmaReference?.trim() || undefined,
           genericName: createProductForm.genericName.trim() || createProductForm.name.trim(),
           dosageForm: createProductForm.dosageForm || currentSub || 'Tablet',
           packSize: createProductForm.packSize.trim() || createProductForm.packaging.trim(),
@@ -1585,86 +1584,169 @@ ALB-400-CHEW,Albendazole 400mg Chewable Tablets,Albendazole,Drugs,Tablets,Anthel
         {addModalTab === 'CREATE' ? (
           <form onSubmit={handleSaveCreateProduct} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* 1. CLASSIFICATION HIERARCHY */}
-            <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Filter size={14} /> 1. CLASSIFICATION HIERARCHY
-            </div>
+            {(() => {
+              // Level 1 Categories
+              const mfgCategoriesList = Array.from(new Set(
+                (unifiedCategories || [])
+                  .filter((c: any) => (c.lifecycle_status || c.lifecycleStatus || c.status || 'ACTIVE').toUpperCase() === 'ACTIVE')
+                  .map((c: any) => (c.category || c.name || '').trim())
+                  .filter(Boolean)
+              )).sort();
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-              {/* Category */}
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Category *
-                </label>
-                <select
-                  required
-                  value={createProductForm.category}
-                  onChange={(e) => handleCategoryChange(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none', background: '#F0FDFA', color: '#0F766E' }}
-                >
-                  <option value="" disabled>-- Select Category * --</option>
-                  {categoriesList.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
+              // Level 2 Sub-Categories under selected Category
+              const mfgSubCategoriesList = !createProductForm.category ? [] : Array.from(new Set(
+                (unifiedCategories || [])
+                  .filter((c: any) =>
+                    (c.category || c.name || '').trim().toLowerCase() === createProductForm.category.trim().toLowerCase() &&
+                    (c.lifecycle_status || c.lifecycleStatus || c.status || 'ACTIVE').toUpperCase() === 'ACTIVE'
+                  )
+                  .map((c: any) => (c.sub_category || '').trim())
+                  .filter(Boolean)
+              )).sort();
 
-              {/* Sub-Category */}
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Sub-Category *
-                </label>
-                <select
-                  required={availableSubCategories.length > 0}
-                  disabled={!createProductForm.category || (availableSubCategories.length === 0 && !isLoadingSubCategories)}
-                  value={createProductForm.subCategory}
-                  onChange={(e) => handleSubCategoryChange(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: (!createProductForm.category || availableSubCategories.length === 0) ? '#F8FAFC' : '#FFFFFF' }}
-                >
-                  {!createProductForm.category ? (
-                    <option value="">-- Select Category First --</option>
-                  ) : isLoadingSubCategories ? (
-                    <option value="">Loading sub-categories...</option>
-                  ) : availableSubCategories.length === 0 ? (
-                    <option value="">Not Applicable (No sub-categories)</option>
-                  ) : (
-                    <>
-                      <option value="">-- Select Sub-Category * --</option>
-                      {availableSubCategories.map((sub) => (
-                        <option key={sub} value={sub}>{sub}</option>
-                      ))}
-                    </>
+              // Level 3 Sub-Sub-Categories under selected Sub-Category
+              const mfgSubSubCategoriesList = (!createProductForm.category || !createProductForm.subCategory) ? [] : Array.from(new Set(
+                (unifiedCategories || [])
+                  .filter((c: any) =>
+                    (c.category || c.name || '').trim().toLowerCase() === createProductForm.category.trim().toLowerCase() &&
+                    (c.sub_category || '').trim().toLowerCase() === createProductForm.subCategory.trim().toLowerCase() &&
+                    (c.lifecycle_status || c.lifecycleStatus || c.status || 'ACTIVE').toUpperCase() === 'ACTIVE'
+                  )
+                  .map((c: any) => (c.sub_sub_category || '').trim())
+                  .filter(Boolean)
+              )).sort();
+
+              const mfgHasL2 = !!createProductForm.category && mfgSubCategoriesList.length > 0;
+              const mfgHasL3 = mfgHasL2 && !!createProductForm.subCategory && mfgSubSubCategoriesList.length > 0;
+              const mfgDynamicCols = (mfgHasL2 && mfgHasL3) ? '1fr 1fr 1fr' : mfgHasL2 ? '1fr 1fr' : '1fr';
+
+              const resolveMfgCatId = (cat: string, sub?: string, subSub?: string) => {
+                const list = (unifiedCategories || []);
+                if (!cat) return '';
+                if (subSub && sub) {
+                  const m = list.find(c => c.category?.trim().toLowerCase() === cat.trim().toLowerCase() && c.sub_category?.trim().toLowerCase() === sub.trim().toLowerCase() && c.sub_sub_category?.trim().toLowerCase() === subSub.trim().toLowerCase());
+                  if (m) return m.category_id || m.id || '';
+                }
+                if (sub) {
+                  const mExact = list.find(c => c.category?.trim().toLowerCase() === cat.trim().toLowerCase() && c.sub_category?.trim().toLowerCase() === sub.trim().toLowerCase() && !c.sub_sub_category);
+                  if (mExact) return mExact.category_id || mExact.id || '';
+                  const mAny = list.find(c => c.category?.trim().toLowerCase() === cat.trim().toLowerCase() && c.sub_category?.trim().toLowerCase() === sub.trim().toLowerCase());
+                  if (mAny) return mAny.category_id || mAny.id || '';
+                }
+                const mL1 = list.find(c => c.category?.trim().toLowerCase() === cat.trim().toLowerCase() && !c.sub_category);
+                if (mL1) return mL1.category_id || mL1.id || '';
+                const mAnyL1 = list.find(c => c.category?.trim().toLowerCase() === cat.trim().toLowerCase());
+                return mAnyL1 ? (mAnyL1.category_id || mAnyL1.id || '') : '';
+              };
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Filter size={14} /> 1. CLASSIFICATION HIERARCHY
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: mfgDynamicCols, gap: 14 }}>
+                    {/* Category * */}
+                    <div>
+                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                        Category *
+                      </label>
+                      <select
+                        required
+                        value={createProductForm.category}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const resId = resolveMfgCatId(val, '', '');
+                          setCreateProductForm(prev => ({
+                            ...prev,
+                            category: val,
+                            subCategory: '',
+                            subSubCategory: '',
+                            subSubCategoryId: resId,
+                            dosageForm: ''
+                          }));
+                        }}
+                        style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none', background: '#F0FDFA', color: '#0F766E' }}
+                      >
+                        <option value="" disabled>-- Select Category * --</option>
+                        {mfgCategoriesList.map((cat) => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Sub-Category * (Rendered ONLY if Level-2 children exist in DB) */}
+                    {mfgHasL2 && (
+                      <div>
+                        <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                          Sub-Category *
+                        </label>
+                        <select
+                          required
+                          value={createProductForm.subCategory}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const resId = resolveMfgCatId(createProductForm.category, val, '');
+                            setCreateProductForm(prev => ({
+                              ...prev,
+                              subCategory: val,
+                              subSubCategory: '',
+                              subSubCategoryId: resId,
+                              dosageForm: val
+                            }));
+                          }}
+                          style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', color: '#0F172A' }}
+                        >
+                          <option value="">-- Select Sub-Category * --</option>
+                          {mfgSubCategoriesList.map((sub) => (
+                            <option key={sub} value={sub}>{sub}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Sub-Sub-Category (Optional) (Rendered ONLY if Level-3 children exist in DB) */}
+                    {mfgHasL3 && (
+                      <div>
+                        <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                          Sub-Sub-Category <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>
+                        </label>
+                        <select
+                          value={createProductForm.subSubCategory}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const resId = resolveMfgCatId(createProductForm.category, createProductForm.subCategory, val);
+                            setCreateProductForm(prev => ({
+                              ...prev,
+                              subSubCategory: val,
+                              subSubCategoryId: resId
+                            }));
+                          }}
+                          style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', color: '#0F172A' }}
+                        >
+                          <option value="">-- Select Sub-Sub-Category (Optional) --</option>
+                          {mfgSubSubCategoriesList.map((ss) => (
+                            <option key={ss} value={ss}>{ss}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Resolved Hierarchy Display */}
+                  {createProductForm.category && (
+                    <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: '8px 12px', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#0F766E' }}>
+                        CLASSIFICATION: {createProductForm.category}{createProductForm.subCategory ? ' › ' + createProductForm.subCategory : ''}{createProductForm.subSubCategory ? ' › ' + createProductForm.subSubCategory : ''}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#0F766E', background: '#CCFBF1', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                        {!mfgHasL2 ? 'L1 Leaf' : (!mfgHasL3 || !createProductForm.subSubCategory) ? 'L2 Leaf' : 'Full Hierarchy (3 Levels)'}
+                      </span>
+                    </div>
                   )}
-                </select>
-              </div>
-
-              {/* Sub-Sub-Category (Optional) */}
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Sub-Sub-Category <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>
-                </label>
-                <select
-                  disabled={!createProductForm.subCategory || (availableSubSubCategories.length === 0 && !isLoadingSubSubCategories)}
-                  value={createProductForm.subSubCategory}
-                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, subSubCategory: e.target.value }))}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: (!createProductForm.subCategory || availableSubSubCategories.length === 0) ? '#F8FAFC' : '#FFFFFF' }}
-                >
-                  {!createProductForm.subCategory ? (
-                    <option value="">-- Select Sub-Category First --</option>
-                  ) : isLoadingSubSubCategories ? (
-                    <option value="">Loading options...</option>
-                  ) : availableSubSubCategories.length === 0 ? (
-                    <option value="">None (Standard Formulation)</option>
-                  ) : (
-                    <>
-                      <option value="">-- Optional Classification --</option>
-                      {availableSubSubCategories.map((ss) => (
-                        <option key={ss} value={ss}>{ss}</option>
-                      ))}
-                    </>
-                  )}
-                </select>
-              </div>
-            </div>
+                </div>
+              );
+            })()}
 
             {/* 2. PRODUCT INFORMATION */}
             <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
@@ -1729,7 +1811,20 @@ ALB-400-CHEW,Albendazole 400mg Chewable Tablets,Albendazole,Drugs,Tablets,Anthel
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                  Pharma Ref (e.g. IP, BP)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. IP, BP, USP"
+                  value={createProductForm.pharmaReference}
+                  onChange={(e) => setCreateProductForm(prev => ({ ...prev, pharmaReference: e.target.value }))}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                />
+              </div>
+
               <div>
                 <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
                   Strength
@@ -2160,7 +2255,7 @@ ALB-400-CHEW,Albendazole 400mg Chewable Tablets,Albendazole,Drugs,Tablets,Anthel
                   onChange={(e) => setMappingFormData({ ...mappingFormData, mfgProductCode: e.target.value })}
                   style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', outline: 'none' }}
                 />
-                <span style={{ fontSize: 10.5, color: '#64748B', marginTop: 2, display: 'block' }}>Does not replace central code {selectedCentralProduct.productCode}</span>
+                <span style={{ fontSize: 10.5, color: '#64748B', marginTop: 2, display: 'block' }}>Central product code is linked automatically</span>
               </div>
 
               <div>
@@ -2322,7 +2417,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ mapping, onClose, o
               Edit Facility Commercial Terms
             </h3>
             <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748B' }}>
-              {mapping.product?.name} ({mapping.product?.productCode})
+              {mapping.product?.name}
             </p>
           </div>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#64748B', cursor: 'pointer' }}>
@@ -2507,10 +2602,7 @@ const ProductDetailDrawer: React.FC<ProductDetailDrawerProps> = ({ mapping, onCl
         <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Header Summary */}
           <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600, color: '#475569', background: '#FFFFFF', padding: '2px 8px', borderRadius: 4, border: '1px solid #E2E8F0' }}>
-                {p.productCode}
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
               <span style={{
                 padding: '3px 10px',
                 borderRadius: 20,
@@ -2570,6 +2662,7 @@ const ProductDetailDrawer: React.FC<ProductDetailDrawerProps> = ({ mapping, onCl
             </div>
             <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
               <div><span style={{ color: '#64748B', fontSize: 11 }}>Dosage Form:</span> <strong>{p.dosageForm}</strong></div>
+              <div><span style={{ color: '#64748B', fontSize: 11 }}>Pharma Reference:</span> <strong style={{ color: '#0F766E' }}>{p.pharmaReference || p.pharma_reference || '—'}</strong></div>
               <div><span style={{ color: '#64748B', fontSize: 11 }}>Strength:</span> <strong>{p.strength || 'Standard'}</strong></div>
               <div><span style={{ color: '#64748B', fontSize: 11 }}>Standard Pack Size:</span> <strong>{p.packSize}</strong></div>
               <div><span style={{ color: '#64748B', fontSize: 11 }}>Base UOM:</span> <strong>{p.baseUom}</strong></div>

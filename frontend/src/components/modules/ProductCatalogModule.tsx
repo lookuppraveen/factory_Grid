@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useApp } from '../../context/AppContext';
 import { catalogApi } from '../../services/catalogApi';
 import { BulkUploadModal } from './catalog/BulkUploadModal';
+
 import { AdminMapProductModal } from './catalog/AdminMapProductModal';
 import { Product, ManufacturerProductMapping, LifecycleStatus, AttributeMaster, ProductPrice, ProductTax, ProductUom, CustomerSegment } from '../../types';
 import { ManufacturerProductCatalogTab } from './ManufacturerProductCatalogTab';
@@ -181,7 +182,6 @@ export const ProductCatalogModule: React.FC = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('ALL');
   const [selectedBrandId, setSelectedBrandId] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
-  const [selectedMfgId, setSelectedMfgId] = useState<string>('ALL');
 
   // Categories available for filter based on selected Product Type
   const filterCategoriesList = useMemo(() => {
@@ -339,6 +339,7 @@ export const ProductCatalogModule: React.FC = () => {
     code: '',
     name: '',
     shortName: '',
+    pharmaReference: '',
     description: '',
     baseUom: 'Unit',
     packSize: '10 x 1 x 10',
@@ -352,61 +353,102 @@ export const ProductCatalogModule: React.FC = () => {
 
   const [isSavingProduct, setIsSavingProduct] = useState(false);
 
+  // ── Category ID Resolution Helper (Single Source of Truth from Unified Categories) ──
+  const resolveFinalCategoryId = (ptId: string, cat: string, sub?: string, subSub?: string): string => {
+    const list = unifiedCategories || [];
+    if (!cat) return '';
+
+    // 1. Level 3 exact match
+    if (subSub && sub) {
+      const matchL3 = list.find(c =>
+        c.product_type_id === ptId &&
+        c.category?.trim().toLowerCase() === cat.trim().toLowerCase() &&
+        c.sub_category?.trim().toLowerCase() === sub.trim().toLowerCase() &&
+        c.sub_sub_category?.trim().toLowerCase() === subSub.trim().toLowerCase()
+      );
+      if (matchL3) return matchL3.category_id || matchL3.id || '';
+    }
+
+    // 2. Level 2 match
+    if (sub) {
+      const matchL2Exact = list.find(c =>
+        c.product_type_id === ptId &&
+        c.category?.trim().toLowerCase() === cat.trim().toLowerCase() &&
+        c.sub_category?.trim().toLowerCase() === sub.trim().toLowerCase() &&
+        !c.sub_sub_category
+      );
+      if (matchL2Exact) return matchL2Exact.category_id || matchL2Exact.id || '';
+
+      const matchL2Any = list.find(c =>
+        c.product_type_id === ptId &&
+        c.category?.trim().toLowerCase() === cat.trim().toLowerCase() &&
+        c.sub_category?.trim().toLowerCase() === sub.trim().toLowerCase()
+      );
+      if (matchL2Any) return matchL2Any.category_id || matchL2Any.id || '';
+    }
+
+    // 3. Level 1 match
+    const matchL1Exact = list.find(c =>
+      c.product_type_id === ptId &&
+      c.category?.trim().toLowerCase() === cat.trim().toLowerCase() &&
+      !c.sub_category
+    );
+    if (matchL1Exact) return matchL1Exact.category_id || matchL1Exact.id || '';
+
+    const matchL1Any = list.find(c =>
+      c.product_type_id === ptId &&
+      c.category?.trim().toLowerCase() === cat.trim().toLowerCase()
+    );
+    return matchL1Any ? (matchL1Any.category_id || matchL1Any.id || '') : '';
+  };
+
   // ── Dependent Category Hierarchy Dropdowns (Product Type → Category → Sub-Category → Sub-Sub-Category) ──
   const dependentL1Categories = useMemo(() => {
+    if (!formData.productTypeId) return [];
     const list = (unifiedCategories || []).filter(c =>
       c.product_type_id === formData.productTypeId &&
       (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
     );
-    const unique = Array.from(new Set(list.map(c => c.category).filter(Boolean)));
+    const unique = Array.from(new Set(list.map(c => c.category?.trim()).filter(Boolean))).sort();
     return unique;
   }, [unifiedCategories, formData.productTypeId]);
 
   const dependentL2SubCategories = useMemo(() => {
-    if (!formData.category) return [];
+    if (!formData.productTypeId || !formData.category) return [];
     const list = (unifiedCategories || []).filter(c =>
       c.product_type_id === formData.productTypeId &&
-      c.category === formData.category &&
+      c.category?.trim().toLowerCase() === formData.category.trim().toLowerCase() &&
       (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
     );
-    const unique = Array.from(new Set(list.map(c => c.sub_category).filter(Boolean)));
+    const unique = Array.from(new Set(list.map(c => c.sub_category?.trim()).filter(Boolean))).sort();
     return unique;
   }, [unifiedCategories, formData.productTypeId, formData.category]);
 
-  const dependentL3Records = useMemo(() => {
-    if (!formData.category) return [];
-    return (unifiedCategories || []).filter(c =>
+  const dependentL3SubSubCategories = useMemo(() => {
+    if (!formData.productTypeId || !formData.category || !formData.subCategory) return [];
+    const list = (unifiedCategories || []).filter(c =>
       c.product_type_id === formData.productTypeId &&
-      c.category === formData.category &&
-      (!formData.subCategory || c.sub_category === formData.subCategory) &&
+      c.category?.trim().toLowerCase() === formData.category.trim().toLowerCase() &&
+      c.sub_category?.trim().toLowerCase() === formData.subCategory.trim().toLowerCase() &&
       (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
     );
+    const unique = Array.from(new Set(list.map(c => c.sub_sub_category?.trim()).filter(Boolean))).sort();
+    return unique;
   }, [unifiedCategories, formData.productTypeId, formData.category, formData.subCategory]);
 
-  const dependentL3SubSubCategories = useMemo(() => {
-    const unique = Array.from(new Set(dependentL3Records.map(c => c.sub_sub_category).filter(Boolean)));
-    return unique;
-  }, [dependentL3Records]);
-
   const handleProductTypeChange = (newPtId: string) => {
-    const matchingCats = (unifiedCategories || []).filter(c =>
-      c.product_type_id === newPtId &&
-      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
-    );
-    const firstCat = matchingCats[0]?.category || '';
-    const matchingSubs = matchingCats.filter(c => c.category === firstCat);
-    const firstSub = matchingSubs[0]?.sub_category || '';
-    const matchingSubSubs = matchingSubs.filter(c => c.sub_category === firstSub);
-    const firstSubSub = matchingSubSubs[0]?.sub_sub_category || '';
-    const resolved = matchingSubSubs[0] || matchingSubs[0] || matchingCats[0];
-
+    // When Product Type changes:
+    // - Clear Category
+    // - Clear Sub-Category
+    // - Clear Sub-Sub-Category
+    // - Clear CategoryId
     setFormData(prev => ({
       ...prev,
       productTypeId: newPtId,
-      category: firstCat,
-      subCategory: firstSub,
-      subSubCategory: firstSubSub,
-      categoryId: resolved?.category_id || resolved?.id || ''
+      category: '',
+      subCategory: '',
+      subSubCategory: '',
+      categoryId: ''
     }));
 
     // Reload applicable attributes for the newly selected Product Type
@@ -419,67 +461,82 @@ export const ProductCatalogModule: React.FC = () => {
   };
 
   const handleCategoryChange = (newCat: string) => {
-    const matchingSubs = (unifiedCategories || []).filter(c =>
-      c.product_type_id === formData.productTypeId &&
-      c.category === newCat &&
-      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
-    );
-    const firstSub = matchingSubs[0]?.sub_category || '';
-    const matchingSubSubs = matchingSubs.filter(c => c.sub_category === firstSub);
-    const firstSubSub = matchingSubSubs[0]?.sub_sub_category || '';
-    const resolved = matchingSubSubs[0] || matchingSubs[0];
-
-    // Changing Category must NOT change or reset Product Type attributes
+    // When Category changes:
+    // - Clear Sub-Category
+    // - Clear Sub-Sub-Category
+    // - Auto-resolve categoryId for this L1 (if it has no children)
+    const resolvedCatId = resolveFinalCategoryId(formData.productTypeId, newCat, '', '');
     setFormData(prev => ({
       ...prev,
       category: newCat,
-      subCategory: firstSub,
-      subSubCategory: firstSubSub,
-      categoryId: resolved?.category_id || resolved?.id || ''
+      subCategory: '',
+      subSubCategory: '',
+      categoryId: resolvedCatId
     }));
   };
 
   const handleSubCategoryChange = (newSub: string) => {
-    const matchingSubSubs = (unifiedCategories || []).filter(c =>
-      c.product_type_id === formData.productTypeId &&
-      c.category === formData.category &&
-      c.sub_category === newSub &&
-      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
-    );
-    const firstSubSub = matchingSubSubs[0]?.sub_sub_category || '';
-    const resolved = matchingSubSubs[0];
-
+    // When Sub-Category changes:
+    // - Clear Sub-Sub-Category
+    // - Auto-resolve categoryId for this L2
+    const resolvedCatId = resolveFinalCategoryId(formData.productTypeId, formData.category, newSub, '');
     setFormData(prev => ({
       ...prev,
       subCategory: newSub,
-      subSubCategory: firstSubSub,
-      categoryId: resolved?.category_id || resolved?.id || ''
+      subSubCategory: '',
+      categoryId: resolvedCatId
     }));
   };
 
   const handleSubSubCategoryChange = (newSubSub: string) => {
-    const matched = (unifiedCategories || []).find(c =>
-      c.product_type_id === formData.productTypeId &&
-      c.category === formData.category &&
-      (!formData.subCategory || c.sub_category === formData.subCategory) &&
-      (c.sub_sub_category === newSubSub || c.category_id === newSubSub || c.id === newSubSub)
-    );
+    // When Sub-Sub-Category changes:
+    // - Auto-resolve categoryId for this L3 leaf
+    const resolvedCatId = resolveFinalCategoryId(formData.productTypeId, formData.category, formData.subCategory, newSubSub);
     setFormData(prev => ({
       ...prev,
       subSubCategory: newSubSub,
-      categoryId: matched?.category_id || matched?.id || prev.categoryId
+      categoryId: resolvedCatId
     }));
   };
 
   // Dynamic attribute form values for Add / Edit Product modal
   const [formAttrValues, setFormAttrValues] = useState<Record<string, string>>({});
 
-  // Active configured attributes for the selected Product Type in Add / Edit Product modal (Client Requirement Section 5)
+  // Additional dynamically selected attributes on product (Select Attribute action)
+  const [extraSelectedAttributeIds, setExtraSelectedAttributeIds] = useState<string[]>([]);
+  const [isSelectingModalAttr, setIsSelectingModalAttr] = useState(false);
+
+  // Active configured + dynamically selected attributes for the selected Product in Add / Edit Product modal
   const modalProductTypeAttributes = useMemo(() => {
-    if (!formData.productTypeId) return [];
-    return getProductTypeConfiguredAttributes(formData.productTypeId);
-  }, [formData.productTypeId, getProductTypeConfiguredAttributes, productTypeAttributes, attributeMasters]);
+    const list: any[] = formData.productTypeId ? [...getProductTypeConfiguredAttributes(formData.productTypeId)] : [];
+    const existingAttrIdSet = new Set(list.map(a => a.attribute_id || a.attribute?.attribute_id));
+    for (const attrId of extraSelectedAttributeIds) {
+      if (!existingAttrIdSet.has(attrId)) {
+        const master = (attributeMasters || []).find(m => (m.attribute_id || m.id) === attrId);
+        if (master) {
+          list.push({
+            attribute_id: master.attribute_id || master.id,
+            attribute_name: master.attribute_name || master.name,
+            attribute_code: master.attribute_code || master.code,
+            data_type: master.data_type,
+            unit_of_measure: master.unit_of_measure,
+            allowed_values: master.allowed_values,
+            is_required: false,
+            attribute: master,
+          });
+          existingAttrIdSet.add(attrId);
+        }
+      }
+    }
+    return list;
+  }, [formData.productTypeId, getProductTypeConfiguredAttributes, productTypeAttributes, attributeMasters, extraSelectedAttributeIds]);
   const modalCategoryConfiguredAttributes = modalProductTypeAttributes;
+
+  // Active attribute masters list available for "Select Attribute"
+  const availableToSelectModalAttributes = useMemo(() => {
+    const currentAttrIdSet = new Set(modalProductTypeAttributes.map(a => a.attribute_id || a.attribute?.attribute_id));
+    return (attributeMasters || []).filter(m => (m.is_active || m.isActive) && !currentAttrIdSet.has(m.attribute_id || m.id));
+  }, [attributeMasters, modalProductTypeAttributes]);
 
   // Active attribute masters list for rendering dynamic attributes
   const activeAttributesList = useMemo(() => {
@@ -533,18 +590,15 @@ export const ProductCatalogModule: React.FC = () => {
       // Filter by Lifecycle Status
       let matchesStatus = true;
       if (selectedStatus !== 'ALL') {
-        const statusVal = p.lifecycle_status || (p.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE');
-        matchesStatus = statusVal === selectedStatus;
+        const statusVal = (p.lifecycle_status || (p.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE')).toUpperCase();
+        if (selectedStatus === 'END_OF_LIFE' || selectedStatus === 'EOL') {
+          matchesStatus = statusVal === 'END_OF_LIFE' || statusVal === 'EOL';
+        } else {
+          matchesStatus = statusVal === selectedStatus.toUpperCase();
+        }
       }
 
-      // Filter by mapped manufacturer
-      let matchesMfg = true;
-      if (selectedMfgId !== 'ALL') {
-        const pMappings = (mappings || []).filter(m => m.productId === p.id);
-        matchesMfg = pMappings.some(m => m.manufacturerId === selectedMfgId);
-      }
-
-      return matchesSearch && matchesPt && matchesCat && matchesBrand && matchesStatus && matchesMfg;
+      return matchesSearch && matchesPt && matchesCat && matchesBrand && matchesStatus;
     }).sort((a, b) => {
       // Latest record first (created_at DESC), secondary stable sort on id DESC
       const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
@@ -556,13 +610,13 @@ export const ProductCatalogModule: React.FC = () => {
       const idB = String(b.id || b.product_code || '');
       return idB.localeCompare(idA);
     });
-  }, [products, mappings, searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus, selectedMfgId, unifiedCategories, brands, productAttributes]);
+  }, [products, mappings, searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus, unifiedCategories, brands, productAttributes]);
 
   // Pagination Control
   const pagination = usePagination({
     totalItems: filteredProducts.length,
     initialPageSize: 10,
-    resetDependencies: [searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus, selectedMfgId]
+    resetDependencies: [searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus]
   });
   const paginatedProducts = pagination.paginateItems(filteredProducts);
 
@@ -727,27 +781,17 @@ export const ProductCatalogModule: React.FC = () => {
     setEditingProductId(null);
     const nextCodeNum = products.length + 1;
     const defaultPtId = productTypes[0]?.product_type_id || 'pt_med';
-    const matchingCats = (unifiedCategories || []).filter(c =>
-      c.product_type_id === defaultPtId &&
-      (c.lifecycle_status === 'ACTIVE' || (c as any).status === 'Active')
-    );
-    const firstCat = matchingCats[0]?.category || 'Drugs';
-    const matchingSubs = matchingCats.filter(c => c.category === firstCat);
-    const firstSub = matchingSubs[0]?.sub_category || 'Tablets';
-    const matchingSubSubs = matchingSubs.filter(c => c.sub_category === firstSub);
-    const firstSubSub = matchingSubSubs[0]?.sub_sub_category || 'Film Coated Tablets';
-    const targetCatRecord = matchingSubSubs[0] || matchingSubs[0] || matchingCats[0];
-
     setFormData({
       productTypeId: defaultPtId,
-      category: firstCat,
-      subCategory: firstSub,
-      subSubCategory: firstSubSub,
-      categoryId: targetCatRecord?.category_id || targetCatRecord?.id || 'CAT001',
+      category: '',
+      subCategory: '',
+      subSubCategory: '',
+      categoryId: '',
       brandId: '',
       code: `PRD001${nextCodeNum < 10 ? '00' + nextCodeNum : nextCodeNum < 100 ? '0' + nextCodeNum : nextCodeNum}`,
       name: '',
       shortName: '',
+      pharmaReference: '',
       description: '',
       baseUom: 'Unit',
       packSize: '10 x 1 x 10',
@@ -760,6 +804,8 @@ export const ProductCatalogModule: React.FC = () => {
     });
 
     setFormAttrValues({});
+    setExtraSelectedAttributeIds([]);
+    setIsSelectingModalAttr(false);
     setModalFormError(null);
     setIsAddModalOpen(true);
   };
@@ -788,6 +834,7 @@ export const ProductCatalogModule: React.FC = () => {
       code: prd.product_code || prd.code || '',
       name: prd.product_name || prd.name || '',
       shortName: prd.product_short_name || '',
+      pharmaReference: prd.pharmaReference || prd.pharma_reference || (prd as any).pharma_ref || '',
       description: prd.product_description || prd.description || '',
       baseUom: prd.base_uom || prd.uom || 'Unit',
       packSize: prd.pack_size || prd.packSize || '10 x 1 x 10',
@@ -801,6 +848,8 @@ export const ProductCatalogModule: React.FC = () => {
 
     const currentAttrs = getProductAttributeMap(prd.id);
     setFormAttrValues(currentAttrs);
+    setExtraSelectedAttributeIds(Object.keys(currentAttrs));
+    setIsSelectingModalAttr(false);
 
     setModalFormError(null);
     setIsAddModalOpen(true);
@@ -862,7 +911,7 @@ export const ProductCatalogModule: React.FC = () => {
       return;
     }
     if (!formData.category) {
-      setModalFormError('Category is mandatory. Please select a Category from the master hierarchy.');
+      setModalFormError('Category is mandatory. Please select a Category from the master hierarchy tree.');
       return;
     }
 
@@ -925,6 +974,8 @@ export const ProductCatalogModule: React.FC = () => {
       productCode: codeClean,
       name: formData.name.trim(),
       shortName: formData.shortName.trim() || formData.name.trim().slice(0, 30),
+      pharmaReference: formData.pharmaReference.trim() || undefined,
+      pharma_reference: formData.pharmaReference.trim() || undefined,
       productTypeId: formData.productTypeId,
       categoryId: formData.categoryId || chosenCatRecord?.category_id || undefined,
       category: formData.category || chosenCatRecord?.category || 'Drugs',
@@ -1102,8 +1153,9 @@ export const ProductCatalogModule: React.FC = () => {
         return { label: 'INACTIVE', bg: '#FEE2E2', color: '#B91C1C', border: '#FCA5A5' };
       case 'DISCONTINUED':
         return { label: 'DISCONTINUED', bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' };
+      case 'END_OF_LIFE':
       case 'EOL':
-        return { label: 'EOL (End of Life)', bg: '#F3E8FF', color: '#7E22CE', border: '#D8B4FE' };
+        return { label: 'END OF LIFE', bg: '#F3E8FF', color: '#7E22CE', border: '#D8B4FE' };
       default:
         return { label: st, bg: '#F1F5F9', color: '#64748B', border: '#CBD5E1' };
     }
@@ -1174,28 +1226,6 @@ export const ProductCatalogModule: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {currentRole === 'ADMIN' && (
-            <button
-              onClick={() => setActiveTab('category-master')}
-              title="Manage Canonical Category Records"
-              style={{
-                padding: '10px 16px',
-                borderRadius: 8,
-                background: '#F0FDFA',
-                color: '#0F766E',
-                border: '1px solid #99F6E4',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6
-              }}
-            >
-              <Layers size={16} /> Category Master →
-            </button>
-          )}
-
           {canEditProducts && (
             <>
               <button
@@ -1235,25 +1265,6 @@ export const ProductCatalogModule: React.FC = () => {
                 }}
               >
                 <FileSpreadsheet size={16} /> Bulk Upload (Excel/CSV)
-              </button>
-
-              <button
-                onClick={() => setIsAdminMapModalOpen(true)}
-                style={{
-                  padding: '10px 18px',
-                  borderRadius: 8,
-                  background: '#FFFFFF',
-                  color: '#334155',
-                  border: '1px solid #CBD5E1',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8
-                }}
-              >
-                <Layers size={16} /> Map Existing Master Product
               </button>
             </>
           )}
@@ -1403,36 +1414,13 @@ export const ProductCatalogModule: React.FC = () => {
             >
               <option value="ALL">All Statuses</option>
               <option value="ACTIVE">ACTIVE</option>
+              <option value="DISCONTINUED">DISCONTINUED</option>
+              <option value="END_OF_LIFE">END OF LIFE</option>
               <option value="DRAFT">DRAFT</option>
               <option value="INACTIVE">INACTIVE</option>
-              <option value="DISCONTINUED">DISCONTINUED</option>
-              <option value="EOL">EOL (End of Life)</option>
             </select>
           </div>
 
-          {/* Manufacturer Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Manufacturer:</span>
-            <select
-              value={selectedMfgId}
-              onChange={e => setSelectedMfgId(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                fontSize: 12.5,
-                background: '#FFFFFF',
-                border: '1px solid #CBD5E1',
-                borderRadius: 6,
-                color: '#0F172A',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              <option value="ALL">All Manufacturers</option>
-              {(manufacturers || []).map(m => (
-                <option key={m.id} value={m.id}>{m.companyName || m.name}</option>
-              ))}
-            </select>
-          </div>
 
         </div>
 
@@ -1510,9 +1498,6 @@ export const ProductCatalogModule: React.FC = () => {
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 10, marginBottom: 8 }}>
                         <div>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>
-                            {pCode}
-                          </span>
                           <h3 style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 800, color: '#0F172A' }}>
                             {pName}
                           </h3>
@@ -1543,28 +1528,17 @@ export const ProductCatalogModule: React.FC = () => {
                           <span style={{ fontSize: 10.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
                             {getProductTypeName(p)}
                           </span>
-                          <span title="Product Type ID" style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#64748B', marginLeft: 6 }}>
-                            ({getProductTypeId(p)})
-                          </span>
                         </div>
                         <div>
                           <span style={{ color: '#475569', fontWeight: 600 }}>Category: </span>
                           <strong style={{ color: '#0F172A' }}>{getCategoryHierarchyDisplay(p)}</strong>
-                          <span title="Category ID" style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E', marginLeft: 6 }}>
-                            ({getCategoryId(p)})
-                          </span>
                         </div>
                         <div>
                           <span style={{ color: '#475569', fontWeight: 600 }}>Brand: </span>
                           {brandStr ? (
-                            <>
-                              <span style={{ padding: '1px 6px', background: '#FEF3C7', color: '#B45309', borderRadius: 4, fontSize: 11, fontWeight: 700, border: '1px solid #FDE68A' }}>
-                                🏷 {brandStr}
-                              </span>
-                              <span title="Brand ID" style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#B45309', marginLeft: 6 }}>
-                                ({getBrandId(p) || '—'})
-                              </span>
-                            </>
+                            <span style={{ padding: '1px 6px', background: '#FEF3C7', color: '#B45309', borderRadius: 4, fontSize: 11, fontWeight: 700, border: '1px solid #FDE68A' }}>
+                              🏷 {brandStr}
+                            </span>
                           ) : (
                             <span style={{ color: '#94A3B8', fontStyle: 'italic' }}>Unbranded (—)</span>
                           )}
@@ -1657,8 +1631,7 @@ export const ProductCatalogModule: React.FC = () => {
           <table style={{ width: '100%', minWidth: 1260, borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'auto' }}>
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 105, minWidth: 105, position: 'sticky', left: 0, background: '#F8FAFC', zIndex: 4, boxShadow: '2px 0 5px rgba(0,0,0,0.04)' }}>PRODUCT CODE</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 160, maxWidth: 240 }}>PRODUCT NAME</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 180, maxWidth: 260, position: 'sticky', left: 0, background: '#F8FAFC', zIndex: 4, boxShadow: '2px 0 5px rgba(0,0,0,0.04)' }}>PRODUCT NAME</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 100, minWidth: 100 }}>SHORT NAME</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 115, minWidth: 115 }}>PRODUCT TYPE</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 160, maxWidth: 220 }}>CATEGORY</th>
@@ -1694,7 +1667,7 @@ export const ProductCatalogModule: React.FC = () => {
             <tbody>
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={15} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                  <td colSpan={14} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
                     <Package size={36} style={{ color: '#94A3B8', marginBottom: 10, display: 'block', margin: '0 auto 10px' }} />
                     <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No central products found.</div>
                     <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 18 }}>
@@ -1732,58 +1705,47 @@ export const ProductCatalogModule: React.FC = () => {
                       onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                       onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
                     >
-                      {/* 1. PRODUCT CODE (STICKY LEFT) */}
+                      {/* 1. PRODUCT NAME (STICKY LEFT) */}
                       <td style={{
-                        padding: '12px 10px',
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: '#0F766E',
-                        fontFamily: 'monospace',
-                        whiteSpace: 'nowrap',
-                        width: 105,
-                        minWidth: 105,
+                        padding: '12px 14px',
+                        minWidth: 180,
+                        maxWidth: 260,
                         position: 'sticky',
                         left: 0,
                         background: '#FFFFFF',
                         zIndex: 2,
                         boxShadow: '2px 0 5px rgba(0,0,0,0.04)'
                       }}>
-                        {pCode}
-                      </td>
-
-                      {/* 2. PRODUCT NAME */}
-                      <td style={{ padding: '12px 10px', minWidth: 160, maxWidth: 240 }}>
                         <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', lineHeight: 1.3, wordBreak: 'break-word', whiteSpace: 'normal' }}>{pName}</div>
+                        {(prd.pharmaReference || prd.pharma_reference) && (
+                          <span style={{ display: 'inline-block', marginTop: 4, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#F0FDFA', color: '#0F766E', border: '1px solid #99F6E4' }}>
+                            Ref: {prd.pharmaReference || prd.pharma_reference}
+                          </span>
+                        )}
                       </td>
 
-                      {/* 3. PRODUCT SHORT NAME */}
+                      {/* 2. PRODUCT SHORT NAME */}
                       <td style={{ padding: '12px 10px', fontSize: 12, fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
                         {pShort}
                       </td>
 
-                      {/* 4. PRODUCT TYPE */}
+                      {/* 3. PRODUCT TYPE */}
                       <td style={{ padding: '12px 10px', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
                           <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
                             {getProductTypeName(prd)}
                           </span>
-                          <span title="Product Type ID" style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#64748B' }}>
-                            {getProductTypeId(prd)}
-                          </span>
                         </div>
                       </td>
 
-                      {/* 5. CATEGORY (Derived hierarchy) */}
+                      {/* 4. CATEGORY (Derived hierarchy) */}
                       <td style={{ padding: '12px 10px', fontSize: 12 }}>
                         <div style={{ fontWeight: 600, color: '#0F172A', lineHeight: 1.3 }}>
                           {getCategoryHierarchyDisplay(prd)}
                         </div>
-                        <div title="Category ID" style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E', marginTop: 3 }}>
-                          {getCategoryId(prd)}
-                        </div>
                       </td>
 
-                      {/* 6. BRAND */}
+                      {/* 5. BRAND */}
                       <td style={{ padding: '12px 10px', fontSize: 12 }}>
                         {brandStr ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
@@ -1791,14 +1753,10 @@ export const ProductCatalogModule: React.FC = () => {
                               <span>🏷</span>
                               <span>{brandStr}</span>
                             </div>
-                            <span title="Brand ID" style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#B45309' }}>
-                              {getBrandId(prd) || '—'}
-                            </span>
                           </div>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <span style={{ color: '#94A3B8', fontStyle: 'italic', fontSize: 11.5 }}>Unbranded</span>
-                            <span title="Brand ID (None)" style={{ fontSize: 10, fontFamily: 'monospace', color: '#94A3B8' }}>—</span>
                           </div>
                         )}
                       </td>
@@ -1995,9 +1953,6 @@ export const ProductCatalogModule: React.FC = () => {
               background: '#F8FAFC'
             }}>
               <div>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>
-                  {selectedProduct.product_code || selectedProduct.code}
-                </span>
                 <h2 style={{ margin: '2px 0 0', fontSize: 18, fontWeight: 800, color: '#0F172A' }}>
                   {selectedProduct.product_name || selectedProduct.name}
                 </h2>
@@ -2020,85 +1975,63 @@ export const ProductCatalogModule: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12.5 }}>
-                  {/* 1. Product ID */}
-                  <div>
-                    <span style={{ color: '#64748B' }}>Product ID:</span>
-                    <strong style={{ color: '#0F172A', fontFamily: 'monospace', display: 'block' }}>{selectedProduct.product_id || selectedProduct.id}</strong>
-                  </div>
-
-                  {/* 2. Product Code */}
-                  <div>
-                    <span style={{ color: '#64748B' }}>Product Code:</span>
-                    <strong style={{ color: '#0F766E', fontFamily: 'monospace', display: 'block' }}>{selectedProduct.product_code || selectedProduct.code}</strong>
-                  </div>
-
-                  {/* 3. Product Type */}
+                  {/* 1. Product Type */}
                   <div>
                     <span style={{ color: '#64748B' }}>Product Type:</span>
                     <strong style={{ color: '#1D4ED8', display: 'block' }}>{getProductTypeName(selectedProduct)}</strong>
                   </div>
 
-                  {/* 4. Product Type ID */}
-                  <div>
-                    <span style={{ color: '#64748B' }}>Product Type ID:</span>
-                    <strong style={{ color: '#1D4ED8', fontFamily: 'monospace', display: 'block' }}>{getProductTypeId(selectedProduct)}</strong>
-                  </div>
-
-                  {/* 5. Brand */}
+                  {/* 2. Brand */}
                   <div>
                     <span style={{ color: '#64748B' }}>Brand:</span>
                     <strong style={{ color: '#D97706', display: 'block' }}>{getBrandName(selectedProduct) || 'Unbranded / Generic'}</strong>
                   </div>
 
-                  {/* 6. Brand ID */}
-                  <div>
-                    <span style={{ color: '#64748B' }}>Brand ID:</span>
-                    <strong style={{ color: '#D97706', fontFamily: 'monospace', display: 'block' }}>{getBrandId(selectedProduct) || '—'}</strong>
-                  </div>
-
-                  {/* 7. Category */}
+                  {/* 3. Category */}
                   <div>
                     <span style={{ color: '#64748B' }}>Category:</span>
                     <strong style={{ color: '#0F172A', display: 'block' }}>{getCategoryHierarchyDisplay(selectedProduct)}</strong>
                   </div>
 
-                  {/* 8. Category ID */}
-                  <div>
-                    <span style={{ color: '#64748B' }}>Category ID:</span>
-                    <strong style={{ color: '#0F766E', fontFamily: 'monospace', display: 'block' }}>{getCategoryId(selectedProduct)}</strong>
-                  </div>
-
-                  {/* 9. Product Name */}
+                  {/* 4. Product Name */}
                   <div>
                     <span style={{ color: '#64748B' }}>Product Name:</span>
                     <strong style={{ color: '#0F172A', display: 'block' }}>{selectedProduct.product_name || selectedProduct.name}</strong>
                   </div>
 
-                  {/* 10. Product Short Name */}
+                  {/* 5. Product Short Name */}
                   <div>
                     <span style={{ color: '#64748B' }}>Product Short Name:</span>
                     <strong style={{ color: '#0F766E', display: 'block' }}>{selectedProduct.product_short_name || '—'}</strong>
                   </div>
 
-                  {/* 11. Base UOM */}
+                  {/* 6. Pharma Reference */}
+                  <div>
+                    <span style={{ color: '#64748B' }}>Pharma Reference:</span>
+                    <strong style={{ color: '#0F766E', display: 'block' }}>
+                      {selectedProduct.pharmaReference || selectedProduct.pharma_reference || '—'}
+                    </strong>
+                  </div>
+
+                  {/* 7. Base UOM */}
                   <div>
                     <span style={{ color: '#64748B' }}>Base UOM:</span>
                     <strong style={{ color: '#0F172A', display: 'block' }}>{selectedProduct.base_uom || selectedProduct.uom || 'Unit'}</strong>
                   </div>
 
-                  {/* 12. Pack Size */}
+                  {/* 8. Pack Size */}
                   <div>
                     <span style={{ color: '#64748B' }}>Pack Size:</span>
                     <strong style={{ color: '#334155', display: 'block' }}>{selectedProduct.pack_size || selectedProduct.packSize || '—'}</strong>
                   </div>
 
-                  {/* 13. Pack UOM */}
+                  {/* 9. Pack UOM */}
                   <div>
                     <span style={{ color: '#64748B' }}>Pack UOM:</span>
                     <strong style={{ color: '#334155', display: 'block' }}>{selectedProduct.pack_uom || '—'}</strong>
                   </div>
 
-                  {/* 14. Lifecycle Status */}
+                  {/* 10. Lifecycle Status */}
                   <div>
                     <span style={{ color: '#64748B' }}>Lifecycle Status:</span>
                     {(() => {
@@ -3169,205 +3102,249 @@ export const ProductCatalogModule: React.FC = () => {
               {/* ────────────────────────────────────────────────────────── */}
               {/* ────────────────────────────────────────────────────────── */}
               {/* 1. CLASSIFICATION HIERARCHY */}
-              {/* ────────────────────────────────────────────────────────── */}
-              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Layers size={14} /> 1. CLASSIFICATION HIERARCHY
-                </div>
+              {(() => {
+                const hasL2 = !!formData.category && dependentL2SubCategories.length > 0;
+                const hasL3 = hasL2 && !!formData.subCategory && dependentL3SubSubCategories.length > 0;
+                const dynamicCols = (hasL2 && hasL3) ? '1fr 1fr 1fr' : hasL2 ? '1fr 1fr' : '1fr';
 
-                {/* Product Type * */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                      Product Type *
-                    </label>
-                    {formData.productTypeId && (
-                      <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
-                        ID: {formData.productTypeId}
-                      </span>
+                return (
+                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Layers size={14} /> 1. CLASSIFICATION HIERARCHY
+                      </div>
+                      {formData.categoryId && (
+                        <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E', background: '#CCFBF1', padding: '2px 8px', borderRadius: 4 }}>
+                          Category ID: {formData.categoryId}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 1. PRODUCT TYPE * */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                          Product Type *
+                        </label>
+                      </div>
+                      <select
+                        required
+                        value={formData.productTypeId}
+                        onChange={e => handleProductTypeChange(e.target.value)}
+                        style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none', background: '#F0FDFA', color: '#0F766E' }}
+                      >
+                        <option value="" disabled>-- Select Product Type * --</option>
+                        {(productTypes || []).filter(t => (t.lifecycle_status || t.status) === 'ACTIVE').map(t => (
+                          <option key={t.product_type_id || t.id} value={t.product_type_id || t.id}>
+                            {t.product_type_name || t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 2. DYNAMIC CASCADING CATEGORY DROPDOWNS (Progressive Disclosure) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: dynamicCols, gap: 14 }}>
+                      {/* Level 1: Category * */}
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                            Category *
+                          </label>
+                          <span style={{ fontSize: 11, color: '#64748B' }}>
+                            {dependentL1Categories.length} available
+                          </span>
+                        </div>
+                        <select
+                          required
+                          value={formData.category}
+                          onChange={e => handleCategoryChange(e.target.value)}
+                          style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', color: '#0F172A' }}
+                        >
+                          <option value="">-- Select Category * --</option>
+                          {dependentL1Categories.map(cat => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Level 2: Sub-Category * (Rendered ONLY if Level-2 children exist in DB) */}
+                      {hasL2 && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                              Sub-Category *
+                            </label>
+                            <span style={{ fontSize: 11, color: '#64748B' }}>
+                              {dependentL2SubCategories.length} available
+                            </span>
+                          </div>
+                          <select
+                            required
+                            value={formData.subCategory}
+                            onChange={e => handleSubCategoryChange(e.target.value)}
+                            style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', color: '#0F172A' }}
+                          >
+                            <option value="">-- Select Sub-Category * --</option>
+                            {dependentL2SubCategories.map(sub => (
+                              <option key={sub} value={sub}>
+                                {sub}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Level 3: Sub-Sub-Category (Optional) (Rendered ONLY if Level-3 children exist in DB) */}
+                      {hasL3 && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                              Sub-Sub-Category <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>
+                            </label>
+                            <span style={{ fontSize: 11, color: '#64748B' }}>
+                              {dependentL3SubSubCategories.length} available
+                            </span>
+                          </div>
+                          <select
+                            value={formData.subSubCategory}
+                            onChange={e => handleSubSubCategoryChange(e.target.value)}
+                            style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', color: '#0F172A' }}
+                          >
+                            <option value="">-- Select Sub-Sub-Category (Optional) --</option>
+                            {dependentL3SubSubCategories.map(subSub => (
+                              <option key={subSub} value={subSub}>
+                                {subSub}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Resolved Master Category Hierarchy Display */}
+                    {formData.category && (
+                      <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.05em' }}>
+                            Resolved Master Category Hierarchy:
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ color: '#64748B' }}>Category:</span>
+                          <strong style={{ color: '#0F766E' }}>{formData.category}</strong>
+                          {hasL2 && formData.subCategory && (
+                            <>
+                              <span style={{ color: '#94A3B8' }}>›</span>
+                              <span style={{ color: '#64748B' }}>Sub-Category:</span>
+                              <strong style={{ color: '#0F766E' }}>{formData.subCategory}</strong>
+                            </>
+                          )}
+                          {hasL3 && formData.subSubCategory && (
+                            <>
+                              <span style={{ color: '#94A3B8' }}>›</span>
+                              <span style={{ color: '#64748B' }}>Sub-Sub:</span>
+                              <strong style={{ color: '#0284C7' }}>{formData.subSubCategory}</strong>
+                            </>
+                          )}
+                          <span style={{
+                            marginLeft: 'auto',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            background: '#0F766E',
+                            color: '#FFFFFF'
+                          }}>
+                            {!hasL2 ? 'L1 Leaf' : (!hasL3 || !formData.subSubCategory) ? 'L2 Leaf' : 'L3 Leaf'}
+                          </span>
+                        </div>
+                      </div>
                     )}
                   </div>
-                  <select
-                    required
-                    value={formData.productTypeId}
-                    onChange={e => handleProductTypeChange(e.target.value)}
-                    style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none', background: '#F0FDFA', color: '#0F766E' }}
-                  >
-                    <option value="" disabled>-- Select Product Type * --</option>
-                    {(productTypes || []).filter(t => (t.lifecycle_status || t.status) === 'ACTIVE').map(t => (
-                      <option key={t.product_type_id || t.id} value={t.product_type_id || t.id}>
-                        {t.product_type_name || t.name} ({t.product_type_id || t.id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Dependent Dropdowns Row: Category & Sub-Category */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  {/* Category * */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Category *
-                      </label>
-                      <span style={{ fontSize: 11, color: '#64748B' }}>
-                        {dependentL1Categories.length} available
-                      </span>
-                    </div>
-                    <select
-                      required
-                      value={formData.category}
-                      onChange={e => handleCategoryChange(e.target.value)}
-                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF' }}
-                    >
-                      <option value="">-- Select Category * --</option>
-                      {dependentL1Categories.map(cat => (
-                        <option key={cat} value={cat}>
-                          {cat}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Sub-Category * */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Sub-Category *
-                      </label>
-                      <span style={{ fontSize: 11, color: '#64748B' }}>
-                        {dependentL2SubCategories.length} available
-                      </span>
-                    </div>
-                    <select
-                      required
-                      value={formData.subCategory}
-                      onChange={e => handleSubCategoryChange(e.target.value)}
-                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF' }}
-                    >
-                      <option value="">-- Select Sub-Category * --</option>
-                      {dependentL2SubCategories.map(sub => (
-                        <option key={sub} value={sub}>
-                          {sub}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Dependent Dropdowns Row: Sub-Sub-Category & Brand */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  {/* Sub-Sub-Category */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Sub-Sub-Category (Optional)
-                      </label>
-                      {formData.categoryId && (
-                        <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
-                          Cat ID: {formData.categoryId}
-                        </span>
-                      )}
-                    </div>
-                    <select
-                      value={formData.subSubCategory}
-                      onChange={e => handleSubSubCategoryChange(e.target.value)}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF' }}
-                    >
-                      <option value="">-- {dependentL3SubSubCategories.length === 0 ? 'None (Direct Category Selection)' : 'Select Sub-Sub-Category (Optional)'} --</option>
-                      {dependentL3SubSubCategories.map(subSub => (
-                        <option key={subSub} value={subSub}>
-                          {subSub}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Brand (Optional) */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                        Product Brand <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>
-                      </label>
-                      {formData.brandId ? (
-                        <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#D97706' }}>
-                          ID: {formData.brandId}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#94A3B8' }}>
-                          ID: —
-                        </span>
-                      )}
-                    </div>
-                    <select
-                      value={formData.brandId}
-                      onChange={e => setFormData({ ...formData, brandId: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', color: '#0F172A' }}
-                    >
-                      <option value="">-- No Brand / Unbranded (Generic) --</option>
-                      {(brands || []).filter(b => (b.lifecycle_status || b.status || 'ACTIVE').toUpperCase() === 'ACTIVE').map(b => (
-                        <option key={b.brand_id || b.id} value={b.brand_id || b.id}>
-                          {b.brand_name || b.name} ({b.brand_id || b.id})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Read-only Derived Category Hierarchy Display */}
-                <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.05em' }}>
-                      Resolved Master Category Hierarchy:
-                    </div>
-                    <div style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
-                      Database Category ID: {formData.categoryId || 'Auto-resolved'}
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Type:</span>
-                      <strong style={{ color: '#0F172A' }}>{formData.productTypeId}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Category:</span>
-                      <strong style={{ color: '#0F172A' }}>{formData.category || '—'}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Sub-Category:</span>
-                      <strong style={{ color: '#0F766E' }}>{formData.subCategory || 'General'}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', fontSize: 11 }}>Sub-Sub-Category:</span>
-                      <strong style={{ color: '#0284C7' }}>{formData.subSubCategory || '—'}</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* ────────────────────────────────────────────────────────── */}
-              {/* 2. PRODUCT TYPE ATTRIBUTES (DYNAMIC BY PRODUCT TYPE) */}
+              {/* 2. DYNAMIC PRODUCT SPECIFICATIONS (ATTRIBUTES) */}
               {/* ────────────────────────────────────────────────────────── */}
               <div style={{ background: '#FFFFFF', border: '1.5px solid #99F6E4', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Sparkles size={14} /> 2. PRODUCT TYPE ATTRIBUTES (SPECIFICATIONS)
+                    <Sparkles size={14} /> 2. DYNAMIC PRODUCT SPECIFICATIONS (ATTRIBUTES)
                   </div>
-                  <span style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    padding: '2px 8px',
-                    borderRadius: 12,
-                    background: '#F0FDFA',
-                    color: '#0F766E',
-                    border: '1px solid #99F6E4'
-                  }}>
-                    {modalProductTypeAttributes.length} Attributes Applicable
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      background: '#F0FDFA',
+                      color: '#0F766E',
+                      border: '1px solid #99F6E4'
+                    }}>
+                      {modalProductTypeAttributes.length} Specifications Assigned
+                    </span>
+                    {availableToSelectModalAttributes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsSelectingModalAttr(!isSelectingModalAttr)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          background: '#0F766E',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Plus size={12} />
+                        <span>+ Select Attribute</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
+                {isSelectingModalAttr && availableToSelectModalAttributes.length > 0 && (
+                  <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <select
+                      autoFocus
+                      defaultValue=""
+                      onChange={e => {
+                        const attrId = e.target.value;
+                        if (attrId) {
+                          setExtraSelectedAttributeIds(prev => [...prev, attrId]);
+                          setFormAttrValues(prev => ({ ...prev, [attrId]: '' }));
+                          setIsSelectingModalAttr(false);
+                        }
+                      }}
+                      style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1.5px solid #0F766E', fontSize: 12.5, fontWeight: 600, background: '#FFF' }}
+                    >
+                      <option value="">-- Choose Attribute Definition to Assign (e.g. Strength, Composition, Storage Temperature) --</option>
+                      {availableToSelectModalAttributes.map(m => (
+                        <option key={m.attribute_id || m.id} value={m.attribute_id || m.id}>
+                          {m.attribute_name || m.name} ({m.data_type || m.dataType}{m.unit_of_measure ? ` - ${m.unit_of_measure}` : ''})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setIsSelectingModalAttr(false)}
+                      style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#64748B', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
                 <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.4 }}>
-                  Attributes applicable to Product Type <strong>{(productTypes.find(p => (p.product_type_id || p.id) === formData.productTypeId)?.product_type_name) || formData.productTypeId}</strong>. Values are saved to <code>PRODUCT_ATTRIBUTE</code> table.
+                  Dynamic product specifications (e.g. Strength, Dosage Form, Pack Size, Composition, Storage Temperature). Pre-allocated generic columns in PostgreSQL store values without requiring schema changes.
                 </div>
 
                 {modalProductTypeAttributes.length === 0 ? (
@@ -3380,7 +3357,7 @@ export const ProductCatalogModule: React.FC = () => {
                     color: '#64748B',
                     textAlign: 'center'
                   }}>
-                    No attributes are currently assigned to this Product Type. You can configure attributes in <strong>Product Type Master</strong>.
+                    No specifications currently assigned. Click <strong>+ Select Attribute</strong> above to add dynamic product specifications.
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -3498,47 +3475,46 @@ export const ProductCatalogModule: React.FC = () => {
                   <Package size={14} /> 3. PRODUCT INFORMATION
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                    Product Short Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Paracetamol 650"
+                    value={formData.shortName}
+                    onChange={e => setFormData({ ...formData, shortName: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
                   <div>
                     <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      Product Code * (UNIQUE)
+                      Product Name *
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. PRD001001"
-                      value={formData.code}
-                      onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', fontWeight: 800, color: '#0F766E', outline: 'none' }}
+                      placeholder="e.g. Paracetamol 650mg Tablets"
+                      value={formData.name}
+                      onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none' }}
                     />
                   </div>
 
                   <div>
                     <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      Product Short Name
+                      Pharma Reference <span style={{ fontWeight: 400, color: '#94A3B8' }}>(e.g. IP, BP, USP)</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Paracetamol 650"
-                      value={formData.shortName}
-                      onChange={e => setFormData({ ...formData, shortName: e.target.value })}
+                      placeholder="e.g. IP, BP, USP"
+                      value={formData.pharmaReference}
+                      onChange={e => setFormData({ ...formData, pharmaReference: e.target.value })}
                       style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                    Product Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Paracetamol 650mg Tablets"
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none' }}
-                  />
                 </div>
 
                 <div>
@@ -3627,11 +3603,12 @@ export const ProductCatalogModule: React.FC = () => {
                       onChange={e => setFormData({ ...formData, lifecycleStatus: e.target.value as LifecycleStatus })}
                       style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, color: '#0F766E', background: '#F0FDFA' }}
                     >
-                      <option value="DRAFT">DRAFT</option>
                       <option value="ACTIVE">ACTIVE</option>
-                      <option value="INACTIVE">INACTIVE</option>
                       <option value="DISCONTINUED">DISCONTINUED</option>
+                      <option value="END_OF_LIFE">END_OF_LIFE</option>
                       <option value="EOL">EOL (End of Life)</option>
+                      <option value="DRAFT">DRAFT</option>
+                      <option value="INACTIVE">INACTIVE</option>
                     </select>
                   </div>
 
@@ -3767,7 +3744,7 @@ export const ProductCatalogModule: React.FC = () => {
                   PRODUCT ATTRIBUTES
                 </div>
                 <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 2 }}>
-                  Product: <strong style={{ color: '#0F766E' }}>{selectedProduct.product_name || selectedProduct.name}</strong> ({selectedProduct.product_code || selectedProduct.code})
+                  Product: <strong style={{ color: '#0F766E' }}>{selectedProduct.product_name || selectedProduct.name}</strong>
                 </div>
               </div>
               <button onClick={() => setIsAttrModalOpen(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}>
@@ -3936,7 +3913,7 @@ export const ProductCatalogModule: React.FC = () => {
               <div>
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0F172A' }}>Add Product Price Rule</h3>
                 <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748B' }}>
-                  {selectedProduct.product_name || selectedProduct.name} ({selectedProduct.product_code || selectedProduct.code})
+                  {selectedProduct.product_name || selectedProduct.name}
                 </p>
               </div>
               <button type="button" onClick={() => setIsQuickPriceOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
@@ -3997,7 +3974,7 @@ export const ProductCatalogModule: React.FC = () => {
                         const mfg = manufacturers.find(mf => mf.id === m.manufacturer_id || mf.manufacturer_id === m.manufacturer_id);
                         return (
                           <option key={m.id || m.product_manufacturer_id} value={m.id || m.product_manufacturer_id}>
-                            {mfg?.manufacturer_name || m.manufacturer_name} ({m.manufacturer_product_code || m.manufacturer_sku})
+                            {mfg?.manufacturer_name || m.manufacturer_name}
                           </option>
                         );
                       })}
@@ -4133,7 +4110,7 @@ export const ProductCatalogModule: React.FC = () => {
               <div>
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0F172A' }}>Add Product Tax Specification</h3>
                 <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748B' }}>
-                  {selectedProduct.product_name || selectedProduct.name} ({selectedProduct.product_code || selectedProduct.code})
+                  {selectedProduct.product_name || selectedProduct.name}
                 </p>
               </div>
               <button type="button" onClick={() => setIsQuickTaxOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
@@ -4244,7 +4221,7 @@ export const ProductCatalogModule: React.FC = () => {
               <div>
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0F172A' }}>Add UOM Conversion</h3>
                 <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748B' }}>
-                  {selectedProduct.product_name || selectedProduct.name} ({selectedProduct.product_code || selectedProduct.code})
+                  {selectedProduct.product_name || selectedProduct.name}
                 </p>
               </div>
               <button type="button" onClick={() => setIsQuickUomOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
@@ -4351,7 +4328,7 @@ export const ProductCatalogModule: React.FC = () => {
                   {editingMapping ? 'Edit Manufacturer Mapping' : 'Add Manufacturer Mapping'}
                 </h3>
                 <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
-                  Product: {selectedProduct.product_name || selectedProduct.name} ({selectedProduct.product_code || selectedProduct.code})
+                  Product: {selectedProduct.product_name || selectedProduct.name}
                 </div>
               </div>
               <button type="button" onClick={() => setIsMappingModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>

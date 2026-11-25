@@ -226,7 +226,7 @@ export const AdminMapProductModal: React.FC<AdminMapProductModalProps> = ({
               <option value="" disabled>-- Select a Canonical Product ({filteredProducts.length} available) --</option>
               {filteredProducts.map((p) => (
                 <option key={p.id || p.product_id} value={p.id || p.product_id}>
-                  {p.product_code || p.code} — {p.name} ({p.category || 'General'})
+                  {p.name} ({p.category || 'General'})
                 </option>
               ))}
             </select>
@@ -258,7 +258,7 @@ export const AdminMapProductModal: React.FC<AdminMapProductModalProps> = ({
               <option value="" disabled>-- Select Verified Facility ({filteredMfgs.length} available) --</option>
               {filteredMfgs.map((m) => (
                 <option key={m.id || m.manufacturer_id} value={m.id || m.manufacturer_id}>
-                  {m.companyName || m.name || m.manufacturer_name} ({m.code || m.manufacturer_code || 'MFG'})
+                  {m.companyName || m.name || m.manufacturer_name}
                 </option>
               ))}
             </select>

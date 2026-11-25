@@ -84,15 +84,20 @@ class AuthApiService {
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        const errorMsg = data?.message || data?.error || (
-          response.status === 401 
-            ? 'Invalid email/username or password. Please verify your credentials or register.'
-            : response.status === 403 
-              ? 'Account inactive or unauthorized portal requested.'
-              : response.status === 423
-                ? 'Account temporarily locked due to failed login attempts. Please contact administrator.'
-                : `Login failed (HTTP ${response.status})`
-        );
+        let errorMsg = '';
+        if (data?.message) {
+          errorMsg = Array.isArray(data.message) ? data.message.join(', ') : String(data.message);
+        } else if (data?.error) {
+          errorMsg = String(data.error);
+        } else if (response.status === 401) {
+          errorMsg = 'Invalid email/username or password. Please verify your credentials or register.';
+        } else if (response.status === 403) {
+          errorMsg = 'Access denied: unauthorized portal or inactive account.';
+        } else if (response.status === 423) {
+          errorMsg = 'Account temporarily locked due to failed login attempts. Please contact administrator.';
+        } else {
+          errorMsg = `Login failed (HTTP ${response.status})`;
+        }
         throw new Error(errorMsg);
       }
 

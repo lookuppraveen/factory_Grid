@@ -8,6 +8,13 @@ import {
   CheckCircle2, AlertCircle, X, Info, Filter, ArrowRight,
   Package, Factory, Star, Eye, Calendar, Clock, Hash
 } from 'lucide-react';
+import {
+  MasterBreadcrumbs,
+  MasterPageHeader,
+  MasterStatsStrip,
+  MasterStatusBadge,
+  TableActionGroup
+} from '../common/MasterComponents';
 
 export const ProductManufacturerMappingModule: React.FC = () => {
   const {
@@ -27,7 +34,7 @@ export const ProductManufacturerMappingModule: React.FC = () => {
   const [selectedProductId, setSelectedProductId] = useState<string>('ALL');
   const [selectedManufacturerId, setSelectedManufacturerId] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
-  const [preferredOnly, setPreferredOnly] = useState(false);
+  const [preferredFilter, setPreferredFilter] = useState<'ALL' | 'PREFERRED' | 'STANDARD'>('ALL');
 
   // View Details Modal State
   const [selectedMappingForDetail, setSelectedMappingForDetail] = useState<ProductManufacturer | null>(null);
@@ -129,7 +136,10 @@ export const ProductManufacturerMappingModule: React.FC = () => {
 
       // Preferred filter
       const isPref = !!(m.is_preferred ?? m.isPreferred);
-      const matchesPreferred = !preferredOnly || isPref;
+      const matchesPreferred =
+        preferredFilter === 'ALL' ||
+        (preferredFilter === 'PREFERRED' && isPref) ||
+        (preferredFilter === 'STANDARD' && !isPref);
 
       return matchesSearch && matchesProduct && matchesMfg && matchesStatus && matchesPreferred;
     }).sort((a, b) => {
@@ -138,7 +148,7 @@ export const ProductManufacturerMappingModule: React.FC = () => {
       if (dateB !== dateA) return dateB - dateA;
       return (b.product_manufacturer_id || (b as any).id || '').localeCompare(a.product_manufacturer_id || (a as any).id || '');
     });
-  }, [mappings, products, manufacturers, searchTerm, selectedProductId, selectedManufacturerId, selectedStatus, preferredOnly]);
+  }, [mappings, products, manufacturers, searchTerm, selectedProductId, selectedManufacturerId, selectedStatus, preferredFilter]);
 
   const {
     paginatedItems: paginatedMappings,
@@ -146,7 +156,7 @@ export const ProductManufacturerMappingModule: React.FC = () => {
     resetPage
   } = usePagination(filteredMappings, {
     initialPageSize: 10,
-    resetDeps: [searchTerm, selectedProductId, selectedManufacturerId, selectedStatus, preferredOnly]
+    resetDeps: [searchTerm, selectedProductId, selectedManufacturerId, selectedStatus, preferredFilter]
   });
 
   // KPI Calculations
@@ -354,131 +364,35 @@ export const ProductManufacturerMappingModule: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 48 }}>
 
-      {/* ── Enterprise Header ────────────────────────────────────── */}
-      <div style={{
-        background: '#FFFFFF',
-        border: '1px solid #E2E8F0',
-        borderRadius: 12,
-        padding: 24,
-        boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 16
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            background: 'rgba(15, 118, 110, 0.10)',
-            border: '1px solid rgba(15, 118, 110, 0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <Link2 size={26} style={{ color: '#0F766E' }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0F766E' }}>
-              CATALOG &amp; PRODUCT MANAGEMENT · RELATIONSHIP MASTER
-            </div>
-            <h1 style={{ margin: '2px 0 0 0', fontSize: 24, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
-              Product Manufacturer
-            </h1>
-            <p style={{ margin: '3px 0 0 0', fontSize: 13, color: '#475569', fontWeight: 500 }}>
-              Product-to-manufacturer relationship and mapping management
-            </p>
-          </div>
-        </div>
+      {/* ── Breadcrumbs Bar ── */}
+      <MasterBreadcrumbs
+        pageTitle="Product Manufacturer Mapping"
+        onBack={() => setActiveTab?.('settings')}
+      />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={() => setActiveTab('products')}
-            style={{
-              padding: '10px 16px',
-              borderRadius: 8,
-              background: '#F8FAFC',
-              color: '#334155',
-              border: '1px solid #CBD5E1',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-          >
-            <Package size={15} /> Product Catalog
-          </button>
-          <button
-            onClick={() => setActiveTab('manufacturer-master')}
-            style={{
-              padding: '10px 16px',
-              borderRadius: 8,
-              background: '#F8FAFC',
-              color: '#334155',
-              border: '1px solid #CBD5E1',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-          >
-            <Factory size={15} /> Manufacturer Master
-          </button>
-          <button
-            onClick={handleOpenAdd}
-            style={{
-              padding: '10px 20px',
-              borderRadius: 8,
-              background: '#0F766E',
-              color: '#FFFFFF',
-              border: 'none',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
-            }}
-          >
-            <Plus size={16} /> + Add Product Manufacturer
-          </button>
-        </div>
-      </div>
+      {/* ── Enterprise Header ── */}
+      <MasterPageHeader
+        icon={Link2}
+        domainLabel="CATALOG & RELATIONSHIP MASTER"
+        title="Product Manufacturer Mapping"
+        description="Manage product-to-manufacturer relationships and manufacturer-specific product identifiers."
+        primaryAction={{
+          label: "Add Product Manufacturer",
+          icon: Plus,
+          onClick: handleOpenAdd
+        }}
+      />
 
-      {/* ── KPI Stat Summary Cards ───────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Total Mappings</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#0F172A', marginTop: 4 }}>{stats.total}</div>
-          <div style={{ fontSize: 11.5, color: '#0F766E', marginTop: 2, fontWeight: 600 }}>PRODUCT_MANUFACTURER records</div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Active Relationships</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#15803D', marginTop: 4 }}>{stats.active}</div>
-          <div style={{ fontSize: 11.5, color: '#475569', marginTop: 2 }}>Eligible for active catalog supply</div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Products Mapped</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#0F766E', marginTop: 4 }}>{stats.uniqueProducts}</div>
-          <div style={{ fontSize: 11.5, color: '#475569', marginTop: 2 }}>Unique central products</div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Preferred Suppliers</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#B45309', marginTop: 4 }}>★ {stats.preferredCount}</div>
-          <div style={{ fontSize: 11.5, color: '#B45309', marginTop: 2, fontWeight: 600 }}>Designated primary mappings</div>
-        </div>
-      </div>
+      {/* ── Compact Statistics Strip ── */}
+      <MasterStatsStrip
+        stats={[
+          { label: 'TOTAL MAPPINGS', value: stats.total },
+          { label: 'ACTIVE', value: stats.active, color: '#15803D' },
+          { label: 'PRODUCTS MAPPED', value: stats.uniqueProducts, color: '#0F766E' },
+          { label: 'PREFERRED SUPPLIERS', value: `★ ${stats.preferredCount}`, color: '#B45309' }
+        ]}
+        modelTag="Canonical Data Model: PRODUCT_MANUFACTURER"
+      />
 
       {/* ── Search & Multi-Filter Controls Bar ────────────────────── */}
       <div style={{
@@ -598,36 +512,37 @@ export const ProductManufacturerMappingModule: React.FC = () => {
             </select>
           </div>
 
-          {/* Filter: Preferred Only Toggle */}
-          <button
-            type="button"
-            onClick={() => setPreferredOnly(!preferredOnly)}
-            style={{
-              padding: '8px 12px',
-              fontSize: 12.5,
-              fontWeight: 700,
-              borderRadius: 6,
-              border: preferredOnly ? '1.5px solid #F59E0B' : '1px solid #CBD5E1',
-              background: preferredOnly ? '#FFFBEB' : '#FFFFFF',
-              color: preferredOnly ? '#B45309' : '#475569',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-          >
-            <Star size={14} style={{ color: preferredOnly ? '#F59E0B' : '#94A3B8', fill: preferredOnly ? '#F59E0B' : 'none' }} />
-            {preferredOnly ? '★ Preferred Only' : 'Filter Preferred'}
-          </button>
+          {/* Preference Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Preference:</span>
+            <select
+              value={preferredFilter}
+              onChange={e => setPreferredFilter(e.target.value as any)}
+              style={{
+                padding: '8px 12px',
+                fontSize: 12.5,
+                background: preferredFilter !== 'ALL' ? '#FFFBEB' : '#FFFFFF',
+                border: preferredFilter !== 'ALL' ? '1.5px solid #F59E0B' : '1px solid #CBD5E1',
+                borderRadius: 6,
+                color: preferredFilter !== 'ALL' ? '#B45309' : '#0F172A',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <option value="ALL">All Mappings</option>
+              <option value="PREFERRED">★ Preferred Only</option>
+              <option value="STANDARD">Standard Only</option>
+            </select>
+          </div>
 
-          {(searchTerm || selectedProductId !== 'ALL' || selectedManufacturerId !== 'ALL' || selectedStatus !== 'ALL' || preferredOnly) && (
+          {(searchTerm || selectedProductId !== 'ALL' || selectedManufacturerId !== 'ALL' || selectedStatus !== 'ALL' || preferredFilter !== 'ALL') && (
             <button
               onClick={() => {
                 setSearchTerm('');
                 setSelectedProductId('ALL');
                 setSelectedManufacturerId('ALL');
                 setSelectedStatus('ALL');
-                setPreferredOnly(false);
+                setPreferredFilter('ALL');
               }}
               style={{
                 background: 'none',
@@ -667,23 +582,14 @@ export const ProductManufacturerMappingModule: React.FC = () => {
 
       {/* ── Main PRODUCT_MANUFACTURER Table ───────────────────────── */}
       <div style={{ background: '#FFFFFF', borderRadius: 12, border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)', overflowX: 'auto' }}>
-        <table style={{ width: '100%', minWidth: 1650, borderCollapse: 'collapse', textAlign: 'left' }}>
+        <table style={{ width: '100%', minWidth: 1200, borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 170 }}>
-                PRODUCT MANUFACTURER ID
-              </th>
-              <th style={{ padding: '12px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 190 }}>
+              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>
                 PRODUCT
               </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110 }}>
-                PRODUCT ID
-              </th>
-              <th style={{ padding: '12px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 190 }}>
+              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>
                 MANUFACTURER
-              </th>
-              <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 125 }}>
-                MANUFACTURER ID
               </th>
               <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 150 }}>
                 MANUFACTURER PRODUCT CODE
@@ -720,7 +626,7 @@ export const ProductManufacturerMappingModule: React.FC = () => {
           <tbody>
             {filteredMappings.length === 0 ? (
               <tr>
-                <td colSpan={15} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                <td colSpan={12} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
                   <Link2 size={36} style={{ color: '#94A3B8', marginBottom: 10, display: 'block', margin: '0 auto 10px' }} />
                   <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No product-manufacturer mappings found.</div>
                   <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 18 }}>
@@ -773,62 +679,31 @@ export const ProductManufacturerMappingModule: React.FC = () => {
                     onMouseEnter={e => e.currentTarget.style.background = isPref ? '#FEF9E7' : '#F8FAFC'}
                     onMouseLeave={e => e.currentTarget.style.background = isPref ? '#FFFDF5' : '#FFFFFF'}
                   >
-                    {/* 1. PRODUCT MANUFACTURER ID */}
-                    <td style={{ padding: '12px 14px', fontSize: 12, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        padding: '3px 7px',
-                        borderRadius: 4,
-                        background: '#F0FDFA',
-                        border: '1px solid #CCFBF1',
-                        display: 'inline-block'
-                      }}>
-                        {pmId}
-                      </span>
-                    </td>
-
-                    {/* 2. PRODUCT */}
-                    <td style={{ padding: '12px 12px' }}>
+                    {/* 1. PRODUCT */}
+                    <td style={{ padding: '12px 14px' }}>
                       <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', lineHeight: 1.3 }}>
                         {prdName}
                       </div>
-                      <div style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace', marginTop: 1 }}>
-                        {prdCode}
-                      </div>
                     </td>
 
-                    {/* 3. PRODUCT ID */}
-                    <td style={{ padding: '12px 10px', fontSize: 12, fontWeight: 600, color: '#334155', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {resolvedProdId}
-                    </td>
-
-                    {/* 4. MANUFACTURER */}
-                    <td style={{ padding: '12px 12px' }}>
+                    {/* 2. MANUFACTURER */}
+                    <td style={{ padding: '12px 14px' }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
                         {mfgName}
                       </div>
-                      {mfgCode && (
-                        <div style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace', marginTop: 1 }}>
-                          {mfgCode}
-                        </div>
-                      )}
                     </td>
 
-                    {/* 5. MANUFACTURER ID */}
-                    <td style={{ padding: '12px 10px', fontSize: 12, fontWeight: 600, color: '#334155', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {resolvedMfgId}
-                    </td>
-
-                    {/* 6. MANUFACTURER PRODUCT CODE */}
+                    {/* 3. MANUFACTURER PRODUCT CODE */}
                     <td style={{ padding: '12px 10px', fontSize: 12, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                       {mfgProdCode}
                     </td>
 
-                    {/* 7. MANUFACTURER PART NUMBER */}
+                    {/* 4. MANUFACTURER PART NUMBER */}
                     <td style={{ padding: '12px 10px', fontSize: 12, color: '#334155', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                       {mfgPartNum}
                     </td>
 
-                    {/* 8. MANUFACTURER SKU */}
+                    {/* 5. MANUFACTURER SKU */}
                     <td style={{ padding: '12px 10px', fontSize: 12, color: '#334155', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                       {mfgSku}
                     </td>
@@ -891,105 +766,25 @@ export const ProductManufacturerMappingModule: React.FC = () => {
                     </td>
 
                     {/* 15. ACTIONS */}
-                    <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenView(mapping)}
-                          title="View Complete Mapping Details"
-                          style={{
-                            padding: '5px 8px',
-                            borderRadius: 4,
-                            background: '#F8FAFC',
-                            border: '1px solid #CBD5E1',
-                            color: '#334155',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 3
-                          }}
-                        >
-                          <Eye size={12} /> View
-                        </button>
-                        {!isPref && (
-                          <button
-                            type="button"
-                            onClick={() => handleSetPreferred(mapping)}
-                            title="Set as Preferred Manufacturer for this product"
-                            style={{
-                              padding: '5px 8px',
-                              borderRadius: 4,
-                              background: '#FFFBEB',
-                              border: '1px solid #FDE68A',
-                              color: '#B45309',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 3
-                            }}
-                          >
-                            ★ Preferred
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(mapping)}
-                          title="Edit Mapping Record"
-                          style={{
-                            padding: '5px 8px',
-                            borderRadius: 4,
-                            background: '#F0FDFA',
-                            border: '1px solid #99F6E4',
-                            color: '#0F766E',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 3
-                          }}
-                        >
-                          <Edit3 size={12} /> Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleStatus(mapping)}
-                          title={badge.label === 'ACTIVE' ? 'Deactivate Mapping' : 'Activate Mapping'}
-                          style={{
-                            padding: '5px 7px',
-                            borderRadius: 4,
-                            background: badge.label === 'ACTIVE' ? '#FEF2F2' : '#F0FDF4',
-                            border: badge.label === 'ACTIVE' ? '1px solid #FECACA' : '1px solid #BBF7D0',
-                            color: badge.label === 'ACTIVE' ? '#DC2626' : '#16A34A',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Power size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemove(mapping)}
-                          title="Remove Mapping Relationship"
-                          style={{
-                            padding: '5px 7px',
-                            borderRadius: 4,
-                            background: '#FFF',
-                            border: '1px solid #CBD5E1',
-                            color: '#64748B',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                      <TableActionGroup
+                        onView={() => handleOpenView(mapping)}
+                        onEdit={() => handleOpenEdit(mapping)}
+                        status={statusVal}
+                        onToggleStatus={() => handleToggleStatus(mapping)}
+                        onDelete={() => handleRemove(mapping)}
+                        customActions={!isPref ? [
+                          {
+                            label: 'Preferred',
+                            icon: Star,
+                            onClick: () => handleSetPreferred(mapping),
+                            title: 'Set as Preferred Manufacturer for this product',
+                            color: '#B45309',
+                            borderColor: '#FDE68A',
+                            hoverBg: '#FFFBEB'
+                          }
+                        ] : []}
+                      />
                     </td>
                   </tr>
                 );
@@ -1117,36 +912,20 @@ export const ProductManufacturerMappingModule: React.FC = () => {
                     {/* Product Box */}
                     <div style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0F766E', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
-                        <Package size={14} /> Product (FK → PRODUCT)
+                        <Package size={14} /> Product
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', marginTop: 4 }}>
                         {prdName}
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px dashed #CBD5E1', fontSize: 11.5 }}>
-                        <span style={{ color: '#64748B' }}>Product ID:</span>
-                        <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0F172A' }}>{resolvedProdId}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11.5 }}>
-                        <span style={{ color: '#64748B' }}>Product Code:</span>
-                        <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0F766E' }}>{prdCode}</span>
                       </div>
                     </div>
 
                     {/* Manufacturer Box */}
                     <div style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0F766E', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
-                        <Factory size={14} /> Manufacturer (FK → MANUFACTURER)
+                        <Factory size={14} /> Manufacturer
                       </div>
                       <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', marginTop: 4 }}>
                         {mfgName}
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px dashed #CBD5E1', fontSize: 11.5 }}>
-                        <span style={{ color: '#64748B' }}>Manufacturer ID:</span>
-                        <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0F172A' }}>{resolvedMfgId}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11.5 }}>
-                        <span style={{ color: '#64748B' }}>Manufacturer Code:</span>
-                        <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#0F766E' }}>{mfgCode}</span>
                       </div>
                     </div>
                   </div>
@@ -1369,30 +1148,6 @@ export const ProductManufacturerMappingModule: React.FC = () => {
                 </div>
               )}
 
-              {/* If editing, show read-only relationship key info */}
-              {editingMapping && (
-                <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Product Manufacturer ID</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace', marginTop: 2 }}>
-                      {editingMapping.product_manufacturer_id || editingMapping.id}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Product ID</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', fontFamily: 'monospace', marginTop: 2 }}>
-                      {editingMapping.product_id || editingMapping.productId}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Manufacturer ID</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', fontFamily: 'monospace', marginTop: 2 }}>
-                      {editingMapping.manufacturer_id || editingMapping.manufacturerId}
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Product Selection */}
               <div>
                 <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
@@ -1428,7 +1183,7 @@ export const ProductManufacturerMappingModule: React.FC = () => {
                   <option value="" disabled>-- Select Product --</option>
                   {(products || []).map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.product_code || p.code} · {p.product_name || p.name}
+                      {p.product_name || p.name}
                     </option>
                   ))}
                 </select>
@@ -1458,7 +1213,7 @@ export const ProductManufacturerMappingModule: React.FC = () => {
                   <option value="" disabled>-- Select Manufacturer --</option>
                   {(activeManufacturers || []).map(m => (
                     <option key={m.manufacturer_id || m.id} value={m.manufacturer_id || m.id}>
-                      {m.manufacturer_name || m.companyName || m.name} ({m.manufacturer_code || (m as any).code || m.manufacturer_id || m.id})
+                      {m.manufacturer_name || m.companyName || m.name}
                     </option>
                   ))}
                 </select>

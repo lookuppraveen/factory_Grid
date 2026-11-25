@@ -15,6 +15,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RfqModule } from './modules/rfq/rfq.module';
 import { MarginsModule } from './modules/margins/margins.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 /**
  * One deployable app made of modules that keep the plan's service boundaries.
@@ -52,6 +53,7 @@ import { MarginsModule } from './modules/margins/margins.module';
     CatalogModule,
     RfqModule,
     MarginsModule,
+    AdminModule,
   ],
 
   controllers: [HealthController],

@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 import { PageableQueryDto } from '../../../common/pagination/pageable.dto';
 
-export const VALID_LIFECYCLE_STATUSES = ['DRAFT', 'ACTIVE', 'INACTIVE', 'DISCONTINUED', 'EOL'] as const;
+export const VALID_LIFECYCLE_STATUSES = ['ACTIVE', 'DISCONTINUED', 'END_OF_LIFE', 'DRAFT', 'INACTIVE', 'EOL'] as const;
 
 export class CreateCatalogProductDto {
   @ApiPropertyOptional({ example: 'prd_01', description: 'Product database ID' })
@@ -63,6 +63,12 @@ export class CreateCatalogProductDto {
   @IsString()
   @MaxLength(100)
   dosageForm?: string;
+
+  @ApiPropertyOptional({ example: 'IP', description: 'Pharmacopoeial reference standard (e.g. IP, BP, USP)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  pharmaReference?: string;
 
   @ApiPropertyOptional({ example: 'pt_med', description: 'Product type ID from Category Master' })
   @IsOptional()
@@ -193,6 +199,10 @@ export class CreateCatalogProductDto {
 
   @IsOptional()
   @IsString()
+  pharma_reference?: string;
+
+  @IsOptional()
+  @IsString()
   brand_id?: string;
 
   @IsOptional()
@@ -258,6 +268,16 @@ export class UpdateCatalogProductDto {
   @IsString()
   @MaxLength(100)
   dosageForm?: string;
+
+  @ApiPropertyOptional({ example: 'IP', description: 'Pharmacopoeial reference standard (e.g. IP, BP, USP)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  pharmaReference?: string;
+
+  @IsOptional()
+  @IsString()
+  pharma_reference?: string;
 
   @ApiPropertyOptional({ example: 'pt_med' })
   @IsOptional()
@@ -384,10 +404,16 @@ export class ProductQueryDto extends PageableQueryDto {
   @IsString()
   productTypeId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by lifecycle status' })
+  @ApiPropertyOptional({ description: 'Filter by lifecycle status (ACTIVE, DISCONTINUED, END_OF_LIFE, ALL)' })
   @IsOptional()
   @IsString()
   lifecycleStatus?: string;
+
+  @ApiPropertyOptional({ description: 'Buyer search mode: defaults to ACTIVE products only and excludes DISCONTINUED and END_OF_LIFE' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  buyerView?: boolean;
 
   @ApiPropertyOptional({ description: 'Only return active products' })
   @IsOptional()
@@ -450,6 +476,16 @@ export class ProductBulkUploadItemDto {
   @IsOptional()
   @IsString()
   dosageForm?: string;
+
+  @ApiPropertyOptional({ description: 'Pharmacopoeia Reference standard (e.g. IP, BP, USP)', example: 'IP' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  pharmaReference?: string;
+
+  @IsOptional()
+  @IsString()
+  pharma_reference?: string;
 
   @ApiPropertyOptional({ description: 'Pack Size', example: '10 x 10 Strip' })
   @IsOptional()

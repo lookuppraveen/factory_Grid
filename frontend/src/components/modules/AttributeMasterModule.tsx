@@ -1,11 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AttributeMaster, AttributeDataType } from '../../types';
 import { PaginationControl } from '../common/PaginationControl';
 import { usePagination } from '../../hooks/usePagination';
 import {
-  Search, Plus, Edit3, Power, Eye, X, Check, AlertCircle, Sparkles, Layers, Trash2, Sliders
+  Search, Plus, Edit3, Power, Eye, X, Check, AlertCircle, Sparkles, Layers, Trash2, Sliders, MoreVertical
 } from 'lucide-react';
+import {
+  MasterBreadcrumbs,
+  MasterPageHeader,
+  MasterStatsStrip,
+  MasterStatusBadge
+} from '../common/MasterComponents';
 
 const DATA_TYPES: AttributeDataType[] = ['TEXT', 'NUMBER', 'DECIMAL', 'BOOLEAN', 'DATE', 'LIST'];
 
@@ -20,13 +26,36 @@ export const AttributeMasterModule: React.FC = () => {
     productTypeAttributes,
     addProductTypeAttribute,
     removeProductTypeAttribute,
-    updateProductTypeAttribute
+    updateProductTypeAttribute,
+    setActiveTab
   } = useApp();
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDataType, setSelectedDataType] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+
+  // Single active row dropdown state for standardized Actions menu (matching Product Type Master)
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-actions-menu]')) {
+        setOpenActionMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenActionMenuId(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -350,64 +379,42 @@ export const AttributeMasterModule: React.FC = () => {
     }
   };
 
+  const totalCount = (attributeMasters || []).length;
+  const activeCount = (attributeMasters || []).filter(a => a.is_active).length;
+  const inactiveCount = totalCount - activeCount;
+  const dataTypeCount = new Set((attributeMasters || []).map(a => a.data_type || a.dataType)).size;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 40 }}>
 
-      {/* ── Enterprise Page Header ─────────────────────────────────── */}
-      <div style={{
-        background: '#FFFFFF',
-        border: '1px solid #E2E8F0',
-        borderRadius: 8,
-        padding: '16px 20px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 12
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 38,
-            height: 38,
-            borderRadius: 8,
-            background: 'rgba(15, 118, 110, 0.08)',
-            border: '1px solid rgba(15, 118, 110, 0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <Sparkles size={20} style={{ color: '#0F766E' }} />
-          </div>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0F172A', letterSpacing: '-0.01em' }}>
-              Attribute Master
-            </h1>
-            <p style={{ margin: '2px 0 0 0', fontSize: 12.5, color: '#64748B' }}>
-              Master catalog specification attributes definition
-            </p>
-          </div>
-        </div>
+      {/* ── Breadcrumbs Bar ── */}
+      <MasterBreadcrumbs
+        pageTitle="Attribute Master"
+        onBack={() => setActiveTab?.('settings')}
+      />
 
-        <button
-          onClick={handleOpenAdd}
-          style={{
-            padding: '8px 16px',
-            borderRadius: 6,
-            background: '#0F766E',
-            color: '#FFFFFF',
-            border: 'none',
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6
-          }}
-        >
-          <Plus size={15} /> Add Attribute
-        </button>
-      </div>
+      {/* ── Enterprise Page Header ── */}
+      <MasterPageHeader
+        icon={Sparkles}
+        domainLabel="SPECIFICATION & ATTRIBUTE MODEL"
+        title="Attribute Master"
+        description="Master catalog specification attributes definition, data types, and product type assignments."
+        primaryAction={{
+          label: "Add Attribute",
+          icon: Plus,
+          onClick: handleOpenAdd
+        }}
+      />
+
+      {/* ── Compact Statistics Strip ── */}
+      <MasterStatsStrip
+        stats={[
+          { label: 'TOTAL ATTRIBUTES', value: totalCount },
+          { label: 'ACTIVE', value: activeCount, color: '#15803D' },
+          { label: 'INACTIVE', value: inactiveCount, color: '#DC2626' },
+          { label: 'DATA TYPES', value: dataTypeCount, color: '#0F766E' }
+        ]}
+      />
 
       {/* ── Search & Filter Controls ─────────────────────────────── */}
       <div style={{
@@ -528,44 +535,33 @@ export const AttributeMasterModule: React.FC = () => {
         )}
       </div>
 
-      {/* ── ATTRIBUTE_MASTER Table ─────────────────────────────────── */}
+      {/* ── Attribute Master Table ─────────────────────────────────── */}
       <div style={{
         background: '#FFFFFF',
         borderRadius: 8,
         border: '1px solid #E2E8F0',
-        overflowX: 'auto'
+        overflowX: 'auto',
+        minHeight: filteredAttributes.length > 0 ? 240 : undefined
       }}>
-        <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', textAlign: 'left' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-              <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', width: 170 }}>
+              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 170 }}>
                 Attribute Code
               </th>
-              <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', minWidth: 170 }}>
+              <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 180 }}>
                 Attribute Name
               </th>
-              <th style={{ padding: '10px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', width: 100 }}>
-                Data Type
-              </th>
-              <th style={{ padding: '10px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', width: 120 }}>
+              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>
                 Unit of Measure
               </th>
-              <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', minWidth: 210 }}>
+              <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 220 }}>
                 Applicable Product Types
               </th>
-              <th style={{ padding: '10px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', width: 85 }}>
-                Filterable
+              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110, textAlign: 'center' }}>
+                Active / Status
               </th>
-              <th style={{ padding: '10px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', width: 90 }}>
-                Searchable
-              </th>
-              <th style={{ padding: '10px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', width: 80 }}>
-                Required
-              </th>
-              <th style={{ padding: '10px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', width: 90 }}>
-                Active
-              </th>
-              <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#475569', textAlign: 'right', width: 115 }}>
+              <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', textAlign: 'right', width: 110 }}>
                 Actions
               </th>
             </tr>
@@ -573,7 +569,7 @@ export const AttributeMasterModule: React.FC = () => {
           <tbody>
             {filteredAttributes.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: '36px 20px', color: '#64748B' }}>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '36px 20px', color: '#64748B' }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#0F172A' }}>No attributes found</div>
                   <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 4, marginBottom: 14 }}>
                     {searchTerm || selectedDataType !== 'ALL' || statusFilter !== 'ALL'
@@ -613,37 +609,33 @@ export const AttributeMasterModule: React.FC = () => {
                     onMouseLeave={e => (e.currentTarget.style.background = '#FFFFFF')}
                   >
                     {/* 1. Attribute Code */}
-                    <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '12px 14px', fontSize: 12, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                       {code}
                     </td>
 
                     {/* 2. Attribute Name */}
-                    <td style={{ padding: '10px 12px' }}>
+                    <td style={{ padding: '12px 16px' }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{name}</div>
+                      {attr.remark && (
+                        <div style={{ fontSize: 11, color: '#64748B', marginTop: 2, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {attr.remark}
+                        </div>
+                      )}
                     </td>
 
-                    {/* 3. Data Type */}
-                    <td style={{ padding: '10px 10px', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontSize: 11,
-                        fontWeight: 600,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        background: '#F1F5F9',
-                        color: '#334155',
-                        border: '1px solid #E2E8F0'
-                      }}>
-                        {attr.data_type}
-                      </span>
+                    {/* 3. Unit of Measure */}
+                    <td style={{ padding: '12px 14px', fontSize: 12.5, color: '#475569' }}>
+                      {uom !== '—' ? (
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#334155', background: '#F8FAFC', padding: '2px 6px', borderRadius: 4, border: '1px solid #E2E8F0' }}>
+                          {uom}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#94A3B8' }}>—</span>
+                      )}
                     </td>
 
-                    {/* 4. Unit of Measure */}
-                    <td style={{ padding: '10px 10px', fontSize: 12.5, color: '#475569' }}>
-                      {uom}
-                    </td>
-
-                    {/* 5. Applicable Product Types */}
-                    <td style={{ padding: '10px 12px' }}>
+                    {/* 4. Applicable Product Types */}
+                    <td style={{ padding: '12px 16px' }}>
                       {assignedPts.length === 0 ? (
                         <span style={{ fontSize: 11, color: '#94A3B8', fontStyle: 'italic' }}>
                           Unassigned
@@ -682,119 +674,144 @@ export const AttributeMasterModule: React.FC = () => {
                       )}
                     </td>
 
-                    {/* 5. Filterable */}
-                    <td style={{ padding: '10px 10px', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        background: attr.is_filterable ? '#DCFCE7' : '#F1F5F9',
-                        color: attr.is_filterable ? '#15803D' : '#64748B',
-                        border: attr.is_filterable ? '1px solid #86EFAC' : '1px solid #E2E8F0'
-                      }}>
-                        {attr.is_filterable ? 'YES' : 'NO'}
-                      </span>
+                    {/* 5. Active / Status */}
+                    <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <MasterStatusBadge status={isActive} />
                     </td>
 
-                    {/* 6. Searchable */}
-                    <td style={{ padding: '10px 10px', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        background: attr.is_searchable ? '#DCFCE7' : '#F1F5F9',
-                        color: attr.is_searchable ? '#15803D' : '#64748B',
-                        border: attr.is_searchable ? '1px solid #86EFAC' : '1px solid #E2E8F0'
-                      }}>
-                        {attr.is_searchable ? 'YES' : 'NO'}
-                      </span>
-                    </td>
-
-                    {/* 7. Required */}
-                    <td style={{ padding: '10px 10px', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        background: attr.is_required ? '#FEF3C7' : '#F1F5F9',
-                        color: attr.is_required ? '#B45309' : '#64748B',
-                        border: attr.is_required ? '1px solid #FDE68A' : '1px solid #E2E8F0'
-                      }}>
-                        {attr.is_required ? 'YES' : 'NO'}
-                      </span>
-                    </td>
-
-                    {/* 8. Active */}
-                    <td style={{ padding: '10px 10px', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        padding: '2px 7px',
-                        borderRadius: 4,
-                        background: isActive ? '#DCFCE7' : '#FEE2E2',
-                        color: isActive ? '#15803D' : '#B91C1C',
-                        border: isActive ? '1px solid #86EFAC' : '1px solid #FCA5A5'
-                      }}>
-                        {isActive ? 'ACTIVE' : 'INACTIVE'}
-                      </span>
-                    </td>
-
-                    {/* 9. Actions */}
-                    <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                        {/* View Action */}
+                    {/* 6. Actions */}
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                      <div style={{ position: 'relative', display: 'inline-block' }} data-actions-menu={`attr_${attr.attribute_id || attr.id}`}>
                         <button
                           type="button"
-                          onClick={() => handleOpenView(attr)}
-                          title="View Attribute Details"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const menuId = `attr_${attr.attribute_id || attr.id}`;
+                            setOpenActionMenuId(openActionMenuId === menuId ? null : menuId);
+                          }}
                           style={{
-                            padding: '4px 7px',
-                            borderRadius: 4,
-                            background: '#FFFFFF',
+                            padding: '5px 9px',
+                            borderRadius: 6,
+                            background: openActionMenuId === `attr_${attr.attribute_id || attr.id}` ? '#F1F5F9' : '#FFFFFF',
                             border: '1px solid #CBD5E1',
-                            color: '#475569',
-                            cursor: 'pointer'
+                            color: '#334155',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            transition: 'all 0.15s ease'
                           }}
+                          title="Row Actions"
+                          aria-label="Actions"
                         >
-                          <Eye size={13} />
+                          <span>Actions</span>
+                          <MoreVertical size={13} style={{ color: '#64748B' }} />
                         </button>
 
-                        {/* Edit Action */}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(attr)}
-                          title="Edit Attribute"
-                          style={{
-                            padding: '4px 7px',
-                            borderRadius: 4,
-                            background: '#FFFFFF',
-                            border: '1px solid #CBD5E1',
-                            color: '#0F766E',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Edit3 size={13} />
-                        </button>
+                        {openActionMenuId === `attr_${attr.attribute_id || attr.id}` && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              right: 0,
+                              top: 'calc(100% + 4px)',
+                              zIndex: 1000,
+                              minWidth: 165,
+                              background: '#FFFFFF',
+                              border: '1px solid #E2E8F0',
+                              borderRadius: 8,
+                              boxShadow: '0 10px 25px -5px rgba(15,23,42,0.15), 0 8px 10px -6px rgba(15,23,42,0.1)',
+                              padding: '4px 0',
+                              textAlign: 'left'
+                            }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenActionMenuId(null);
+                                handleOpenView(attr);
+                              }}
+                              style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '7px 14px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#334155',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                textAlign: 'left'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <Eye size={13} style={{ color: '#0F766E' }} />
+                              <span>View</span>
+                            </button>
 
-                        {/* Activate / Deactivate Action */}
-                        <button
-                          type="button"
-                          onClick={() => handleToggleStatus(attr)}
-                          title={isActive ? 'Deactivate Attribute' : 'Activate Attribute'}
-                          style={{
-                            padding: '4px 7px',
-                            borderRadius: 4,
-                            background: isActive ? '#FEF2F2' : '#F0FDF4',
-                            border: isActive ? '1px solid #FECACA' : '1px solid #BBF7D0',
-                            color: isActive ? '#DC2626' : '#16A34A',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Power size={13} />
-                        </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenActionMenuId(null);
+                                handleOpenEdit(attr);
+                              }}
+                              style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '7px 14px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#334155',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                textAlign: 'left'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <Edit3 size={13} style={{ color: '#0F766E' }} />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenActionMenuId(null);
+                                handleToggleStatus(attr);
+                              }}
+                              style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '7px 14px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: isActive ? '#D97706' : '#15803D',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                textAlign: 'left'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <Power size={13} style={{ color: isActive ? '#D97706' : '#16A34A' }} />
+                              <span>{isActive ? 'Deactivate' : 'Activate'}</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -851,7 +868,7 @@ export const AttributeMasterModule: React.FC = () => {
                   Attribute Details
                 </h3>
                 <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748B' }}>
-                  ATTRIBUTE_MASTER record & Product Type associations
+                  Attribute record & Product Type associations
                 </p>
               </div>
               <button
@@ -1271,7 +1288,7 @@ export const AttributeMasterModule: React.FC = () => {
                   {editingAttr ? 'Edit Attribute' : 'Add Attribute'}
                 </h3>
                 <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748B' }}>
-                  {editingAttr ? 'Modify existing attribute definition' : 'Create new attribute in ATTRIBUTE_MASTER'}
+                  {editingAttr ? 'Modify existing attribute definition' : 'Create new specification attribute'}
                 </p>
               </div>
               <button

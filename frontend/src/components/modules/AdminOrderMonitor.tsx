@@ -1,7 +1,20 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { MasterOrder, AdvanceMethod } from '../../types';
-import { ShoppingBag, Search, Eye, X, CheckCircle2, Clock, RefreshCw, Send, ShieldCheck, CheckSquare, Square, PauseCircle, AlertTriangle, Star, Lock, ThumbsUp, ThumbsDown, CreditCard, IndianRupee, ChevronDown } from 'lucide-react';
+import { AdvanceMethod } from '../../types';
+import {
+  adminOrderApi,
+  AdminMasterOrder,
+  AdminOrdersSummary,
+  AdminSubOrder,
+  AdminOrderLine,
+  ApiError,
+} from '../../services/adminOrderApi';
+import {
+  ShoppingBag, Search, Eye, X, CheckCircle2, Clock, RefreshCw, Send,
+  ShieldCheck, CheckSquare, Square, PauseCircle, AlertTriangle, Star,
+  Lock, ThumbsUp, ThumbsDown, CreditCard, IndianRupee, ChevronDown,
+  RotateCcw, AlertCircle
+} from 'lucide-react';
 import { AdvancePaymentSection } from '../common/AdvancePaymentSection';
 import { EnterpriseMetricBar } from '../common/EnterpriseMetricBar';
 import { PaginationControl } from '../common/PaginationControl';
@@ -9,23 +22,40 @@ import { usePagination } from '../../hooks/usePagination';
 
 export const AdminOrderMonitor: React.FC = () => {
   const {
-    orders, currentRole, regeneratePO, submitPOToBuyer, setActiveTab,
-    placeOrderOnHold, releaseOrderHold, getApplicableMargin, platformFeeConfig,
-    approveMasterOrderAdmin, rejectMasterOrderAdmin
+    currentRole, regeneratePO, submitPOToBuyer, setActiveTab,
+    getApplicableMargin, platformFeeConfig
   } = useApp();
+
+  // ── Real Backend & Database States (No Mock Data) ──
+  const [orders, setOrders] = useState<AdminMasterOrder[]>([]);
+  const [summary, setSummary] = useState<AdminOrdersSummary>({
+    pendingApprovalCount: 0,
+    pendingAdvanceCount: 0,
+    totalAdvanceReceived: 0,
+    totalAdvanceOutstanding: 0,
+    totalOrdersCount: 0,
+    totalGmv: 0
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [fetchErrorStatus, setFetchErrorStatus] = useState<number | null>(null);
+
+  // Truthful Database Health Check State (derived directly from /api/v1/health via SELECT 1)
+  const [dbHealth, setDbHealth] = useState<'UP' | 'DOWN' | 'CHECKING'>('CHECKING');
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedOrder, setSelectedOrder] = useState<MasterOrder | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<AdminMasterOrder | null>(null);
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [adminBanner, setAdminBanner] = useState<string | null>(null);
   const [adminBannerType, setAdminBannerType] = useState<'success' | 'error'>('success');
-  const [qaCounter, setQaCounter] = useState(0);
 
   // Hold Action States
-  const [holdTargetOrder, setHoldTargetOrder] = useState<MasterOrder | null>(null);
+  const [holdTargetOrder, setHoldTargetOrder] = useState<AdminMasterOrder | null>(null);
   const [holdReasonText, setHoldReasonText] = useState('');
 
-  // Admin Approval Modal State (NEW: full PO Approval Workflow)
-  const [approvalTargetOrder, setApprovalTargetOrder] = useState<MasterOrder | null>(null);
+  // Admin Approval Modal State (full PO Approval Workflow)
+  const [approvalTargetOrder, setApprovalTargetOrder] = useState<AdminMasterOrder | null>(null);
   const [approvalStep, setApprovalStep] = useState<'REVIEW' | 'ADVANCE_CONFIG' | 'REJECT'>('REVIEW');
   const [approvalDecision, setApprovalDecision] = useState<'YES' | 'NO' | null>(null);
   const [advRequired, setAdvRequired] = useState<boolean>(true);
@@ -36,7 +66,73 @@ export const AdminOrderMonitor: React.FC = () => {
   const [advNotes, setAdvNotes] = useState<string>('');
   const [rejectReason, setRejectReason] = useState<string>('');
 
-  const UNIFIED_STORAGE_KEY = 'factorygrid_unified_suborders_v11';
+  // Filter States
+  const [approvalFilter, setApprovalFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
+  const [advanceFilter, setAdvanceFilter] = useState<'ALL' | 'NOT_REQUIRED' | 'PENDING' | 'PARTIALLY_PAID' | 'PAID'>('ALL');
+  const [poStatusFilter, setPoStatusFilter] = useState<'ALL' | 'AWAITING_ADVANCE' | 'CONFIRMED_RELEASED' | 'REJECTED' | 'ON_HOLD'>('ALL');
+
+  // ── Truthful Database Health Check ──
+  const checkDatabaseHealth = useCallback(async () => {
+    try {
+      const health = await adminOrderApi.checkHealth();
+      setDbHealth(health.database === 'UP' ? 'UP' : 'DOWN');
+    } catch {
+      setDbHealth('DOWN');
+    }
+  }, []);
+
+  // ── Fetch Master Orders and Summary directly from PostgreSQL ──
+  const fetchOrders = useCallback(async (isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
+    setFetchError(null);
+    setFetchErrorStatus(null);
+    try {
+      const [listRes, sumRes] = await Promise.all([
+        adminOrderApi.listOrders({
+          search: searchTerm.trim() || undefined,
+          approvalStatus: approvalFilter !== 'ALL' ? approvalFilter : undefined,
+          advanceStatus: advanceFilter !== 'ALL' ? advanceFilter : undefined,
+          poStatus: poStatusFilter !== 'ALL' ? poStatusFilter : undefined
+        }),
+        adminOrderApi.getSummary().catch(() => null),
+        checkDatabaseHealth().catch(() => null)
+      ]);
+      setOrders(listRes.orders || []);
+      if (sumRes) {
+        setSummary(sumRes);
+      } else if (listRes.summary) {
+        setSummary(listRes.summary);
+      }
+    } catch (err: any) {
+      console.error('Failed to load admin orders from database:', err);
+      const status = err?.status || (err instanceof ApiError ? err.status : 0);
+      setFetchErrorStatus(status);
+      if (status === 401) {
+        setFetchError('Authentication failed: Missing or invalid token. Please log in with your Admin account.');
+      } else if (status === 403) {
+        setFetchError('Access denied: You do not have permissions to access Admin Master Orders.');
+      } else if (status === 404) {
+        setFetchError('Admin Orders endpoint not found (404). Please ensure backend is running.');
+      } else {
+        setFetchError(err.message || 'Failed to load master orders from PostgreSQL database.');
+      }
+    } finally {
+      if (!isSilent) setIsLoading(false);
+    }
+  }, [searchTerm, approvalFilter, advanceFilter, poStatusFilter, checkDatabaseHealth]);
+
+  // Load orders on mount or when filters change (with 250ms debounce)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchOrders();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [fetchOrders]);
+
+  // Initial database health check on mount
+  useEffect(() => {
+    checkDatabaseHealth();
+  }, [checkDatabaseHealth]);
 
   // Synchronize selected line IDs when opening an order in the PO Review modal
   useEffect(() => {
@@ -52,121 +148,21 @@ export const AdminOrderMonitor: React.FC = () => {
     }
   }, [selectedOrder, orders]);
 
-  const getSubOrderQaState = (subCode: string) => {
-    try {
-      const saved = localStorage.getItem(UNIFIED_STORAGE_KEY);
-      const store = saved ? JSON.parse(saved) : {};
-      return store[subCode] || {};
-    } catch (e) {
-      return {};
-    }
-  };
-
-  const updateSubOrderQaStatus = (
-    subCode: string,
-    newQaStatus: 'PENDING_QA' | 'UNDER_QA_REVIEW' | 'QA_APPROVED' | 'QA_REJECTED',
-    rejectionReason?: string
-  ) => {
-    let store: Record<string, any> = {};
-    try {
-      const saved = localStorage.getItem(UNIFIED_STORAGE_KEY);
-      if (saved) store = JSON.parse(saved);
-    } catch (e) {}
-
-    const targetRec = store[subCode] || {};
-    const nowStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    store[subCode] = {
-      ...targetRec,
-      subOrderNumber: subCode,
-      qaStatus: newQaStatus,
-      qaRejectionReason: newQaStatus === 'QA_REJECTED' ? (rejectionReason || 'Assay purity fell below CDSCO pharmacopeial standards limit') : (targetRec.qaRejectionReason || ''),
-      qaReviewedAt: nowStr,
-      qaReviewedBy: 'Admin Quality Governance Desk'
-    };
-
-    try {
-      localStorage.setItem(UNIFIED_STORAGE_KEY, JSON.stringify(store));
-      window.dispatchEvent(new Event('storage'));
-    } catch (e) {
-      console.error(e);
-    }
-    setQaCounter(prev => prev + 1);
-  };
-
-  // Filter States (Section 17)
-  const [approvalFilter, setApprovalFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
-  const [advanceFilter, setAdvanceFilter] = useState<'ALL' | 'NOT_REQUIRED' | 'PENDING' | 'PARTIALLY_PAID' | 'PAID'>('ALL');
-  const [poStatusFilter, setPoStatusFilter] = useState<'ALL' | 'AWAITING_ADVANCE' | 'CONFIRMED_RELEASED' | 'REJECTED' | 'ON_HOLD'>('ALL');
-
-  const totalOrdersCount = orders.length;
-  const totalGmv = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-  const pendingApprovalCount = orders.filter(o => o.status === 'PENDING_ADMIN_APPROVAL' || o.adminApprovalStatus === 'PENDING').length;
-  const pendingAdvanceCount = orders.filter(o => o.status === 'PENDING_ADVANCE' && (o.advanceStatus === 'PENDING' || o.advanceStatus === 'PARTIALLY_PAID')).length;
-  const totalAdvanceOutstanding = orders.reduce((s, o) => s + (o.advanceOutstanding || 0), 0);
-  const totalAdvanceReceived = orders.reduce((s, o) => s + (o.advanceReceived || 0), 0);
-
-  const filteredOrders = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    return orders.filter(o => {
-      // 1. Search term
-      if (term) {
-        const matchOrderNum = (o.orderNumber || '').toLowerCase().includes(term);
-        const matchPoNum = (o.poNumber || '').toLowerCase().includes(term);
-        const matchRfqNum = (o.rfqNumber || '').toLowerCase().includes(term);
-        const matchCustName = (o.customerName || '').toLowerCase().includes(term);
-        const matchCustCode = (o.customerCode || '').toLowerCase().includes(term);
-        const matchSubOrders = (o.subOrders || []).some(so =>
-          (so.poNumber || '').toLowerCase().includes(term) ||
-          (so.subOrderNumber || '').toLowerCase().includes(term) ||
-          (so.rfqNumber || '').toLowerCase().includes(term) ||
-          (so.manufacturerName || '').toLowerCase().includes(term) ||
-          (so.lines || []).some(l =>
-            (l.productName || '').toLowerCase().includes(term) ||
-            (l.molecule || '').toLowerCase().includes(term)
-          )
-        );
-        if (!matchOrderNum && !matchPoNum && !matchRfqNum && !matchCustName && !matchCustCode && !matchSubOrders) {
-          return false;
-        }
-      }
-
-      // 2. PO Approval Filter
-      const isApproved = o.adminApprovalStatus === 'APPROVED' || o.status === 'CONFIRMED_RELEASED' || o.status === 'PENDING_ADVANCE';
-      const isRejected = o.status === 'REJECTED_BY_ADMIN' || o.adminApprovalStatus === 'REJECTED';
-      const isPending = o.status === 'PENDING_ADMIN_APPROVAL' || o.adminApprovalStatus === 'PENDING' || (!isApproved && !isRejected);
-
-      if (approvalFilter === 'PENDING' && !isPending) return false;
-      if (approvalFilter === 'APPROVED' && !isApproved) return false;
-      if (approvalFilter === 'REJECTED' && !isRejected) return false;
-
-      // 3. Advance Payment Filter
-      if (advanceFilter === 'NOT_REQUIRED' && !(o.advanceRequired === false || o.advanceStatus === 'NOT_REQUIRED')) return false;
-      if (advanceFilter === 'PENDING' && !(o.advanceStatus === 'PENDING' && o.status === 'PENDING_ADVANCE')) return false;
-      if (advanceFilter === 'PARTIALLY_PAID' && o.advanceStatus !== 'PARTIALLY_PAID') return false;
-      if (advanceFilter === 'PAID' && o.advanceStatus !== 'PAID') return false;
-
-      // 4. PO Status Filter
-      const isHeld = o.isOnHold || o.status === 'ON_HOLD';
-      if (poStatusFilter === 'ON_HOLD' && !isHeld) return false;
-      if (poStatusFilter === 'AWAITING_ADVANCE' && o.status !== 'PENDING_ADVANCE') return false;
-      if (poStatusFilter === 'CONFIRMED_RELEASED' && o.status !== 'CONFIRMED_RELEASED') return false;
-      if (poStatusFilter === 'REJECTED' && !isRejected) return false;
-
-      return true;
-    }).sort((a, b) => {
-      const dateA = new Date(a.createdDate || a.createdAt || (a as any).created_at || 0).getTime();
-      const dateB = new Date(b.createdDate || b.createdAt || (b as any).created_at || 0).getTime();
+  // Sort orders descending by created date
+  const sortedOrders = useMemo(() => {
+    return [...orders].sort((a, b) => {
+      const dateA = new Date(a.createdDate || a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdDate || b.createdAt || 0).getTime();
       if (dateB !== dateA) return dateB - dateA;
       return (b.id || '').localeCompare(a.id || '');
     });
-  }, [orders, searchTerm, approvalFilter, advanceFilter, poStatusFilter]);
+  }, [orders]);
 
   const {
     paginatedItems: paginatedOrders,
     paginationProps,
     resetPage
-  } = usePagination(filteredOrders, {
+  } = usePagination(sortedOrders, {
     initialPageSize: 10,
     resetDeps: [searchTerm, approvalFilter, advanceFilter, poStatusFilter]
   });
@@ -182,6 +178,43 @@ export const AdminOrderMonitor: React.FC = () => {
         </div>
       )}
 
+      {/* Server Fetch Error Banner with granular actions */}
+      {fetchError && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '14px 20px', color: '#DC2626', fontSize: 13, fontWeight: 700, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertTriangle size={18} />
+            <div>
+              <div>{fetchError}</div>
+              {fetchErrorStatus === 401 && (
+                <div style={{ fontSize: 11.5, fontWeight: 500, color: '#B91C1C', marginTop: 2 }}>
+                  Your session may have expired or you are not signed in as an Admin. Click below to sign in via centralized IAM.
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {fetchErrorStatus === 401 && (
+              <button
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.location.href = '/login';
+                  }
+                }}
+                style={{ padding: '6px 14px', background: '#0F766E', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
+              >
+                Log In as Admin
+              </button>
+            )}
+            <button
+              onClick={() => fetchOrders()}
+              style={{ padding: '6px 14px', background: '#DC2626', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header (Clean Enterprise Flat Command Bar) */}
       <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 6, padding: '18px 24px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
         <div>
@@ -192,44 +225,64 @@ export const AdminOrderMonitor: React.FC = () => {
             Master Orders &amp; Purchase Order (PO) Management Desk
           </h1>
           <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
-            Governance console for reviewing auto-generated POs, selecting product lines, managing hold status, regenerating PO parameters, and submitting POs to Buyers.
+            Real-time governance console connected to PostgreSQL for reviewing auto-generated POs, advance payment rules, and dispatch authorizations.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => fetchOrders()}
+            disabled={isLoading}
+            style={{ padding: '8px 14px', background: '#FFF', border: '1px solid #CBD5E1', color: '#334155', borderRadius: 6, fontSize: 12.5, fontWeight: 700, cursor: isLoading ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            title="Refresh orders from PostgreSQL database"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> {isLoading ? 'Refreshing...' : 'Refresh Data'}
+          </button>
           <button
             onClick={() => setActiveTab('qa-governance')}
             style={{ padding: '8px 16px', background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#4338CA', borderRadius: 6, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <ShieldCheck size={16} /> 🛡️ Open Central QA Desk
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F0FDF4', border: '1px solid #86EFAC', padding: '6px 14px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, color: '#15803D' }}>
-            <CheckCircle2 size={14} /> ADMIN PO WORKFLOW DESK
-          </div>
+
+          {/* Truthful Database Connection Status derived directly from /api/v1/health */}
+          {dbHealth === 'UP' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F0FDF4', border: '1px solid #86EFAC', padding: '6px 14px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, color: '#15803D' }} title="Verified live PostgreSQL connectivity via /api/v1/health">
+              <CheckCircle2 size={14} /> LIVE POSTGRESQL CONNECTED
+            </div>
+          ) : dbHealth === 'DOWN' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FEF2F2', border: '1px solid #FCA5A5', padding: '6px 14px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, color: '#DC2626' }} title="PostgreSQL connection is currently unavailable">
+              <AlertTriangle size={14} /> DATABASE DISCONNECTED
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '6px 14px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, color: '#64748B' }}>
+              <RefreshCw size={14} className="animate-spin" /> CHECKING DATABASE...
+            </div>
+          )}
         </div>
       </div>
 
-      {/* PO & Advance Payment Summary Bar (Replaces 6 Floating Cards) */}
+      {/* PO & Advance Payment Summary Bar (Aggregates directly from PostgreSQL) */}
       <EnterpriseMetricBar
         title="PURCHASE ORDER & ADVANCE PAYMENT MONITORING"
-        subtitle="Platform PO Governance & Advance Settlement Tracking"
+        subtitle="Platform PO Governance & Advance Settlement Tracking (Real Database Totals)"
         metrics={[
-          { label: 'Pending PO Approvals', value: pendingApprovalCount, color: '#D97706' },
-          { label: 'Advance Pending', value: pendingAdvanceCount, color: '#DC2626' },
-          { label: 'Advance Received', value: `₹${(totalAdvanceReceived / 100000).toFixed(1)}L`, color: '#0F766E' },
-          { label: 'Advance Outstanding', value: `₹${(totalAdvanceOutstanding / 100000).toFixed(1)}L`, color: '#7C3AED' },
-          { label: 'Total Master Orders', value: totalOrdersCount, color: '#2563EB' },
-          { label: 'Total GMV', value: `₹${(totalGmv / 100000).toFixed(1)}L`, color: '#16A34A' },
+          { label: 'Pending PO Approvals', value: summary.pendingApprovalCount, color: '#D97706' },
+          { label: 'Advance Pending', value: summary.pendingAdvanceCount, color: '#DC2626' },
+          { label: 'Advance Received', value: `₹${(summary.totalAdvanceReceived / 100000).toFixed(1)}L`, color: '#0F766E' },
+          { label: 'Advance Outstanding', value: `₹${(summary.totalAdvanceOutstanding / 100000).toFixed(1)}L`, color: '#7C3AED' },
+          { label: 'Total Master Orders', value: summary.totalOrdersCount, color: '#2563EB' },
+          { label: 'Total GMV', value: `₹${(summary.totalGmv / 100000).toFixed(1)}L`, color: '#16A34A' },
         ]}
       />
 
-      {/* Table & Filters Toolbar (Standard Enterprise Section) */}
+      {/* Table & Filters Toolbar */}
       <div style={{ background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 6, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
         <div style={{ padding: '14px 20px', background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ position: 'relative', width: 280 }}>
             <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
             <input
               type="text"
-              placeholder="Search by PO #, Customer..."
+              placeholder="Search by PO #, Customer, Product..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               style={{ width: '100%', height: 34, paddingLeft: 32, fontSize: 12, border: '1px solid #CBD5E1', borderRadius: 6, boxSizing: 'border-box' }}
@@ -270,7 +323,7 @@ export const AdminOrderMonitor: React.FC = () => {
             >
               <option value="ALL">PO Status: All</option>
               <option value="AWAITING_ADVANCE">Awaiting Advance Payment</option>
-              <option value="CONFIRMED_RELEASED">Confirmed & Released</option>
+              <option value="CONFIRMED_RELEASED">Confirmed &amp; Released</option>
               <option value="REJECTED">Rejected</option>
               <option value="ON_HOLD">On Hold</option>
             </select>
@@ -307,218 +360,259 @@ export const AdminOrderMonitor: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {paginatedOrders.length === 0 ? (
+              {isLoading ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: '32px 16px', textAlign: 'center', color: '#94A3B8' }}>
-                    No purchase orders found matching the filter criteria.
+                  <td colSpan={9} style={{ padding: '40px 16px', textAlign: 'center', color: '#64748B' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 600 }}>
+                      <RefreshCw size={18} className="animate-spin" />
+                      <span>Loading master orders from PostgreSQL database...</span>
+                    </div>
                   </td>
                 </tr>
-              ) : paginatedOrders.map(ord => {
-                const isHeld = ord.isOnHold || ord.status === 'ON_HOLD';
-                const isApproved = ord.adminApprovalStatus === 'APPROVED' || ord.status === 'CONFIRMED_RELEASED' || ord.status === 'PENDING_ADVANCE';
-                const isRejected = ord.status === 'REJECTED_BY_ADMIN' || ord.adminApprovalStatus === 'REJECTED';
-                const isPending = ord.status === 'PENDING_ADMIN_APPROVAL' || ord.adminApprovalStatus === 'PENDING' || (!isApproved && !isRejected);
+              ) : paginatedOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={9} style={{ padding: '40px 16px', textAlign: 'center', color: '#94A3B8' }}>
+                    {searchTerm || approvalFilter !== 'ALL' || advanceFilter !== 'ALL' || poStatusFilter !== 'ALL'
+                      ? 'No purchase orders found matching the filter criteria.'
+                      : 'No master orders found in database.'}
+                  </td>
+                </tr>
+              ) : (
+                paginatedOrders.map(ord => {
+                  const isHeld = ord.isOnHold || ord.status === 'ON_HOLD';
+                  const isApproved = ord.adminApprovalStatus === 'APPROVED' || ord.status === 'CONFIRMED_RELEASED' || ord.status === 'PENDING_ADVANCE';
+                  const isRejected = ord.status === 'REJECTED_BY_ADMIN' || ord.adminApprovalStatus === 'REJECTED';
+                  const isPending = ord.status === 'PENDING_ADMIN_APPROVAL' || ord.adminApprovalStatus === 'PENDING' || (!isApproved && !isRejected);
 
-                return (
-                  <tr key={ord.id} style={{ borderBottom: '1px solid #F1F5F9', background: isHeld ? '#FFFDFD' : 'transparent' }}>
-                    {/* 1. PO / MASTER ORDER */}
-                    <td style={{ padding: '12px 16px', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace' }}>
-                      {ord.poNumber || ord.orderNumber}
-                      <div style={{ fontSize: 10.5, color: '#64748B', fontFamily: 'monospace', fontWeight: 500 }}>
-                        Ref: {ord.orderNumber} {ord.rfqNumber && `· RFQ: ${ord.rfqNumber}`}
-                      </div>
-                      {ord.isGeneric && (
-                        <span style={{ fontSize: 9.5, fontWeight: 800, padding: '1px 6px', borderRadius: 4, background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', marginTop: 3, display: 'inline-block' }}>
-                          🧪 GENERIC (FACTORYGRID DIRECT)
-                        </span>
-                      )}
-                    </td>
+                  return (
+                    <tr key={ord.id} style={{ borderBottom: '1px solid #F1F5F9', background: isHeld ? '#FFFDFD' : 'transparent' }}>
+                      {/* 1. PO / MASTER ORDER */}
+                      <td style={{ padding: '12px 16px', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace' }}>
+                        {ord.poNumber || ord.orderNumber}
+                        <div style={{ fontSize: 10.5, color: '#64748B', fontFamily: 'monospace', fontWeight: 500 }}>
+                          Ref: {ord.orderNumber} {ord.rfqNumber && `· RFQ: ${ord.rfqNumber}`}
+                        </div>
+                        {ord.isGeneric && (
+                          <span style={{ fontSize: 9.5, fontWeight: 800, padding: '1px 6px', borderRadius: 4, background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', marginTop: 3, display: 'inline-block' }}>
+                            🧪 GENERIC (FACTORYGRID DIRECT)
+                          </span>
+                        )}
+                      </td>
 
-                    {/* 2. CUSTOMER */}
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#334155' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span>{ord.customerName}</span>
-                        {ord.customerClassification === 'SPECIAL_PARTY' ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 10, fontWeight: 800 }}>
-                            <Star size={10} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
+                      {/* 2. CUSTOMER */}
+                      <td style={{ padding: '12px 16px', fontWeight: 700, color: '#334155' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>{ord.customerName}</span>
+                          {ord.customerClassification === 'SPECIAL_PARTY' ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 10, fontWeight: 800 }}>
+                              <Star size={10} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
+                            </span>
+                          ) : (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '1px 6px', borderRadius: 4, background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', fontSize: 10, fontWeight: 700 }}>
+                              REGULAR
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 3. CREATED DATE */}
+                      <td style={{ padding: '12px 16px', color: '#64748B' }}>{ord.createdDate}</td>
+
+                      {/* 4. EXPECTED DELIVERY */}
+                      <td style={{ padding: '12px 16px', color: '#64748B' }}>{ord.expectedDeliveryDate}</td>
+
+                      {/* 5. TOTAL AMOUNT */}
+                      <td style={{ padding: '12px 16px', fontWeight: 800, fontFamily: 'monospace', color: '#0F766E' }}>
+                        ₹{ord.totalAmount?.toLocaleString()}
+                      </td>
+
+                      {/* 6. PO APPROVAL */}
+                      <td style={{ padding: '12px 16px' }}>
+                        {isApproved ? (
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#DCFCE7', color: '#15803D' }}>
+                            APPROVED
+                          </span>
+                        ) : isRejected ? (
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF2F2', color: '#DC2626' }}>
+                            REJECTED
                           </span>
                         ) : (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '1px 6px', borderRadius: 4, background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', fontSize: 10, fontWeight: 700 }}>
-                            REGULAR
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF3C7', color: '#B45309' }}>
+                            PENDING APPROVAL
                           </span>
                         )}
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* 3. CREATED DATE */}
-                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{ord.createdDate}</td>
-
-                    {/* 4. EXPECTED DELIVERY */}
-                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{ord.expectedDeliveryDate}</td>
-
-                    {/* 5. TOTAL AMOUNT */}
-                    <td style={{ padding: '12px 16px', fontWeight: 800, fontFamily: 'monospace', color: '#0F766E' }}>
-                      ₹{ord.totalAmount?.toLocaleString()}
-                    </td>
-
-                    {/* 6. PO APPROVAL (Section 1 & 15) */}
-                    <td style={{ padding: '12px 16px' }}>
-                      {isApproved ? (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#DCFCE7', color: '#15803D' }}>
-                          APPROVED
-                        </span>
-                      ) : isRejected ? (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF2F2', color: '#DC2626' }}>
-                          REJECTED
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF3C7', color: '#B45309' }}>
-                          PENDING APPROVAL
-                        </span>
-                      )}
-                    </td>
-
-                    {/* 7. ADVANCE PAYMENT (Section 1 & 15) */}
-                    <td style={{ padding: '12px 16px' }}>
-                      {!isApproved ? (
-                        /* CRITICAL: Advance Payment MUST NOT appear as an actionable decision before Admin approves the PO */
-                        <span style={{ color: '#94A3B8', fontWeight: 800, fontSize: 14 }}>—</span>
-                      ) : (ord.advanceRequired === false || ord.advanceStatus === 'NOT_REQUIRED') ? (
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#F1F5F9', color: '#475569' }}>
-                          NOT REQUIRED
-                        </span>
-                      ) : ord.advanceStatus === 'PAID' ? (
-                        <div>
-                          <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: '#DCFCE7', color: '#15803D' }}>
-                            PAID
+                      {/* 7. ADVANCE PAYMENT */}
+                      <td style={{ padding: '12px 16px' }}>
+                        {!isApproved ? (
+                          <span style={{ color: '#94A3B8', fontWeight: 800, fontSize: 14 }}>—</span>
+                        ) : (ord.advanceRequired === false || ord.advanceStatus === 'NOT_REQUIRED') ? (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#F1F5F9', color: '#475569' }}>
+                            NOT REQUIRED
                           </span>
-                          <div style={{ fontSize: 10.5, color: '#15803D', marginTop: 3, fontFamily: 'monospace', fontWeight: 600 }}>
-                            ₹{(ord.advanceReceived || 0).toLocaleString()} (Full)
+                        ) : ord.advanceStatus === 'PAID' ? (
+                          <div>
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: '#DCFCE7', color: '#15803D' }}>
+                              PAID
+                            </span>
+                            <div style={{ fontSize: 10.5, color: '#15803D', marginTop: 3, fontFamily: 'monospace', fontWeight: 600 }}>
+                              ₹{(ord.advanceReceived || 0).toLocaleString()} (Full)
+                            </div>
                           </div>
-                        </div>
-                      ) : ord.advanceStatus === 'PARTIALLY_PAID' ? (
-                        <div>
-                          <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8' }}>
-                            PARTIALLY PAID
-                          </span>
-                          <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 3, fontFamily: 'monospace' }}>
-                            ₹{(ord.advanceReceived || 0).toLocaleString()} / ₹{(ord.requiredAdvanceAmount || 0).toLocaleString()}
+                        ) : ord.advanceStatus === 'PARTIALLY_PAID' ? (
+                          <div>
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8' }}>
+                              PARTIALLY PAID
+                            </span>
+                            <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 3, fontFamily: 'monospace' }}>
+                              ₹{(ord.advanceReceived || 0).toLocaleString()} / ₹{(ord.requiredAdvanceAmount || 0).toLocaleString()}
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: '#FEF3C7', color: '#B45309' }}>
-                            PAYMENT PENDING
-                          </span>
-                          <div style={{ fontSize: 10.5, color: '#DC2626', marginTop: 3, fontFamily: 'monospace', fontWeight: 700 }}>
-                            ₹{(ord.requiredAdvanceAmount || 0).toLocaleString()}
+                        ) : (
+                          <div>
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: '#FEF3C7', color: '#B45309' }}>
+                              PAYMENT PENDING
+                            </span>
+                            <div style={{ fontSize: 10.5, color: '#DC2626', marginTop: 3, fontFamily: 'monospace', fontWeight: 700 }}>
+                              ₹{(ord.requiredAdvanceAmount || 0).toLocaleString()}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </td>
-
-                    {/* 8. PO STATUS (Section 1, 14, 15) */}
-                    <td style={{ padding: '12px 16px' }}>
-                      {isHeld ? (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF2F2', color: '#DC2626' }}>
-                          ON HOLD
-                        </span>
-                      ) : isRejected ? (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF2F2', color: '#DC2626' }}>
-                          REJECTED
-                        </span>
-                      ) : isPending ? (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF3C7', color: '#B45309' }}>
-                          AWAITING ADMIN APPROVAL
-                        </span>
-                      ) : ord.status === 'PENDING_ADVANCE' ? (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8' }}>
-                          AWAITING ADVANCE PAYMENT
-                        </span>
-                      ) : ord.status === 'CONFIRMED_RELEASED' ? (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#DCFCE7', color: '#15803D' }}>
-                          CONFIRMED &amp; RELEASED
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#F1F5F9', color: '#475569' }}>
-                          {ord.status.replace('_', ' ')}
-                        </span>
-                      )}
-                    </td>
-
-                    {/* 9. ADMIN ACTIONS (Section 1, 20) */}
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
-                        {/* Primary Review PO button for pending approval */}
-                        {isPending && (
-                          <button
-                            onClick={() => {
-                              setApprovalTargetOrder(ord);
-                              setApprovalStep('REVIEW');
-                              setApprovalDecision(null);
-                              setRejectReason('');
-                              setAdvMethod('PERCENTAGE');
-                              setAdvPct(30);
-                              setAdvFixedAmount(Math.round((ord.totalAmount || 0) * 0.3));
-                              setAdvDueDate('');
-                              setAdvNotes('');
-                            }}
-                            style={{
-                              padding: '6px 12px',
-                              background: '#0F766E',
-                              color: '#FFF',
-                              border: 'none',
-                              borderRadius: 6,
-                              fontSize: 11.5,
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 5,
-                              boxShadow: '0 1px 2px rgba(15, 118, 110, 0.2)'
-                            }}
-                            title="Review PO — Approve or Reject"
-                          >
-                            <ShieldCheck size={13} /> Review PO
-                          </button>
                         )}
+                      </td>
 
-                        {/* Hold / Release Hold Button */}
+                      {/* 8. PO STATUS */}
+                      <td style={{ padding: '12px 16px' }}>
                         {isHeld ? (
-                          <button
-                            onClick={() => {
-                              releaseOrderHold(ord.id);
-                              setAdminBanner(`✓ Master Order ${ord.orderNumber} released from HOLD.`);
-                            }}
-                            style={{ padding: '5px 10px', background: '#FEF3C7', border: '1px solid #FCD34D', color: '#B45309', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                            title={ord.holdReason ? `Held: ${ord.holdReason}` : 'Order currently on hold'}
-                          >
-                            <Clock size={12} /> Release Hold
-                          </button>
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF2F2', color: '#DC2626' }}>
+                            ON HOLD
+                          </span>
+                        ) : isRejected ? (
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF2F2', color: '#DC2626' }}>
+                            REJECTED
+                          </span>
+                        ) : isPending ? (
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#FEF3C7', color: '#B45309' }}>
+                            AWAITING ADMIN APPROVAL
+                          </span>
+                        ) : ord.status === 'PENDING_ADVANCE' ? (
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8' }}>
+                            AWAITING ADVANCE PAYMENT
+                          </span>
+                        ) : ord.status === 'CONFIRMED_RELEASED' ? (
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#DCFCE7', color: '#15803D' }}>
+                            CONFIRMED &amp; RELEASED
+                          </span>
                         ) : (
-                          <button
-                            onClick={() => {
-                              setHoldTargetOrder(ord);
-                              setHoldReasonText('');
-                            }}
-                            style={{ padding: '5px 10px', background: '#FFF', border: '1px solid #FCA5A5', color: '#DC2626', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <PauseCircle size={12} /> Hold
-                          </button>
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#F1F5F9', color: '#475569' }}>
+                            {ord.status.replace('_', ' ')}
+                          </span>
                         )}
+                      </td>
 
-                        {/* View PO Details */}
-                        <button
-                          onClick={() => setSelectedOrder(ord)}
-                          style={{ padding: '5px 10px', background: '#2563EB', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <Eye size={12} /> View PO
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                      {/* 9. ADMIN ACTIONS */}
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
+                          {/* Primary Review PO button for pending approval - loads live PO from PostgreSQL */}
+                          {isPending && (
+                            <button
+                              disabled={isActionLoading}
+                              onClick={async () => {
+                                setIsActionLoading(true);
+                                try {
+                                  const fresh = await adminOrderApi.getOrderDetail(ord.id);
+                                  setApprovalTargetOrder(fresh);
+                                } catch {
+                                  setApprovalTargetOrder(ord);
+                                } finally {
+                                  setIsActionLoading(false);
+                                  setApprovalStep('REVIEW');
+                                  setApprovalDecision(null);
+                                  setRejectReason('');
+                                  setAdvMethod('PERCENTAGE');
+                                  setAdvPct(30);
+                                  setAdvFixedAmount(Math.round((ord.totalAmount || 0) * 0.3));
+                                  setAdvDueDate('');
+                                  setAdvNotes('');
+                                }
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                background: '#0F766E',
+                                color: '#FFF',
+                                border: 'none',
+                                borderRadius: 6,
+                                fontSize: 11.5,
+                                fontWeight: 800,
+                                cursor: isActionLoading ? 'not-allowed' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                boxShadow: '0 1px 2px rgba(15, 118, 110, 0.2)'
+                              }}
+                              title="Review PO — Approve or Reject"
+                            >
+                              <ShieldCheck size={13} /> Review PO
+                            </button>
+                          )}
+
+                          {/* Hold / Release Hold Button */}
+                          {isHeld ? (
+                            <button
+                              disabled={isActionLoading}
+                              onClick={async () => {
+                                setIsActionLoading(true);
+                                try {
+                                  await adminOrderApi.releaseHold(ord.id);
+                                  setAdminBannerType('success');
+                                  setAdminBanner(`✓ Master Order ${ord.orderNumber} released from HOLD.`);
+                                  await fetchOrders(true);
+                                } catch (err: any) {
+                                  setAdminBannerType('error');
+                                  setAdminBanner(`Failed to release hold: ${err.message}`);
+                                } finally {
+                                  setIsActionLoading(false);
+                                }
+                              }}
+                              style={{ padding: '5px 10px', background: '#FEF3C7', border: '1px solid #FCD34D', color: '#B45309', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: isActionLoading ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              title={ord.holdReason ? `Held: ${ord.holdReason}` : 'Order currently on hold'}
+                            >
+                              <Clock size={12} /> Release Hold
+                            </button>
+                          ) : (
+                            <button
+                              disabled={isActionLoading}
+                              onClick={() => {
+                                setHoldTargetOrder(ord);
+                                setHoldReasonText('');
+                              }}
+                              style={{ padding: '5px 10px', background: '#FFF', border: '1px solid #FCA5A5', color: '#DC2626', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: isActionLoading ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <PauseCircle size={12} /> Hold
+                            </button>
+                          )}
+
+                          {/* View PO Details - fetches live PostgreSQL record */}
+                          <button
+                            disabled={isActionLoading}
+                            onClick={async () => {
+                              try {
+                                const fresh = await adminOrderApi.getOrderDetail(ord.id);
+                                setSelectedOrder(fresh);
+                              } catch {
+                                setSelectedOrder(ord);
+                              }
+                            }}
+                            style={{ padding: '5px 10px', background: '#2563EB', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Eye size={12} /> View PO
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -571,7 +665,7 @@ export const AdminOrderMonitor: React.FC = () => {
                 }}
               />
               <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
-                A valid reason is mandatory. Recording a hold will increment the order's Hold Count.
+                A valid reason is mandatory. Recording a hold will persist in PostgreSQL and increment the order's Hold Count.
               </div>
             </div>
 
@@ -588,41 +682,50 @@ export const AdminOrderMonitor: React.FC = () => {
               </button>
               <button
                 type="button"
-                disabled={!holdReasonText.trim()}
-                onClick={() => {
+                disabled={!holdReasonText.trim() || isActionLoading}
+                onClick={async () => {
                   if (!holdReasonText.trim()) return;
-                  placeOrderOnHold(holdTargetOrder.id, holdReasonText.trim());
-                  const newCount = (holdTargetOrder.holdCount || 0) + 1;
-                  setAdminBanner(`✓ Master Order ${holdTargetOrder.orderNumber} has been placed on HOLD (Hold Count: ${newCount}).`);
-                  setHoldTargetOrder(null);
-                  setHoldReasonText('');
+                  setIsActionLoading(true);
+                  try {
+                    const updated = await adminOrderApi.holdOrder(holdTargetOrder.id, holdReasonText.trim());
+                    setAdminBannerType('error');
+                    setAdminBanner(`✓ Master Order ${holdTargetOrder.orderNumber} has been placed on HOLD (Hold Count: ${updated.holdCount || 1}).`);
+                    setHoldTargetOrder(null);
+                    setHoldReasonText('');
+                    await fetchOrders(true);
+                  } catch (err: any) {
+                    setAdminBannerType('error');
+                    setAdminBanner(`Failed to place order on hold: ${err.message}`);
+                  } finally {
+                    setIsActionLoading(false);
+                  }
                 }}
                 style={{
                   padding: '8px 18px',
-                  background: holdReasonText.trim() ? '#DC2626' : '#94A3B8',
+                  background: holdReasonText.trim() && !isActionLoading ? '#DC2626' : '#94A3B8',
                   color: '#FFF',
                   border: 'none',
                   borderRadius: 6,
                   fontSize: 12,
                   fontWeight: 800,
-                  cursor: holdReasonText.trim() ? 'pointer' : 'not-allowed',
+                  cursor: holdReasonText.trim() && !isActionLoading ? 'pointer' : 'not-allowed',
                   transition: 'background 0.15s ease'
                 }}
               >
-                Confirm &amp; Place on Hold
+                {isActionLoading ? 'Placing on Hold...' : 'Confirm & Place on Hold'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── ADMIN PO APPROVAL WORKFLOW MODAL (Sections 2, 3, 4, 5, 6) ── */}
+      {/* ── ADMIN PO APPROVAL WORKFLOW MODAL ── */}
       {approvalTargetOrder && (() => {
         const ao = orders.find(o => o.id === approvalTargetOrder.id) || approvalTargetOrder;
         const totalAmt = ao.totalAmount || 0;
         const computedAdvance = advMethod === 'FIXED_AMOUNT' ? advFixedAmount : Math.round((totalAmt * advPct) / 100);
 
-        // Gather all line items across sub-orders or order lines
+        // Gather all line items across sub-orders directly from database
         const allItems: Array<{ id: string; productName: string; sku?: string; quantity: number; unitPrice: number; taxRate?: number; lineTotal: number }> = [];
         (ao.subOrders || []).forEach(so => {
           (so.lines || []).forEach(l => {
@@ -640,28 +743,6 @@ export const AdminOrderMonitor: React.FC = () => {
             });
           });
         });
-
-        // Fallback demo items if order has no explicit suborder lines
-        if (allItems.length === 0) {
-          allItems.push({
-            id: 'line-demo-1',
-            productName: 'Paracetamol 500mg Tablets BP',
-            sku: 'SKU-PCM-500',
-            quantity: 50000,
-            unitPrice: 12.00,
-            taxRate: 12,
-            lineTotal: 672000
-          });
-          allItems.push({
-            id: 'line-demo-2',
-            productName: 'Azithromycin 500mg Tablets USP',
-            sku: 'SKU-AZI-500',
-            quantity: 10000,
-            unitPrice: 29.28,
-            taxRate: 12,
-            lineTotal: 328000
-          });
-        }
 
         const subtotal = allItems.reduce((s, i) => s + (i.unitPrice * i.quantity), 0);
         const taxTotal = Math.round(subtotal * 0.12);
@@ -695,7 +776,7 @@ export const AdminOrderMonitor: React.FC = () => {
                 </button>
               </div>
 
-              {/* ── STEP 1: REVIEW PO (Section 2 & 3) ── */}
+              {/* ── STEP 1: REVIEW PO ── */}
               {approvalStep === 'REVIEW' && (
                 <>
                   {/* PO Basic Info Grid */}
@@ -744,16 +825,24 @@ export const AdminOrderMonitor: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {allItems.map((item, idx) => (
-                            <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                              <td style={{ padding: '8px 12px', fontWeight: 700, color: '#0F172A' }}>{item.productName}</td>
-                              <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#64748B' }}>{item.sku}</td>
-                              <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{item.quantity.toLocaleString()}</td>
-                              <td style={{ padding: '8px 12px', textAlign: 'right', fontFamily: 'monospace' }}>₹{item.unitPrice.toFixed(2)}</td>
-                              <td style={{ padding: '8px 12px', textAlign: 'right', fontFamily: 'monospace', color: '#64748B' }}>₹{Math.round(item.unitPrice * item.quantity * 0.12).toLocaleString()}</td>
-                              <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, fontFamily: 'monospace', color: '#0F766E' }}>₹{item.lineTotal.toLocaleString()}</td>
+                          {allItems.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#94A3B8' }}>
+                                No product line items recorded for this order in database.
+                              </td>
                             </tr>
-                          ))}
+                          ) : (
+                            allItems.map((item, idx) => (
+                              <tr key={item.id || idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                                <td style={{ padding: '8px 12px', fontWeight: 700, color: '#0F172A' }}>{item.productName}</td>
+                                <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: '#64748B' }}>{item.sku}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{item.quantity.toLocaleString()}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', fontFamily: 'monospace' }}>₹{item.unitPrice.toFixed(2)}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', fontFamily: 'monospace', color: '#64748B' }}>₹{Math.round(item.unitPrice * item.quantity * 0.12).toLocaleString()}</td>
+                                <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, fontFamily: 'monospace', color: '#0F766E' }}>₹{item.lineTotal.toLocaleString()}</td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -763,9 +852,9 @@ export const AdminOrderMonitor: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                     <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <div style={{ fontWeight: 800, color: '#334155', marginBottom: 4, textTransform: 'uppercase', fontSize: 11 }}>Customer &amp; Delivery Info</div>
-                      <div><span style={{ color: '#64748B' }}>Shipping:</span> <strong>{ao.shippingAddress || 'Plot 14, Phase I Industrial Area, Delhi - 110020'}</strong></div>
-                      <div><span style={{ color: '#64748B' }}>Billing:</span> <strong>{ao.billingAddress || 'Connaught Place Corporate Office, New Delhi - 110001'}</strong></div>
-                      <div><span style={{ color: '#64748B' }}>Payment Terms:</span> <strong>{ao.paymentTerms || '30% Advance + Net 30 days'}</strong></div>
+                      <div><span style={{ color: '#64748B' }}>Shipping:</span> <strong>{ao.shippingAddress || 'Registered Office Address'}</strong></div>
+                      <div><span style={{ color: '#64748B' }}>Billing:</span> <strong>{ao.billingAddress || 'Corporate Billing Address'}</strong></div>
+                      <div><span style={{ color: '#64748B' }}>Payment Terms:</span> <strong>{ao.paymentTerms || 'Standard Terms'}</strong></div>
                     </div>
 
                     <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -785,13 +874,14 @@ export const AdminOrderMonitor: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* ADMIN DECISION (Section 3) */}
+                  {/* ADMIN DECISION */}
                   <div style={{ borderTop: '2px solid #E2E8F0', paddingTop: 14 }}>
                     <div style={{ fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, textAlign: 'center' }}>
                       ADMIN DECISION
                     </div>
                     <div style={{ display: 'flex', gap: 14 }}>
                       <button
+                        disabled={isActionLoading}
                         onClick={() => setApprovalStep('REJECT')}
                         style={{
                           flex: 1,
@@ -802,7 +892,7 @@ export const AdminOrderMonitor: React.FC = () => {
                           borderRadius: 8,
                           fontSize: 13,
                           fontWeight: 800,
-                          cursor: 'pointer',
+                          cursor: isActionLoading ? 'not-allowed' : 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -813,9 +903,10 @@ export const AdminOrderMonitor: React.FC = () => {
                         <ThumbsDown size={16} /> Reject PO
                       </button>
                       <button
+                        disabled={isActionLoading}
                         onClick={() => {
                           setApprovalStep('ADVANCE_CONFIG');
-                          setApprovalDecision(null); // CRITICAL: Do not preselect either option
+                          setApprovalDecision(null);
                         }}
                         style={{
                           flex: 1,
@@ -826,7 +917,7 @@ export const AdminOrderMonitor: React.FC = () => {
                           borderRadius: 8,
                           fontSize: 13,
                           fontWeight: 800,
-                          cursor: 'pointer',
+                          cursor: isActionLoading ? 'not-allowed' : 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -841,11 +932,11 @@ export const AdminOrderMonitor: React.FC = () => {
                 </>
               )}
 
-              {/* ── STEP: REJECT PURCHASE ORDER (Section 3) ── */}
+              {/* ── STEP: REJECT PURCHASE ORDER ── */}
               {approvalStep === 'REJECT' && (
                 <>
                   <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '12px 16px', fontSize: 12.5, color: '#991B1B', fontWeight: 600 }}>
-                    <strong>Reject Purchase Order:</strong> The buyer will receive a formal rejection notification along with your entered reason.
+                    <strong>Reject Purchase Order:</strong> The buyer will receive a formal rejection notification in their dashboard along with your entered reason.
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
@@ -867,34 +958,41 @@ export const AdminOrderMonitor: React.FC = () => {
                       Cancel
                     </button>
                     <button
-                      disabled={!rejectReason.trim()}
-                      onClick={() => {
+                      disabled={!rejectReason.trim() || isActionLoading}
+                      onClick={async () => {
                         if (!rejectReason.trim()) return;
-                        const result = rejectMasterOrderAdmin(ao.id, rejectReason.trim());
-                        if (result.success) {
+                        setIsActionLoading(true);
+                        try {
+                          await adminOrderApi.rejectOrder(ao.id, rejectReason.trim());
                           setAdminBannerType('error');
                           setAdminBanner(`✕ Purchase Order ${ao.poNumber || ao.orderNumber} has been REJECTED. Buyer has been notified.`);
                           closeModal();
+                          await fetchOrders(true);
+                        } catch (err: any) {
+                          setAdminBannerType('error');
+                          setAdminBanner(`Failed to reject order: ${err.message}`);
+                        } finally {
+                          setIsActionLoading(false);
                         }
                       }}
                       style={{
                         padding: '9px 22px',
-                        background: rejectReason.trim() ? '#DC2626' : '#94A3B8',
+                        background: rejectReason.trim() && !isActionLoading ? '#DC2626' : '#94A3B8',
                         color: '#FFF',
                         border: 'none',
                         borderRadius: 6,
                         fontSize: 12.5,
                         fontWeight: 800,
-                        cursor: rejectReason.trim() ? 'pointer' : 'not-allowed'
+                        cursor: rejectReason.trim() && !isActionLoading ? 'pointer' : 'not-allowed'
                       }}
                     >
-                      Confirm Rejection
+                      {isActionLoading ? 'Rejecting...' : 'Confirm Rejection'}
                     </button>
                   </div>
                 </>
               )}
 
-              {/* ── STEP 2: ADVANCE PAYMENT DECISION & CONFIGURATION (Sections 4 & 5) ── */}
+              {/* ── STEP 2: ADVANCE PAYMENT DECISION & CONFIGURATION ── */}
               {approvalStep === 'ADVANCE_CONFIG' && (
                 <>
                   {/* PO APPROVED Banner */}
@@ -906,7 +1004,7 @@ export const AdminOrderMonitor: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Advance Payment Required? [ YES ] [ NO ] (Section 4: Do not preselect either option) */}
+                  {/* Advance Payment Required? [ YES ] [ NO ] */}
                   <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18 }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', textAlign: 'center', marginBottom: 12 }}>
                       Advance Payment Required?
@@ -963,7 +1061,7 @@ export const AdminOrderMonitor: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* ── IF ADMIN SELECTS NO (Section 4) ── */}
+                  {/* ── IF ADMIN SELECTS NO ── */}
                   {approvalDecision === 'NO' && (
                     <div style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -973,37 +1071,45 @@ export const AdminOrderMonitor: React.FC = () => {
                         </span>
                       </div>
                       <div style={{ fontSize: 12, color: '#64748B' }}>
-                        This purchase order will be marked as <strong>CONFIRMED &amp; RELEASED</strong> immediately without requiring any upfront advance deposit.
+                        This purchase order will be marked as <strong>CONFIRMED &amp; RELEASED</strong> immediately in PostgreSQL without requiring any upfront advance deposit.
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid #E2E8F0', paddingTop: 12 }}>
                         <button onClick={() => setApprovalStep('REVIEW')} style={{ padding: '8px 16px', background: '#FFF', border: '1px solid #CBD5E1', color: '#475569', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                           ← Back
                         </button>
                         <button
-                          onClick={() => {
-                            const result = approveMasterOrderAdmin(ao.id, { advanceRequired: false });
-                            if (result.success) {
+                          disabled={isActionLoading}
+                          onClick={async () => {
+                            setIsActionLoading(true);
+                            try {
+                              await adminOrderApi.approveOrder(ao.id, { advanceRequired: false });
                               setAdminBannerType('success');
                               setAdminBanner(`✓ Purchase Order ${ao.poNumber || ao.orderNumber} Approved & Released! Advance Payment: NOT REQUIRED.`);
                               closeModal();
+                              await fetchOrders(true);
+                            } catch (err: any) {
+                              setAdminBannerType('error');
+                              setAdminBanner(`Failed to approve order: ${err.message}`);
+                            } finally {
+                              setIsActionLoading(false);
                             }
                           }}
-                          style={{ padding: '10px 24px', background: '#0F766E', color: '#FFF', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                          style={{ padding: '10px 24px', background: '#0F766E', color: '#FFF', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: isActionLoading ? 'not-allowed' : 'pointer' }}
                         >
-                          Confirm Approval &amp; Release PO
+                          {isActionLoading ? 'Releasing PO...' : 'Confirm Approval & Release PO'}
                         </button>
                       </div>
                     </div>
                   )}
 
-                  {/* ── IF ADMIN SELECTS YES (Section 5) ── */}
+                  {/* ── IF ADMIN SELECTS YES ── */}
                   {approvalDecision === 'YES' && (
                     <div style={{ background: '#FFF', border: '1px solid #99F6E4', borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
                       <div style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         ADVANCE PAYMENT CONFIGURATION
                       </div>
 
-                      {/* Advance Payment Type: ( ) Percentage  ( ) Fixed Amount */}
+                      {/* Advance Payment Type */}
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Advance Payment Type:</div>
                         <div style={{ display: 'flex', gap: 16 }}>
@@ -1050,7 +1156,7 @@ export const AdminOrderMonitor: React.FC = () => {
                             />
                             <span style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>%</span>
                           </div>
-                          {/* Auto Calculation Display (Section 5) */}
+                          {/* Auto Calculation Display */}
                           <div style={{ marginTop: 10, padding: 12, background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, fontSize: 12, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                             <div>
                               <div style={{ color: '#64748B' }}>PO Total:</div>
@@ -1113,7 +1219,7 @@ export const AdminOrderMonitor: React.FC = () => {
                             type="text"
                             value={advNotes}
                             onChange={e => setAdvNotes(e.target.value)}
-                            placeholder="Optional text to buyer..."
+                            placeholder="Optional instructions to buyer..."
                             style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 12.5, borderRadius: 6, border: '1px solid #CBD5E1', outline: 'none', boxSizing: 'border-box' }}
                           />
                         </div>
@@ -1133,34 +1239,41 @@ export const AdminOrderMonitor: React.FC = () => {
                           ← Back
                         </button>
                         <button
-                          disabled={computedAdvance <= 0 || computedAdvance > totalAmt}
-                          onClick={() => {
-                            const result = approveMasterOrderAdmin(ao.id, {
-                              advanceRequired: true,
-                              advanceMethod: advMethod,
-                              advancePercentage: advMethod === 'PERCENTAGE' ? advPct : undefined,
-                              fixedAmount: advMethod === 'FIXED_AMOUNT' ? advFixedAmount : undefined,
-                              advanceDueDate: advDueDate || undefined,
-                              advanceNotes: advNotes || undefined
-                            });
-                            if (result.success) {
+                          disabled={computedAdvance <= 0 || computedAdvance > totalAmt || isActionLoading}
+                          onClick={async () => {
+                            setIsActionLoading(true);
+                            try {
+                              await adminOrderApi.approveOrder(ao.id, {
+                                advanceRequired: true,
+                                advanceMethod: advMethod,
+                                advancePercentage: advMethod === 'PERCENTAGE' ? advPct : undefined,
+                                fixedAmount: advMethod === 'FIXED_AMOUNT' ? advFixedAmount : undefined,
+                                advanceDueDate: advDueDate || undefined,
+                                advanceNotes: advNotes || undefined
+                              });
                               setAdminBannerType('success');
                               setAdminBanner(`✓ PO ${ao.poNumber || ao.orderNumber} Approved! Advance payment of ₹${computedAdvance.toLocaleString()} requested from buyer via Razorpay.`);
                               closeModal();
+                              await fetchOrders(true);
+                            } catch (err: any) {
+                              setAdminBannerType('error');
+                              setAdminBanner(`Failed to approve order: ${err.message}`);
+                            } finally {
+                              setIsActionLoading(false);
                             }
                           }}
                           style={{
                             padding: '10px 24px',
-                            background: (computedAdvance <= 0 || computedAdvance > totalAmt) ? '#94A3B8' : '#0F766E',
+                            background: (computedAdvance <= 0 || computedAdvance > totalAmt || isActionLoading) ? '#94A3B8' : '#0F766E',
                             color: '#FFF',
                             border: 'none',
                             borderRadius: 8,
                             fontSize: 13,
                             fontWeight: 800,
-                            cursor: (computedAdvance <= 0 || computedAdvance > totalAmt) ? 'not-allowed' : 'pointer'
+                            cursor: (computedAdvance <= 0 || computedAdvance > totalAmt || isActionLoading) ? 'not-allowed' : 'pointer'
                           }}
                         >
-                          Confirm &amp; Request Advance Payment
+                          {isActionLoading ? 'Requesting Advance...' : 'Confirm & Request Advance Payment'}
                         </button>
                       </div>
                     </div>
@@ -1174,9 +1287,10 @@ export const AdminOrderMonitor: React.FC = () => {
         );
       })()}
 
+      {/* ── VIEW PURCHASE ORDER DETAILS MODAL ── */}
       {selectedOrder && (() => {
         const activeOrder = orders.find(o => o.id === selectedOrder.id) || selectedOrder;
-        const currentPoStatus = activeOrder.poStatus || 'PENDING_ADMIN_REVIEW';
+        const currentPoStatus = (activeOrder as any).poStatus || 'PENDING_ADMIN_REVIEW';
         const isHeld = activeOrder.isOnHold || activeOrder.status === 'ON_HOLD';
 
         // Gather all line items across all sub-orders
@@ -1197,7 +1311,6 @@ export const AdminOrderMonitor: React.FC = () => {
           });
         });
 
-        // Calculate selected totals
         const selectedTotalAmount = allLinesList
           .filter(l => selectedLineIds.includes(l.id))
           .reduce((sum, l) => sum + l.totalPrice, 0);
@@ -1243,18 +1356,31 @@ export const AdminOrderMonitor: React.FC = () => {
                     <div style={{ marginTop: 2 }}>Reason: {activeOrder.holdReason || 'Administrative Review Required'}</div>
                   </div>
                   <button
-                    onClick={() => {
-                      releaseOrderHold(activeOrder.id);
-                      setAdminBanner(`✓ Master Order ${activeOrder.orderNumber} released from HOLD.`);
+                    disabled={isActionLoading}
+                    onClick={async () => {
+                      setIsActionLoading(true);
+                      try {
+                        await adminOrderApi.releaseHold(activeOrder.id);
+                        setAdminBannerType('success');
+                        setAdminBanner(`✓ Master Order ${activeOrder.orderNumber} released from HOLD.`);
+                        await fetchOrders(true);
+                        const refreshed = await adminOrderApi.getOrderDetail(activeOrder.id);
+                        setSelectedOrder(refreshed);
+                      } catch (err: any) {
+                        setAdminBannerType('error');
+                        setAdminBanner(`Failed to release hold: ${err.message}`);
+                      } finally {
+                        setIsActionLoading(false);
+                      }
                     }}
-                    style={{ padding: '5px 12px', background: '#DC2626', color: '#FFF', border: 'none', borderRadius: 4, fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}
+                    style={{ padding: '5px 12px', background: '#DC2626', color: '#FFF', border: 'none', borderRadius: 4, fontWeight: 700, fontSize: 11.5, cursor: isActionLoading ? 'not-allowed' : 'pointer' }}
                   >
                     Release Hold
                   </button>
                 </div>
               )}
 
-              {/* Meta summary (Section 1: PO Number, Master Order, Customer, RFQ, Total, Delivery, Payment Terms, Hold) */}
+              {/* Meta summary */}
               <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 14, fontSize: 12.5, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <strong>PO Number:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{activeOrder.poNumber || activeOrder.orderNumber}</span>
@@ -1278,7 +1404,7 @@ export const AdminOrderMonitor: React.FC = () => {
                   <strong>RFQ Reference:</strong> <span style={{ fontFamily: 'monospace' }}>{activeOrder.rfqNumber || '—'}</span>
                 </div>
                 <div>
-                  <strong>Expected Delivery:</strong> {activeOrder.expectedDeliveryDate || '2026-10-05'}
+                  <strong>Expected Delivery:</strong> {activeOrder.expectedDeliveryDate || 'Standard Timeline'}
                 </div>
                 <div>
                   <strong>Payment Terms:</strong> {activeOrder.paymentTerms || 'Standard Terms'}
@@ -1297,13 +1423,14 @@ export const AdminOrderMonitor: React.FC = () => {
                 </div>
               </div>
 
-              {/* PO Approval & Advance Payment Governance Section (Strictly enforces approval -> advance decision) */}
+              {/* PO Approval & Advance Payment Governance Section */}
               <div style={{ marginTop: 4 }}>
                 <AdvancePaymentSection
-                  order={activeOrder}
-                  onOrderUpdated={(updated) => {
-                    setSelectedOrder(updated);
+                  order={activeOrder as any}
+                  onOrderUpdated={async (updated) => {
+                    setSelectedOrder(updated as any);
                     setAdminBanner(`✓ Order ${updated.orderNumber} updated successfully.`);
+                    await fetchOrders(true);
                   }}
                 />
               </div>
@@ -1351,7 +1478,7 @@ export const AdminOrderMonitor: React.FC = () => {
                               const lineKey = line.id || line.productId || `${so.subOrderNumber}-line-${lIdx}`;
                               const isChecked = selectedLineIds.includes(lineKey);
                               const lineTotal = line.totalPrice !== undefined ? line.totalPrice : (line.quantity * line.unitPrice);
-                              const marginRes = getApplicableMargin(line.productId, so.manufacturerId);
+                              const marginRes = getApplicableMargin ? getApplicableMargin(line.productId, so.manufacturerId) : { marginType: 'PERCENTAGE', marginPercentage: 10 };
                               const feeRate = platformFeeConfig?.feeValue ?? 2.0;
 
                               let marginAmt = 0;
@@ -1359,7 +1486,7 @@ export const AdminOrderMonitor: React.FC = () => {
                               let baseP = line.unitPrice;
 
                               if (marginRes.marginType === 'FIXED_RATE') {
-                                marginAmt = marginRes.marginRate ?? marginRes.marginValue;
+                                marginAmt = marginRes.marginRate ?? (marginRes as any).marginValue ?? 0;
                                 marginStr = `₹${marginAmt.toFixed(2)}`;
                                 baseP = Math.max(1, Math.round(((line.unitPrice / (1 + (feeRate / 100))) - marginAmt) * 100) / 100);
                               } else {
@@ -1437,6 +1564,7 @@ export const AdminOrderMonitor: React.FC = () => {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   {activeOrder.status === 'PENDING_ADMIN_APPROVAL' && (
                     <button
+                      disabled={isActionLoading}
                       onClick={() => {
                         setSelectedOrder(null);
                         setApprovalTargetOrder(activeOrder);
@@ -1458,17 +1586,18 @@ export const AdminOrderMonitor: React.FC = () => {
                         borderRadius: 6,
                         fontSize: 12,
                         fontWeight: 700,
-                        cursor: 'pointer',
+                        cursor: isActionLoading ? 'not-allowed' : 'pointer',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 6
                       }}
                     >
-                      <ShieldCheck size={14} /> Review & Approve PO
+                      <ShieldCheck size={14} /> Review &amp; Approve PO
                     </button>
                   )}
                   {!isHeld && (
                     <button
+                      disabled={isActionLoading}
                       onClick={() => {
                         setHoldTargetOrder(activeOrder);
                         setHoldReasonText('');
@@ -1481,7 +1610,7 @@ export const AdminOrderMonitor: React.FC = () => {
                         borderRadius: 6,
                         fontSize: 12,
                         fontWeight: 700,
-                        cursor: 'pointer',
+                        cursor: isActionLoading ? 'not-allowed' : 'pointer',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 4
@@ -1497,7 +1626,7 @@ export const AdminOrderMonitor: React.FC = () => {
                         setAdminBanner('⚠ Please select at least one product line item to generate the Purchase Order.');
                         return;
                       }
-                      regeneratePO(activeOrder.id, selectedLineIds);
+                      if (regeneratePO) regeneratePO(activeOrder.id, selectedLineIds);
                       setAdminBanner(`✓ Purchase Order ${activeOrder.poNumber || activeOrder.orderNumber} generated successfully with ${selectedLineIds.length} selected line item(s).`);
                     }}
                     disabled={selectedLineIds.length === 0}
@@ -1530,4 +1659,3 @@ export const AdminOrderMonitor: React.FC = () => {
     </div>
   );
 };
-

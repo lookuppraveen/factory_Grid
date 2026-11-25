@@ -49,7 +49,8 @@ export class ProductsController {
   @ApiQuery({ name: 'subCategory', required: false })
   @ApiQuery({ name: 'subSubCategory', required: false })
   @ApiQuery({ name: 'dosageForm', required: false })
-  @ApiQuery({ name: 'lifecycleStatus', required: false })
+  @ApiQuery({ name: 'lifecycleStatus', required: false, description: 'Filter by lifecycle status (ACTIVE, DISCONTINUED, END_OF_LIFE, ALL)' })
+  @ApiQuery({ name: 'buyerView', required: false, type: Boolean, description: 'Default buyer view (returns only ACTIVE products)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   listProducts(@Query() query: ProductQueryDto) {

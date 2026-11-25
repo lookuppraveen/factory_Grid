@@ -30,6 +30,7 @@ dist-ssr
 .vercel
 
 # Temporary / Scratch & Backup Files
+uploads/
 scratch/
 landing_step_*.tsx
 original_b6b7_*.tsx

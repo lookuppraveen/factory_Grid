@@ -1,7 +1,17 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { MasterOrder, SubOrder, SubOrderStatus } from '../../types';
 import { RaiseQaModal, getStoredQaRequests } from './RaiseQaModal';
+import { buyerOrderApi, BuyerMasterOrder, BuyerOrderSummary } from '../../services/buyerOrderApi';
+import {
+  getMasterOrderArtworks,
+  uploadArtworkFiles,
+  submitArtworkLink,
+  requestInHouseArtwork,
+  deleteArtwork,
+  getArtworkFileUrl,
+  OrderArtwork,
+} from '../../services/artworkService';
 import {
   ShoppingBag, Factory, CheckCircle2, Clock, ChevronRight, ChevronDown, AlertCircle,
   Package, ArrowRight, Layers, FileText, ShieldCheck, Eye, Search, Filter, Check, X, ArrowLeft, FileCheck, Send, Building2,
@@ -14,9 +24,15 @@ import { usePagination } from '../../hooks/usePagination';
 
 export const MasterOrderSplittingModule: React.FC = () => {
   const {
-    orders, currentRole, manufacturers, setActiveTab, addAuditLog,
+    currentRole, manufacturers, setActiveTab, addAuditLog,
     updatePODeliveryAddress, updateSubOrderArtwork, regeneratePO, submitPOToBuyer
   } = useApp();
+
+  // Live PostgreSQL Orders State
+  const [liveOrders, setLiveOrders] = useState<MasterOrder[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [apiError, setApiError] = useState<{ message: string; status: number } | null>(null);
+  const [orderSummary, setOrderSummary] = useState<BuyerOrderSummary | null>(null);
 
   // Navigation View Modes:
   // 'LIST' | 'DETAILS' | 'ORIGINAL_QUOTE' | 'SPLIT_PREVIEW' | 'SPLIT_SUCCESS' | 'SUB_ORDERS_LIST' | 'SUB_ORDER_DETAIL' | 'PO_CREATION_LIST' | 'CREATE_PO_FORM' | 'PO_SUCCESS' | 'PO_DETAIL'
@@ -24,28 +40,55 @@ export const MasterOrderSplittingModule: React.FC = () => {
     'LIST' | 'DETAILS' | 'ORIGINAL_QUOTE' | 'SPLIT_PREVIEW' | 'SPLIT_SUCCESS' | 'SUB_ORDERS_LIST' | 'SUB_ORDER_DETAIL' | 'PO_CREATION_LIST' | 'CREATE_PO_FORM' | 'PO_SUCCESS' | 'PO_DETAIL'
   >('LIST');
 
-  const [selectedOrderId, setSelectedOrderId] = useState<string>(orders[0]?.id || '');
-  const [selectedSubOrderCode, setSelectedSubOrderCode] = useState<string>('SO-1001-01');
-  const [targetPoSubOrderCode, setTargetPoSubOrderCode] = useState<string>('SO-1001-01');
+  const [selectedOrderId, setSelectedOrderId] = useState<string>('');
+  const [selectedSubOrderCode, setSelectedSubOrderCode] = useState<string>('');
+  const [targetPoSubOrderCode, setTargetPoSubOrderCode] = useState<string>('');
 
   // PO Delivery Address & Control States
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [addressInputText, setAddressInputText] = useState('');
   const [poBannerMsg, setPoBannerMsg] = useState<string | null>(null);
 
-  // Persisted Created POs State: Record<subOrderCode, { poNumber: string; createdDate: string; status: 'Created' | 'Accepted' | 'Rejected'; rejectionReason?: string }>
-  const [createdPos, setCreatedPos] = useState<Record<string, { poNumber: string; createdDate: string; status: 'Created' | 'Accepted' | 'Rejected'; rejectionReason?: string }>>({
-    'SO-1001-01': { poNumber: 'PO-2026-1001-01', createdDate: '14 Aug 2026', status: 'Accepted' },
-    'SO-1001-02': { poNumber: 'PO-2026-1001-02', createdDate: '14 Aug 2026', status: 'Created' },
-    'SO-1001-03': { poNumber: 'PO-2026-1001-03', createdDate: '14 Aug 2026', status: 'Created' },
-    'SO-2026-5361-01': { poNumber: 'PO-2026-5361-01', createdDate: '14 Aug 2026', status: 'Accepted' },
-    'SO-2026-5361-02': { poNumber: 'PO-2026-5361-02', createdDate: '14 Aug 2026', status: 'Created' },
-    'SO-2026-5361-03': { poNumber: 'PO-2026-5361-03', createdDate: '14 Aug 2026', status: 'Created' }
-  });
+  // Created POs State: Derived dynamically from live PostgreSQL data
+  const [createdPos, setCreatedPos] = useState<Record<string, { poNumber: string; createdDate: string; status: 'Created' | 'Accepted' | 'Rejected'; rejectionReason?: string }>>({});
 
   // List View Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Load Real PostgreSQL Orders for Authenticated Buyer
+  const fetchOrders = useCallback(async () => {
+    setIsLoading(true);
+    setApiError(null);
+    try {
+      const res = await buyerOrderApi.listBuyerOrders({
+        search: searchTerm,
+        status: statusFilter,
+      });
+      const mappedOrders = (res.orders || []) as unknown as MasterOrder[];
+      setLiveOrders(mappedOrders);
+      setOrderSummary(res.summary);
+      if (mappedOrders.length > 0) {
+        setSelectedOrderId(prev => {
+          const exists = mappedOrders.some(o => o.id === prev);
+          return exists ? prev : mappedOrders[0].id;
+        });
+      } else {
+        setSelectedOrderId('');
+      }
+    } catch (err: any) {
+      setLiveOrders([]);
+      const status = err?.status || 500;
+      const message = err?.message || 'Failed to load master orders from PostgreSQL.';
+      setApiError({ message, status });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchTerm, statusFilter]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
 
   // Order Splitting State
   const [isSplitComplete, setIsSplitComplete] = useState<boolean>(true);
@@ -57,33 +100,64 @@ export const MasterOrderSplittingModule: React.FC = () => {
   const [activeArtworkModalSubOrderCode, setActiveArtworkModalSubOrderCode] = useState<string | null>(null);
 
   // Product-Wise Artwork Storage: Record<SubOrderCode, Record<ProdKey, Array<{ id: string; fileName: string; fileType: string; fileSize: string; uploadedAt: string; status: 'PENDING' | 'UPLOADING' | 'UPLOADED'; url?: string }>>>
-  const ARTWORK_STORAGE_KEY = 'factorygrid_product_artworks_v1';
-  const [productArtworksStore, setProductArtworksStore] = useState<Record<string, Record<string, Array<{ id: string; fileName: string; fileType: string; fileSize: string; uploadedAt: string; status: 'PENDING' | 'UPLOADING' | 'UPLOADED'; url?: string }>>>>(() => {
-    try {
-      const saved = localStorage.getItem('factorygrid_product_artworks_v1');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return {};
-  });
+  const [productArtworksStore, setProductArtworksStore] = useState<Record<string, Record<string, Array<{ id: string; fileName: string; fileType: string; fileSize: string; uploadedAt: string; status: 'PENDING' | 'UPLOADING' | 'UPLOADED'; url?: string }>>>>({});
 
-  useEffect(() => {
+  // Synchronize live artwork records from PostgreSQL
+  const loadArtworksForOrder = useCallback(async (orderIdOrNumber: string) => {
+    if (!orderIdOrNumber) return;
     try {
-      localStorage.setItem('factorygrid_product_artworks_v1', JSON.stringify(productArtworksStore));
-      window.dispatchEvent(new Event('storage'));
-    } catch (e) {}
-  }, [productArtworksStore]);
+      const summary = await getMasterOrderArtworks(orderIdOrNumber);
+      const nextStore: Record<string, Record<string, Array<{ id: string; fileName: string; fileType: string; fileSize: string; uploadedAt: string; status: 'PENDING' | 'UPLOADING' | 'UPLOADED'; url?: string }>>> = {};
+      const nextInHouse: Record<string, Record<string, { requestId: string; subCode: string; prodKey: string; productName: string; requestedAt: string; status: string }>> = {};
+      const nextReadiness: Record<string, 'YES' | 'NO' | 'EMAIL'> = {};
+      const nextSubmissionMethod: Record<string, 'FILE' | 'URL' | 'EMAIL' | 'IN_HOUSE_REQUEST'> = {};
 
-  useEffect(() => {
-    const syncArtworksFromStorage = () => {
-      try {
-        const saved = localStorage.getItem('factorygrid_product_artworks_v1');
-        if (saved) setProductArtworksStore(JSON.parse(saved));
-        else setProductArtworksStore({});
-      } catch (e) {}
-    };
-    window.addEventListener('storage', syncArtworksFromStorage);
-    return () => window.removeEventListener('storage', syncArtworksFromStorage);
-  }, []);
+      (summary.artworks || []).forEach((art) => {
+        const prodKey = art.productId;
+        const subCodeList = art.subOrderId
+          ? [art.subOrderId]
+          : (activeArtworkModalSubOrderCode ? [activeArtworkModalSubOrderCode] : ['SO-1001-01', 'SO-1001-02', 'SO-1001-03']);
+
+        subCodeList.forEach((subCode) => {
+          if (art.submissionType === 'IN_HOUSE_REQUEST') {
+            if (!nextInHouse[subCode]) nextInHouse[subCode] = {};
+            nextInHouse[subCode][prodKey] = {
+              requestId: `IAR-${art.id}`,
+              subCode,
+              prodKey,
+              productName: art.productName || 'Pharma Product',
+              requestedAt: new Date(art.createdAt).toLocaleDateString('en-GB') + ' ' + new Date(art.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              status: art.status,
+            };
+            nextSubmissionMethod[`${subCode}_${prodKey}`] = 'IN_HOUSE_REQUEST';
+          } else {
+            if (!nextStore[subCode]) nextStore[subCode] = {};
+            if (!nextStore[subCode][prodKey]) nextStore[subCode][prodKey] = [];
+            nextStore[subCode][prodKey].push({
+              id: art.id,
+              fileName: art.fileName || 'Artwork File',
+              fileType: art.fileType || 'Artwork Document',
+              fileSize: art.fileSize || 'N/A',
+              uploadedAt: new Date(art.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              status: 'UPLOADED',
+              url: art.fileUrl || (art.submissionType === 'EXTERNAL_LINK' ? (art.externalUrl || undefined) : undefined),
+            });
+            if (art.submissionType === 'EXTERNAL_LINK') {
+              nextReadiness[`${subCode}_${prodKey}`] = 'YES';
+              nextSubmissionMethod[`${subCode}_${prodKey}`] = 'URL';
+            }
+          }
+        });
+      });
+
+      setProductArtworksStore(nextStore);
+      setInHouseArtworkRequests(nextInHouse);
+      setArtworkReadiness(prev => ({ ...prev, ...nextReadiness }));
+      setArtSubmissionMethod(prev => ({ ...prev, ...nextSubmissionMethod }));
+    } catch (err: any) {
+      console.warn('Real artwork fetch error:', err.message);
+    }
+  }, [activeArtworkModalSubOrderCode]);
 
   // Lightbox Preview Modal State
   const [activeLightboxData, setActiveLightboxData] = useState<{
@@ -112,19 +186,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
   const [showEmailPanel, setShowEmailPanel] = useState<Record<string, boolean>>({});
 
   // 4 Artwork Submission Methods state per key: Record<string, 'FILE' | 'URL' | 'EMAIL' | 'IN_HOUSE_REQUEST'>
-  const [artSubmissionMethod, setArtSubmissionMethod] = useState<Record<string, 'FILE' | 'URL' | 'EMAIL' | 'IN_HOUSE_REQUEST'>>(() => {
-    try {
-      const saved = localStorage.getItem('factorygrid_art_submission_methods_v1');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return {};
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('factorygrid_art_submission_methods_v1', JSON.stringify(artSubmissionMethod));
-    } catch (e) {}
-  }, [artSubmissionMethod]);
+  const [artSubmissionMethod, setArtSubmissionMethod] = useState<Record<string, 'FILE' | 'URL' | 'EMAIL' | 'IN_HOUSE_REQUEST'>>({});
 
   // Persisted In-House Artwork Requests: Record<SubOrderCode, Record<ProdKey, { requestId: string; subCode: string; prodKey: string; productName: string; requestedAt: string; status: string }>>
   const [inHouseArtworkRequests, setInHouseArtworkRequests] = useState<Record<string, Record<string, {
@@ -134,34 +196,9 @@ export const MasterOrderSplittingModule: React.FC = () => {
     productName: string;
     requestedAt: string;
     status: string;
-  }>>>(() => {
-    try {
-      const saved = localStorage.getItem('factorygrid_inhouse_artwork_requests_v1');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return {};
-  });
+  }>>>({});
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('factorygrid_inhouse_artwork_requests_v1', JSON.stringify(inHouseArtworkRequests));
-      window.dispatchEvent(new Event('storage'));
-    } catch (e) {}
-  }, [inHouseArtworkRequests]);
-
-  useEffect(() => {
-    const syncInHouseRequests = () => {
-      try {
-        const saved = localStorage.getItem('factorygrid_inhouse_artwork_requests_v1');
-        if (saved) setInHouseArtworkRequests(JSON.parse(saved));
-        else setInHouseArtworkRequests({});
-      } catch (e) {}
-    };
-    window.addEventListener('storage', syncInHouseRequests);
-    return () => window.removeEventListener('storage', syncInHouseRequests);
-  }, []);
-
-  const handleRequestInHouseArtwork = (subCode: string, prodKey: string, productName: string) => {
+  const handleRequestInHouseArtwork = async (subCode: string, prodKey: string, productName: string) => {
     const currentSubReqs = inHouseArtworkRequests[subCode] || {};
     const existingReq = currentSubReqs[prodKey];
     if (existingReq) {
@@ -169,51 +206,69 @@ export const MasterOrderSplittingModule: React.FC = () => {
       return;
     }
 
-    const nowFormatted = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const reqId = `IAR-${subCode.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`;
+    const targetOrderId = activeMasterOrder?.id || activeMasterOrder?.orderNumber;
+    if (!targetOrderId) {
+      alert('Master Order not found.');
+      return;
+    }
 
-    const newRequest = {
-      requestId: reqId,
-      subCode,
-      prodKey,
-      productName,
-      requestedAt: nowFormatted,
-      status: 'IN_HOUSE_REQUESTED'
-    };
+    try {
+      const serverArt = await requestInHouseArtwork(
+        targetOrderId,
+        prodKey,
+        `In-house packaging artwork design requested for ${productName}.`,
+        { subOrderId: subCode, productName }
+      );
 
-    setInHouseArtworkRequests(prev => {
-      const sReqs = prev[subCode] || {};
-      return {
-        ...prev,
-        [subCode]: {
-          ...sReqs,
-          [prodKey]: newRequest
-        }
+      const nowFormatted = new Date(serverArt.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date(serverArt.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const reqId = `IAR-${serverArt.id}`;
+
+      const newRequest = {
+        requestId: reqId,
+        subCode,
+        prodKey,
+        productName,
+        requestedAt: nowFormatted,
+        status: 'IN_HOUSE_REQUESTED'
       };
-    });
 
-    setArtSubmissionMethod(prev => ({
-      ...prev,
-      [`${subCode}_${prodKey}`]: 'IN_HOUSE_REQUEST'
-    }));
+      setInHouseArtworkRequests(prev => {
+        const sReqs = prev[subCode] || {};
+        return {
+          ...prev,
+          [subCode]: {
+            ...sReqs,
+            [prodKey]: newRequest
+          }
+        };
+      });
 
-    updateSubOrderArtwork(subCode, {
-      id: reqId,
-      fileName: `In-house Artwork Service Request (${productName})`,
-      fileType: 'In-house Design Service',
-      fileSize: 'Design Request',
-      uploadedAt: nowFormatted,
-      status: 'IN_HOUSE_REQUESTED'
-    });
+      setArtSubmissionMethod(prev => ({
+        ...prev,
+        [`${subCode}_${prodKey}`]: 'IN_HOUSE_REQUEST'
+      }));
 
-    addAuditLog('Artwork Workflow', `Buyer submitted In-house Artwork Request (${reqId}) for ${productName} under Sub-Order ${subCode}`);
-    alert(`✔ In-house artwork request submitted successfully!\n\nRequest ID: ${reqId}\nProduct: ${productName}\nSub-Order: ${subCode}\n\nOur in-house packaging design team will prepare the artwork and contact you if needed.`);
+      updateSubOrderArtwork(subCode, {
+        id: reqId,
+        fileName: `In-house Artwork Service Request (${productName})`,
+        fileType: 'In-house Design Service',
+        fileSize: 'Design Request',
+        uploadedAt: nowFormatted,
+        status: 'IN_HOUSE_REQUESTED'
+      });
+
+      addAuditLog('Artwork Workflow', `Buyer submitted In-house Artwork Request (${reqId}) for ${productName} under Sub-Order ${subCode}`);
+      alert(`✔ In-house artwork request submitted successfully!\n\nRequest ID: ${reqId}\nProduct: ${productName}\nSub-Order: ${subCode}\n\nOur in-house packaging design team will prepare the artwork and contact you if needed.`);
+    } catch (err: any) {
+      console.error('In-house request error:', err);
+      alert(`Failed to submit in-house artwork request: ${err.message || 'Error'}`);
+    }
   };
 
   // Artwork URL Input value per key: Record<string, string>
   const [artUrlInputValue, setArtUrlInputValue] = useState<Record<string, string>>({});
 
-  const handleAddUrlLinkForSubOrder = (subCode: string, prodKey: string, urlString: string) => {
+  const handleAddUrlLinkForSubOrder = async (subCode: string, prodKey: string, urlString: string) => {
     if (!urlString || !urlString.trim()) {
       alert('Please enter a valid artwork URL.');
       return;
@@ -227,34 +282,55 @@ export const MasterOrderSplittingModule: React.FC = () => {
       return;
     }
 
-    const newEntry = {
-      id: `url_${Date.now()}`,
-      fileName: `URL Link: ${cleanUrl.length > 32 ? cleanUrl.substring(0, 32) + '...' : cleanUrl}`,
-      fileType: 'URL Link Reference',
-      fileSize: 'External URL',
-      uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'UPLOADED' as const,
-      url: cleanUrl
-    };
-
-    setProductArtworksStore(prev => {
-      const cSub = prev[subCode] || {};
-      const cProdFiles = cSub[prodKey] || [];
-      return {
-        ...prev,
-        [subCode]: {
-          ...cSub,
-          [prodKey]: [...cProdFiles, newEntry]
-        }
-      };
-    });
-
     const targetSubObj = subOrdersDataset.find(s => s.code === subCode);
-    const poCodeStr = targetSubObj?.poCode || `PO-${subCode}`;
-    updateSubOrderArtwork(subCode, newEntry);
-    addAuditLog('Artwork Workflow', `Buyer provided artwork URL link for Purchase Order ${poCodeStr}`);
-    alert(`✔ Artwork URL Link Submitted Successfully!\n\nURL: ${cleanUrl}\nSub-Order: ${subCode}`);
-    setArtUrlInputValue(prev => ({ ...prev, [`${subCode}_${prodKey}`]: '' }));
+    const targetLine = targetSubObj?.lines?.find((l: any) => (l.id || l.productName) === prodKey);
+    const productName = targetLine?.productName || prodKey;
+    const targetOrderId = activeMasterOrder?.id || activeMasterOrder?.orderNumber;
+
+    if (!targetOrderId) {
+      alert('Master Order not found.');
+      return;
+    }
+
+    try {
+      const serverArt = await submitArtworkLink(
+        targetOrderId,
+        prodKey,
+        cleanUrl,
+        { subOrderId: subCode, productName }
+      );
+
+      const newEntry = {
+        id: serverArt.id,
+        fileName: serverArt.fileName || `URL Link: ${cleanUrl.length > 32 ? cleanUrl.substring(0, 32) + '...' : cleanUrl}`,
+        fileType: 'URL Link Reference',
+        fileSize: 'External URL',
+        uploadedAt: new Date(serverArt.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'UPLOADED' as const,
+        url: cleanUrl
+      };
+
+      setProductArtworksStore(prev => {
+        const cSub = prev[subCode] || {};
+        const cProdFiles = cSub[prodKey] || [];
+        return {
+          ...prev,
+          [subCode]: {
+            ...cSub,
+            [prodKey]: [...cProdFiles, newEntry]
+          }
+        };
+      });
+
+      const poCodeStr = targetSubObj?.poCode || `PO-${subCode}`;
+      updateSubOrderArtwork(subCode, newEntry);
+      addAuditLog('Artwork Workflow', `Buyer provided artwork URL link for Purchase Order ${poCodeStr}`);
+      alert(`✔ Artwork URL Link Submitted Successfully!\n\nURL: ${cleanUrl}\nSub-Order: ${subCode}`);
+      setArtUrlInputValue(prev => ({ ...prev, [`${subCode}_${prodKey}`]: '' }));
+    } catch (err: any) {
+      console.error('Submit artwork link error:', err);
+      alert(`Failed to submit artwork link: ${err.message || 'Error'}`);
+    }
   };
 
   const handleEmailSubmissionInfo = (subCode: string, productName: string) => {
@@ -277,7 +353,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
     contextNumber: 'PO-2026-1001-01'
   });
 
-  const handleAddFilesForSubOrder = (subCode: string, prodKey: string, fileList: FileList | null) => {
+  const handleAddFilesForSubOrder = async (subCode: string, prodKey: string, fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     const allowed = ['pdf', 'ai', 'cdr', 'png', 'jpg', 'jpeg', 'webp'];
     const filesArray = Array.from(fileList);
@@ -297,106 +373,113 @@ export const MasterOrderSplittingModule: React.FC = () => {
     const remainingQuota = 5 - currentProdFiles.length;
     const filesToProcess = filesArray.slice(0, remainingQuota);
 
-    const newEntries: Array<{ id: string; fileName: string; fileType: string; fileSize: string; uploadedAt: string; status: 'PENDING' | 'UPLOADING' | 'UPLOADED'; url?: string }> = [];
+    const validFiles: File[] = [];
     let invalidFound = false;
 
-    filesToProcess.forEach((file, idx) => {
+    filesToProcess.forEach(file => {
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
-      if (!allowed.includes(ext)) {
+      if (allowed.includes(ext)) {
+        validFiles.push(file);
+      } else {
         invalidFound = true;
-        return;
       }
-
-      const sizeStr = file.size > 1024 * 1024
-        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-        : `${Math.round(file.size / 1024)} KB`;
-
-      const typeStr = ext === 'pdf' ? 'PDF Document (.pdf)'
-        : ext === 'ai' ? 'Adobe Illustrator (.ai)'
-        : ext === 'cdr' ? 'CorelDRAW (.cdr)'
-        : `${ext.toUpperCase()} Image (.${ext})`;
-
-      const previewUrl = ['png', 'jpg', 'jpeg', 'webp'].includes(ext)
-        ? URL.createObjectURL(file)
-        : undefined;
-
-      newEntries.push({
-        id: `file_${Date.now()}_${idx}`,
-        fileName: file.name,
-        fileType: typeStr,
-        fileSize: sizeStr,
-        uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'UPLOADED',
-        url: previewUrl
-      });
     });
 
-    if (invalidFound && newEntries.length === 0) {
+    if (invalidFound && validFiles.length === 0) {
       alert('Invalid file format selected. Please choose PNG, JPG, JPEG, WEBP, PDF, AI, or CDR files.');
       return;
     }
 
-    setProductArtworksStore(prev => {
-      const cSub = prev[subCode] || {};
-      const cProdFiles = cSub[prodKey] || [];
-      return {
-        ...prev,
-        [subCode]: {
-          ...cSub,
-          [prodKey]: [...cProdFiles, ...newEntries]
-        }
-      };
-    });
-  };
+    const targetSubObj = subOrdersDataset.find(s => s.code === subCode);
+    const targetLine = targetSubObj?.lines?.find((l: any) => (l.id || l.productName) === prodKey);
+    const productName = targetLine?.productName || prodKey;
+    const targetOrderId = activeMasterOrder?.id || activeMasterOrder?.orderNumber;
 
-  const handleReplaceFileForSubOrder = (subCode: string, prodKey: string, targetFileId: string, fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
-    const file = fileList[0];
-    const allowed = ['pdf', 'ai', 'cdr', 'png', 'jpg', 'jpeg'];
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-
-    if (!allowed.includes(ext)) {
-      alert('Invalid file format selected. Please choose PDF, AI, CDR, PNG, or JPG files.');
+    if (!targetOrderId) {
+      alert('Master Order not found.');
       return;
     }
 
-    const sizeStr = file.size > 1024 * 1024
-      ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-      : `${Math.round(file.size / 1024)} KB`;
+    const uploadKey = `${subCode}_${prodKey}`;
+    setArtworkUploadingKeys(prev => ({ ...prev, [uploadKey]: true }));
 
-    const typeStr = ext === 'pdf' ? 'PDF Document (.pdf)'
-      : ext === 'ai' ? 'Adobe Illustrator (.ai)'
-      : ext === 'cdr' ? 'CorelDRAW (.cdr)'
-      : `${ext.toUpperCase()} Image (.${ext})`;
+    try {
+      const serverArtworks = await uploadArtworkFiles(
+        targetOrderId,
+        prodKey,
+        validFiles,
+        { subOrderId: subCode, productName }
+      );
 
-    setProductArtworksStore(prev => {
-      const currentSub = prev[subCode] || {};
-      const currentProdFiles = currentSub[prodKey] || [];
-      const updated = currentProdFiles.map(f => {
-        if (f.id === targetFileId) {
-          return {
-            ...f,
-            fileName: file.name,
-            fileType: typeStr,
-            fileSize: sizeStr,
-            uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'UPLOADED' as const
-          };
-        }
-        return f;
+      const newEntries = serverArtworks.map(art => ({
+        id: art.id,
+        fileName: art.fileName || 'Artwork File',
+        fileType: art.fileType || 'Artwork Document',
+        fileSize: art.fileSize || 'N/A',
+        uploadedAt: new Date(art.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'UPLOADED' as const,
+        url: art.fileUrl || undefined,
+      }));
+
+      setProductArtworksStore(prev => {
+        const cSub = prev[subCode] || {};
+        const cProdFiles = cSub[prodKey] || [];
+        return {
+          ...prev,
+          [subCode]: {
+            ...cSub,
+            [prodKey]: [...cProdFiles, ...newEntries]
+          }
+        };
       });
 
-      return {
-        ...prev,
-        [subCode]: {
-          ...currentSub,
-          [prodKey]: updated
-        }
-      };
-    });
+      const poCodeStr = targetSubObj?.poCode || `PO-${subCode}`;
+      if (newEntries.length > 0) {
+        updateSubOrderArtwork(subCode, newEntries[0]);
+      }
+      addAuditLog('Artwork Workflow', `Buyer uploaded ${newEntries.length} artwork file(s) for ${productName} (PO: ${poCodeStr})`);
+      alert(`✔ ${newEntries.length} Artwork file(s) uploaded and saved successfully!`);
+    } catch (err: any) {
+      console.error('Artwork upload error:', err);
+      alert(`Failed to upload artwork: ${err.message || 'Error'}`);
+    } finally {
+      setArtworkUploadingKeys(prev => ({ ...prev, [uploadKey]: false }));
+    }
   };
 
-  const handleDeleteFileForSubOrder = (subCode: string, prodKey: string, fileId: string) => {
+  const handleReplaceFileForSubOrder = async (subCode: string, prodKey: string, targetFileId: string, fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const file = fileList[0];
+    const allowed = ['pdf', 'ai', 'cdr', 'png', 'jpg', 'jpeg', 'webp'];
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+
+    if (!allowed.includes(ext)) {
+      alert('Invalid file format selected. Please choose PNG, JPG, JPEG, WEBP, PDF, AI, or CDR files.');
+      return;
+    }
+
+    const targetOrderId = activeMasterOrder?.id || activeMasterOrder?.orderNumber;
+    if (targetOrderId && targetFileId && !targetFileId.startsWith('file_') && !targetFileId.startsWith('mock_')) {
+      try {
+        await deleteArtwork(targetOrderId, targetFileId);
+      } catch (err) {
+        console.warn('Replace delete failed:', err);
+      }
+    }
+
+    await handleAddFilesForSubOrder(subCode, prodKey, fileList);
+  };
+
+  const handleDeleteFileForSubOrder = async (subCode: string, prodKey: string, fileId: string) => {
+    const targetOrderId = activeMasterOrder?.id || activeMasterOrder?.orderNumber;
+    if (targetOrderId && fileId && !fileId.startsWith('file_') && !fileId.startsWith('mock_') && !fileId.startsWith('url_')) {
+      try {
+        await deleteArtwork(targetOrderId, fileId);
+      } catch (err: any) {
+        console.error('Delete artwork API error:', err);
+      }
+    }
+
     setProductArtworksStore(prev => {
       const currentSub = prev[subCode] || {};
       const currentProdFiles = currentSub[prodKey] || [];
@@ -488,8 +571,16 @@ export const MasterOrderSplittingModule: React.FC = () => {
   };
 
   const activeMasterOrder = useMemo(() => {
-    return orders.find(o => o.id === selectedOrderId) || orders[0];
-  }, [orders, selectedOrderId]);
+    return liveOrders.find(o => o.id === selectedOrderId) || liveOrders[0] || null;
+  }, [liveOrders, selectedOrderId]);
+
+  // Synchronize artworks whenever active master order or modal changes
+  useEffect(() => {
+    const targetOrderId = activeMasterOrder?.id || activeMasterOrder?.orderNumber;
+    if (targetOrderId) {
+      loadArtworksForOrder(targetOrderId);
+    }
+  }, [activeMasterOrder, activeArtworkModalSubOrderCode, loadArtworksForOrder]);
 
   // Role Checks
   const isBuyer = currentRole === 'BUYER' || currentRole === 'ADMIN';
@@ -509,9 +600,12 @@ export const MasterOrderSplittingModule: React.FC = () => {
         const isCipla = mfgNameLower.includes('cipla') || so.manufacturerId === 'm2' || subCode.includes('02');
         const isLupin = mfgNameLower.includes('lupin') || so.manufacturerId === 'm3' || subCode.includes('03');
 
-        let mappedLines = (so.lines && so.lines.length > 0) ? so.lines.map(l => ({
+        let mappedLines = (so.lines && so.lines.length > 0) ? so.lines.map((l: any, lineIdx: number) => ({
+          id: l.id ? String(l.id) : (l.productId ? String(l.productId) : `prod_${lineIdx + 1}`),
+          productId: l.productId ? String(l.productId) : (l.id ? String(l.id) : `prod_${lineIdx + 1}`),
           productName: l.productName || 'Pharmaceutical Product',
           dosageForm: l.dosageForm || 'Tablet',
+          packSize: l.packSize || '10 x 10 Strip',
           quantity: l.quantity,
           unitPrice: l.unitPrice,
           totalCost: l.totalPrice || (l.quantity * l.unitPrice),
@@ -520,16 +614,16 @@ export const MasterOrderSplittingModule: React.FC = () => {
 
         if (isSunBio && mappedLines.length === 0) {
           mappedLines = [
-            { productName: 'Paracetamol 500mg Tablets', dosageForm: 'Tablet', quantity: 10000, unitPrice: 9.66, totalCost: 96600, leadTime: '14 Days' },
-            { productName: 'Azithromycin 500mg Tablets', dosageForm: 'Tablet', quantity: 2000, unitPrice: 15.00, totalCost: 30000, leadTime: '12 Days' }
+            { id: 'p6', productId: 'p6', productName: 'Paracetamol 500mg Tablets', dosageForm: 'Tablet', packSize: '10 x 10 Strip', quantity: 10000, unitPrice: 9.66, totalCost: 96600, leadTime: '14 Days' },
+            { id: 'p3', productId: 'p3', productName: 'Azithromycin 500mg Tablets', dosageForm: 'Tablet', packSize: '10 x 3 Strip', quantity: 2000, unitPrice: 15.00, totalCost: 30000, leadTime: '12 Days' }
           ];
         } else if (isCipla && mappedLines.length === 0) {
           mappedLines = [
-            { productName: 'Amoxicillin 250mg Tablets', dosageForm: 'Capsule', quantity: 5000, unitPrice: 11.50, totalCost: 57500, leadTime: '10 Days' }
+            { id: 'p1', productId: 'p1', productName: 'Amoxicillin 250mg Tablets', dosageForm: 'Capsule', packSize: '10 x 10 Strip', quantity: 5000, unitPrice: 11.50, totalCost: 57500, leadTime: '10 Days' }
           ];
         } else if (isLupin && mappedLines.length === 0) {
           mappedLines = [
-            { productName: 'Metformin 500mg SR Tablets', dosageForm: 'Tablet', quantity: 3000, unitPrice: 14.00, totalCost: 42000, leadTime: '7 Days' }
+            { id: 'p2', productId: 'p2', productName: 'Metformin 500mg SR Tablets', dosageForm: 'Tablet', packSize: '10 x 10 Strip', quantity: 3000, unitPrice: 14.00, totalCost: 42000, leadTime: '7 Days' }
           ];
         }
 
@@ -649,19 +743,22 @@ export const MasterOrderSplittingModule: React.FC = () => {
 
   // Filter Master Orders for List View
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => {
+    return liveOrders.filter(o => {
       const q = searchTerm.toLowerCase().trim();
       const matchSearch =
         q === '' ||
         o.orderNumber.toLowerCase().includes(q) ||
         (o.poNumber && o.poNumber.toLowerCase().includes(q)) ||
-        o.customerName.toLowerCase().includes(q) ||
-        o.rfqNumber?.toLowerCase().includes(q) ||
-        o.subOrders.some(s => s.manufacturerName.toLowerCase().includes(q));
+        (o.customerName && o.customerName.toLowerCase().includes(q)) ||
+        (o.rfqNumber && o.rfqNumber.toLowerCase().includes(q)) ||
+        (o.subOrders && o.subOrders.some(s => s.manufacturerName?.toLowerCase().includes(q)));
 
       let matchStatus = true;
-      if (statusFilter === 'OPEN') matchStatus = o.status === 'OPEN' || o.status === 'APPROVED' || o.status === 'CREATED' || o.status === 'PROCESSING';
-      else if (statusFilter === 'CLOSED') matchStatus = o.status === 'COMPLETED';
+      if (statusFilter === 'OPEN') matchStatus = o.status === 'OPEN' || o.status === 'APPROVED' || o.status === 'CREATED' || o.status === 'PROCESSING' || o.status === 'PENDING_ADMIN_APPROVAL' || o.status === 'PENDING_ADVANCE';
+      else if (statusFilter === 'CLOSED') matchStatus = o.status === 'COMPLETED' || o.status === 'DELIVERED';
+      else if (statusFilter === 'PENDING') matchStatus = o.status === 'PENDING_ADMIN_APPROVAL' || o.status === 'PENDING_ADVANCE' || o.status === 'OPEN';
+      else if (statusFilter === 'CONFIRMED') matchStatus = o.status === 'CONFIRMED' || o.status === 'CONFIRMED_RELEASED';
+      else if (statusFilter === 'ON_HOLD') matchStatus = Boolean(o.isOnHold || o.status === 'ON_HOLD');
 
       return matchSearch && matchStatus;
     }).sort((a, b) => {
@@ -673,7 +770,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
       }
       return String(b.orderNumber || b.id || '').localeCompare(String(a.orderNumber || a.id || ''));
     });
-  }, [orders, searchTerm, statusFilter]);
+  }, [liveOrders, searchTerm, statusFilter]);
 
   // Pagination Control
   const pagination = usePagination({
@@ -883,7 +980,18 @@ export const MasterOrderSplittingModule: React.FC = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    const targetOrderId = activeMasterOrder?.id || activeMasterOrder?.orderNumber;
+                    const existingFiles = (productArtworksStore[subCode] || {})[prodKey] || [];
+                    if (targetOrderId) {
+                      for (const f of existingFiles) {
+                        if (f.id && !f.id.startsWith('mock_') && !f.id.startsWith('file_')) {
+                          try {
+                            await deleteArtwork(targetOrderId, f.id);
+                          } catch (e) {}
+                        }
+                      }
+                    }
                     setProductArtworksStore(prev => ({
                       ...prev,
                       [subCode]: {
@@ -1553,7 +1661,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
                                       type="file"
                                       multiple
                                       accept=".pdf,.ai,.cdr,.png,.jpg,.jpeg,.webp"
-                                      id={`art_input_${subCode}_${prodKey}`}
+                                      id={`art_input_new_${subCode}_${prodKey}`}
                                       onChange={e => {
                                         const fname = artFileNameInput[`${subCode}_${prodKey}`]?.trim();
                                         if (!fname) {
@@ -1567,7 +1675,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
                                       style={{ display: 'none' }}
                                     />
                                     <label
-                                      htmlFor={`art_input_${subCode}_${prodKey}`}
+                                      htmlFor={`art_input_new_${subCode}_${prodKey}`}
                                       title={!artFileNameInput[`${subCode}_${prodKey}`]?.trim() ? 'Enter a file name first' : 'Click to select artwork file'}
                                       style={{
                                         padding: '8px 16px', borderRadius: 6,
@@ -1874,7 +1982,13 @@ export const MasterOrderSplittingModule: React.FC = () => {
               {/* Modal Footer */}
               <div style={{ padding: '14px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end' }}>
                 <button
-                  onClick={() => setActiveArtworkModalSubOrderCode(null)}
+                  onClick={() => {
+                    const targetOrderId = activeMasterOrder?.id || activeMasterOrder?.orderNumber;
+                    if (targetOrderId) {
+                      loadArtworksForOrder(targetOrderId);
+                    }
+                    setActiveArtworkModalSubOrderCode(null);
+                  }}
                   style={{ padding: '8px 20px', borderRadius: 6, background: '#0F766E', color: '#FFFFFF', border: 'none', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
                 >
                   Save &amp; Close Artwork Window
@@ -1943,14 +2057,62 @@ export const MasterOrderSplittingModule: React.FC = () => {
             </div>
           </div>
 
-          {filteredOrders.length === 0 ? (
+          {isLoading ? (
+            <div style={{ padding: 48, textAlign: 'center', color: '#64748B' }}>
+              <RefreshCw size={32} className="animate-spin" style={{ color: '#0F766E', marginBottom: 12, marginInline: 'auto' }} />
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>Loading Master Orders from PostgreSQL...</div>
+              <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 4 }}>Retrieving live database records belonging to your account.</div>
+            </div>
+          ) : apiError ? (
+            apiError.status === 401 ? (
+              <div style={{ padding: 40, textAlign: 'center', background: '#FEF2F2' }}>
+                <Lock size={36} style={{ color: '#DC2626', marginBottom: 10, marginInline: 'auto' }} />
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#991B1B' }}>Authentication Required / Session Expired</div>
+                <div style={{ fontSize: 13, color: '#B91C1C', marginTop: 4, maxWidth: 500, marginInline: 'auto' }}>
+                  {apiError.message || 'You must be logged in with a valid Buyer account to view your orders.'}
+                </div>
+                <button
+                  onClick={() => window.location.href = '/login'}
+                  style={{ marginTop: 16, padding: '8px 20px', borderRadius: 6, background: '#DC2626', color: '#FFF', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Log In as Buyer
+                </button>
+              </div>
+            ) : apiError.status === 403 ? (
+              <div style={{ padding: 40, textAlign: 'center', background: '#FEF3C7' }}>
+                <AlertCircle size={36} style={{ color: '#D97706', marginBottom: 10, marginInline: 'auto' }} />
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#92400E' }}>Access Restricted</div>
+                <div style={{ fontSize: 13, color: '#B45309', marginTop: 4 }}>
+                  {apiError.message || 'You do not have permission to view these orders.'}
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: 40, textAlign: 'center', background: '#FEF2F2' }}>
+                <AlertCircle size={36} style={{ color: '#DC2626', marginBottom: 10, marginInline: 'auto' }} />
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#991B1B' }}>Backend Connection Error</div>
+                <div style={{ fontSize: 12.5, color: '#B91C1C', marginTop: 4 }}>{apiError.message}</div>
+                <button
+                  onClick={() => fetchOrders()}
+                  style={{ marginTop: 14, padding: '6px 14px', borderRadius: 6, background: '#0F766E', color: '#FFF', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Retry Request
+                </button>
+              </div>
+            )
+          ) : filteredOrders.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
-              <ShoppingBag size={36} style={{ color: '#CBD5E1', marginBottom: 10 }} />
+              <ShoppingBag size={36} style={{ color: '#CBD5E1', marginBottom: 10, marginInline: 'auto' }} />
               <div style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>No Master Orders Found</div>
-              <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 4 }}>Try clearing your search query or status filter.</div>
-              <button onClick={() => { setSearchTerm(''); setStatusFilter('ALL'); }} style={{ marginTop: 14, padding: '6px 14px', borderRadius: 6, background: '#0F766E', color: '#FFF', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                Reset Filters
-              </button>
+              <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 4 }}>
+                {searchTerm || statusFilter !== 'ALL'
+                  ? 'Try clearing your search query or status filter.'
+                  : 'You currently have no master orders registered in PostgreSQL.'}
+              </div>
+              {(searchTerm || statusFilter !== 'ALL') && (
+                <button onClick={() => { setSearchTerm(''); setStatusFilter('ALL'); }} style={{ marginTop: 14, padding: '6px 14px', borderRadius: 6, background: '#0F766E', color: '#FFF', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  Reset Filters
+                </button>
+              )}
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -1961,7 +2123,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>ORDER DATE</th>
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>DELIVERY DATE</th>
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>STATUS</th>
-                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>RESPONSES</th>
+                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>SOURCE REF</th>
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>TOTAL VALUE</th>
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>PRODUCTS</th>
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>SUB-ORDERS</th>
@@ -1972,11 +2134,11 @@ export const MasterOrderSplittingModule: React.FC = () => {
                 </thead>
                 <tbody>
                   {paginatedOrders.map(order => {
-                    const subCount = order.subOrders?.length || 3;
-                    const prodCount = order.subOrders?.reduce((acc, s) => acc + (s.lines?.length || 1), 0) || 4;
-                    const poCount = order.poNumber ? subCount : (poCreatedCount || subCount);
+                    const subCount = order.subOrders?.length || 0;
+                    const prodCount = order.subOrders?.reduce((acc, s) => acc + (s.lines?.length || 0), 0) || (order.lines?.length || 0);
+                    const poCount = (order as any).purchaseOrders?.length || (order.poNumber ? 1 : 0);
                     const isCompleted = order.status === 'COMPLETED' || order.status === 'DELIVERED';
-                    const displayTotalAmount = order.totalAmount || 297800;
+                    const displayTotalAmount = order.totalAmount || 0;
                     const isHeld = order.isOnHold || order.status === 'ON_HOLD';
 
                     return (
@@ -1985,10 +2147,10 @@ export const MasterOrderSplittingModule: React.FC = () => {
                           {order.orderNumber}
                         </td>
                         <td style={{ padding: '12px 14px', color: '#475569' }}>
-                          {order.createdDate || '14 Aug 2026'}
+                          {order.createdDate || '-'}
                         </td>
                         <td style={{ padding: '12px 14px', fontWeight: 600, color: '#1D4ED8' }}>
-                          {order.expectedDeliveryDate || '2026-09-02'}
+                          {order.expectedDeliveryDate || '-'}
                         </td>
                         <td style={{ padding: '12px 14px' }}>
                           <span
@@ -2071,7 +2233,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
                           )}
                         </td>
                         <td style={{ padding: '12px 14px', fontWeight: 600, color: '#475569' }}>
-                          3 Quotes
+                          {order.rfqNumber ? `RFQ: ${order.rfqNumber}` : order.quoteReference ? `Quote: ${order.quoteReference}` : 'Standard Order'}
                         </td>
                         <td style={{ padding: '12px 14px', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace' }}>
                           ₹{displayTotalAmount.toLocaleString('en-IN')}
@@ -2083,7 +2245,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
                           {subCount} Sub-Orders
                         </td>
                         <td style={{ padding: '12px 14px', fontWeight: 700, color: '#15803D' }}>
-                          {poCount} / {subCount} POs
+                          {poCount} {poCount === 1 ? 'PO' : 'POs'}
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                           <span
@@ -2106,9 +2268,15 @@ export const MasterOrderSplittingModule: React.FC = () => {
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               setSelectedOrderId(order.id);
                               setViewMode('DETAILS');
+                              try {
+                                const detail = await buyerOrderApi.getBuyerOrderDetail(order.id);
+                                if (detail) {
+                                  setLiveOrders(prev => prev.map(o => o.id === detail.id ? (detail as unknown as MasterOrder) : o));
+                                }
+                              } catch (e) {}
                             }}
                             style={{
                               padding: '6px 14px', borderRadius: 6, background: '#0F766E', color: '#FFFFFF',
@@ -3694,6 +3862,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
             const poObj = createdPos[subCode] || null;
             const subArtworksMap = productArtworksStore[subCode] || {};
             const uploadedFilesCount = Object.values(subArtworksMap).flatMap(arr => arr).filter(f => f.status === 'UPLOADED').length;
+            const hasInHouseSub = Object.keys(inHouseArtworkRequests[subCode] || {}).length > 0;
 
             const totalSubUnits = so.lines.reduce((acc, l) => acc + l.quantity, 0);
             const totalSubCost = so.lines.reduce((acc, l) => acc + l.totalCost, 0);
@@ -3762,7 +3931,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
                     </button>
 
                     {/* Sub-Order Level Artwork Action */}
-                    {uploadedFilesCount > 0 ? (
+                    {uploadedFilesCount > 0 || hasInHouseSub ? (
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <button
                           onClick={(e) => {
@@ -3776,7 +3945,7 @@ export const MasterOrderSplittingModule: React.FC = () => {
                           }}
                           title="Click to view uploaded artwork files"
                         >
-                          <CheckCircle2 size={13} style={{ color: '#16A34A' }} /> Artwork Uploaded ({uploadedFilesCount} {uploadedFilesCount === 1 ? 'File' : 'Files'}) ✓
+                          <CheckCircle2 size={13} style={{ color: '#16A34A' }} /> {uploadedFilesCount > 0 ? `Artwork Uploaded (${uploadedFilesCount} ${uploadedFilesCount === 1 ? 'File' : 'Files'}) ✓` : 'Artwork Requested ✓'}
                         </button>
 
                         <button
@@ -3913,8 +4082,8 @@ export const MasterOrderSplittingModule: React.FC = () => {
               <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>{ord.customerName}</h3>
 
               <div style={{ fontSize: 12.5, color: '#475569', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10 }}>
-                <div>Source Quote: <strong style={{ color: '#0F766E', fontFamily: 'monospace' }}>{ord.rfqNumber ? `QUOTE-${ord.rfqNumber.replace('RFQ-', '')}` : 'QUOTE-1001'}</strong></div>
-                <div>Sub-Orders: <strong style={{ color: '#0F766E' }}>{ord.subOrders?.length || 1} Sub-Orders</strong></div>
+                <div>Source Quote: <strong style={{ color: '#0F766E', fontFamily: 'monospace' }}>{ord.rfqNumber ? `QUOTE-${ord.rfqNumber.replace('RFQ-', '')}` : (ord.quoteReference || 'Quoted')}</strong></div>
+                <div>Sub-Orders: <strong style={{ color: '#0F766E' }}>{ord.subOrders?.length || 0} Sub-Orders</strong></div>
                 <div>Total Order Value: <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>₹{ord.totalAmount?.toLocaleString('en-IN')}</strong></div>
                 {ord.advanceStatus && (
                   <div style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -3933,9 +4102,15 @@ export const MasterOrderSplittingModule: React.FC = () => {
 
             <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #F1F5F9', display: 'flex', justifyContent: 'flex-end' }}>
               <button
-                onClick={() => {
+                onClick={async () => {
                   setSelectedOrderId(ord.id);
                   setViewMode('DETAILS');
+                  try {
+                    const detail = await buyerOrderApi.getBuyerOrderDetail(ord.id);
+                    if (detail) {
+                      setLiveOrders(prev => prev.map(o => o.id === detail.id ? (detail as unknown as MasterOrder) : o));
+                    }
+                  } catch (e) {}
                 }}
                 style={{ padding: '8px 16px', borderRadius: 6, background: '#0F766E', color: '#FFFFFF', border: 'none', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >

@@ -61,7 +61,7 @@ import { createPageResponse } from '../../common/pagination/page-response.dto';
 
 @Injectable()
 export class CatalogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // ===================================================================
   // PRODUCTS
@@ -74,8 +74,21 @@ export class CatalogService {
       where.active = true;
     }
 
-    if (query.lifecycleStatus && query.lifecycleStatus !== 'ALL') {
-      where.lifecycleStatus = { equals: query.lifecycleStatus, mode: 'insensitive' };
+    if (query.buyerView) {
+      // By default, Buyer search/catalogue shows strictly ACTIVE products.
+      // DISCONTINUED and END_OF_LIFE products must not appear in the default Buyer search.
+      where.lifecycleStatus = { in: ['ACTIVE', 'Active'] };
+    } else if (query.lifecycleStatus && query.lifecycleStatus !== 'ALL') {
+      const st = query.lifecycleStatus.trim().toUpperCase();
+      if (st === 'END_OF_LIFE' || st === 'EOL') {
+        where.lifecycleStatus = { in: ['END_OF_LIFE', 'EOL', 'End of Life', 'eol'] };
+      } else if (st === 'ACTIVE') {
+        where.lifecycleStatus = { in: ['ACTIVE', 'Active'] };
+      } else if (st === 'DISCONTINUED') {
+        where.lifecycleStatus = { in: ['DISCONTINUED', 'Discontinued'] };
+      } else {
+        where.lifecycleStatus = { equals: query.lifecycleStatus, mode: 'insensitive' };
+      }
     }
 
     if (query.productTypeId && query.productTypeId !== 'ALL') {
@@ -198,9 +211,21 @@ export class CatalogService {
   }
 
   async createProduct(dto: CreateCatalogProductDto) {
-    const rawCode = dto.productCode || dto.product_code;
+    let rawCode = dto.productCode || dto.product_code;
     if (!rawCode || !rawCode.trim()) {
-      throw new BadRequestException('Product Code is required.');
+      // Auto-generate unique product code if not provided by client
+      const products = await this.prisma.catalogProduct.findMany({
+        select: { productCode: true },
+      });
+      let maxNum = 0;
+      for (const p of products) {
+        const match = (p.productCode || '').match(/^PRD-?(\d+)$/i);
+        if (match) {
+          const n = parseInt(match[1], 10);
+          if (!isNaN(n) && n > maxNum) maxNum = n;
+        }
+      }
+      rawCode = `PRD-${String(maxNum + 1).padStart(5, '0')}`;
     }
     const codeClean = rawCode.trim().toUpperCase();
 
@@ -240,9 +265,11 @@ export class CatalogService {
     const effectiveProductTypeId = dto.productTypeId?.trim() || dto.product_type_id?.trim() || categoryRecord?.productTypeId || 'pt_med';
     const effectiveGenericName = dto.genericName?.trim() || dto.generic_name?.trim() || dto.shortName?.trim() || dto.short_name?.trim() || dto.name.trim();
     const effectiveDosageForm = dto.dosageForm?.trim() || dto.dosage_form?.trim() || effectiveSubCategory || 'Standard Form';
+    const effectivePharmaReference = dto.pharmaReference?.trim() || dto.pharma_reference?.trim() || null;
 
     const rawLifecycle = dto.lifecycleStatus || dto.lifecycle_status;
-    const lifecycleStatus = rawLifecycle ? rawLifecycle.toUpperCase() : 'ACTIVE';
+    let lifecycleStatus = rawLifecycle ? rawLifecycle.toUpperCase() : 'ACTIVE';
+    if (lifecycleStatus === 'EOL') lifecycleStatus = 'END_OF_LIFE';
     const active = lifecycleStatus === 'ACTIVE';
 
     const effectiveBaseUom = dto.baseUom?.trim() || dto.base_uom?.trim() || 'Unit';
@@ -304,6 +331,7 @@ export class CatalogService {
         shortName: dto.shortName?.trim() || dto.short_name?.trim() || null,
         genericName: effectiveGenericName,
         dosageForm: effectiveDosageForm,
+        pharmaReference: effectivePharmaReference,
         productTypeId: effectiveProductTypeId,
         categoryId: categoryRecord?.id || catId || null,
         category: effectiveCategory,
@@ -410,6 +438,7 @@ export class CatalogService {
         const effectiveProductTypeId = row.productTypeId?.trim() || 'pt_med';
         const effectiveGenericName = row.genericName?.trim() || row.name!.trim();
         const effectiveDosageForm = row.dosageForm?.trim() || effectiveSubCategory || 'Standard Form';
+        const effectivePharmaReference = row.pharmaReference?.trim() || row.pharma_reference?.trim() || null;
         const effectiveBaseUom = row.baseUom?.trim() || 'Unit';
         const effectivePackSize = row.packSize?.trim() || '10 x 10 Strip';
         const effectivePackUom = 'Strip';
@@ -421,6 +450,7 @@ export class CatalogService {
             name: row.name!.trim(),
             genericName: effectiveGenericName,
             dosageForm: effectiveDosageForm,
+            pharmaReference: effectivePharmaReference,
             productTypeId: effectiveProductTypeId,
             category: row.category!.trim(),
             subCategory: effectiveSubCategory,
@@ -495,6 +525,10 @@ export class CatalogService {
     if (dto.shortName !== undefined) updateData.shortName = dto.shortName?.trim() || null;
     if (dto.genericName !== undefined) updateData.genericName = dto.genericName.trim();
     if (dto.dosageForm !== undefined) updateData.dosageForm = dto.dosageForm.trim();
+    if (dto.pharmaReference !== undefined || dto.pharma_reference !== undefined) {
+      const val = dto.pharmaReference !== undefined ? dto.pharmaReference : dto.pharma_reference;
+      updateData.pharmaReference = val?.trim() || null;
+    }
     if (dto.productTypeId !== undefined) updateData.productTypeId = dto.productTypeId?.trim() || null;
     if (dto.categoryId !== undefined) updateData.categoryId = dto.categoryId?.trim() || null;
     if (dto.category !== undefined) updateData.category = dto.category.trim();
@@ -507,7 +541,8 @@ export class CatalogService {
     if (dto.packSize !== undefined) updateData.packSize = dto.packSize.trim();
     if (dto.packUom !== undefined) updateData.packUom = dto.packUom?.trim() || 'Strip';
     if (dto.lifecycleStatus !== undefined) {
-      const statusUpper = dto.lifecycleStatus.toUpperCase();
+      let statusUpper = dto.lifecycleStatus.toUpperCase();
+      if (statusUpper === 'EOL') statusUpper = 'END_OF_LIFE';
       updateData.lifecycleStatus = statusUpper;
       updateData.active = statusUpper === 'ACTIVE';
     }
@@ -697,10 +732,25 @@ export class CatalogService {
       });
     }
 
+    // Populate generic pre-allocated specification columns attribute_1..attribute_20 in PostgreSQL
+    const allProductAttrs = await this.prisma.productAttribute.findMany({
+      where: { productId: product.id },
+      include: { attribute: true },
+      orderBy: [{ id: 'asc' }],
+    });
+    const genericSlots: Record<string, string | null> = {};
+    for (let i = 1; i <= 20; i++) {
+      genericSlots[`attribute${i}`] = allProductAttrs[i - 1]?.attributeValue?.substring(0, 255) || null;
+    }
+    await this.prisma.catalogProduct.update({
+      where: { id: product.id },
+      data: genericSlots,
+    });
+
     return this.getProductAttributes(product.id);
   }
 
-    // ===================================================================
+  // ===================================================================
   // PRODUCT PRICES (PRODUCT_PRICE)
   // ===================================================================
 
@@ -1460,7 +1510,7 @@ export class CatalogService {
     return { success: true, message: `Customer segment "${id}" deleted successfully.` };
   }
 
-// ===================================================================
+  // ===================================================================
   // PRODUCT MANUFACTURER MAPPINGS (PRODUCT_MANUFACTURER)
   // ===================================================================
 
@@ -1608,7 +1658,7 @@ export class CatalogService {
     const [types, catCounts, attrCounts] = await Promise.all([
       this.prisma.productType.findMany({
         where,
-        orderBy: orderBy.length > 0 ? orderBy : [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: orderBy.some((o: any) => o.id !== undefined) ? orderBy : [...orderBy, { id: 'desc' }],
         ...(isPaginated ? { skip, take } : {}),
       }),
       this.prisma.category.groupBy({
@@ -2070,7 +2120,7 @@ export class CatalogService {
 
     const categories = await this.prisma.category.findMany({
       where,
-      orderBy: orderBy.length > 0 ? orderBy : [{ createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: orderBy.some((o: any) => o.id !== undefined) ? orderBy : [...orderBy, { id: 'desc' }],
       ...(isPaginated ? { skip, take } : {}),
     });
 
@@ -2961,7 +3011,7 @@ export class CatalogService {
           orderBy: [{ displayOrder: 'asc' }],
         },
       },
-      orderBy: orderBy.length > 0 ? orderBy : [{ createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: orderBy.some((o: any) => o.id !== undefined) ? orderBy : [...orderBy, { id: 'desc' }],
       ...(isPaginated ? { skip, take } : {}),
     });
 
@@ -3209,6 +3259,8 @@ export class CatalogService {
       shortName: p.shortName || p.name,
       genericName: p.genericName || p.name,
       dosageForm: p.dosageForm || 'Standard',
+      pharmaReference: p.pharmaReference || null,
+      pharma_reference: p.pharmaReference || null,
       productTypeId: p.productTypeId || 'pt_med',
       categoryId: p.categoryId,
       category: p.category,
@@ -3220,12 +3272,22 @@ export class CatalogService {
       baseUom: p.baseUom || 'Unit',
       packSize: p.packSize || '10 x 10 Strip',
       packUom: p.packUom || 'Strip',
-      lifecycleStatus: p.lifecycleStatus || (p.active ? 'ACTIVE' : 'INACTIVE'),
+      lifecycleStatus: (p.lifecycleStatus === 'EOL' ? 'END_OF_LIFE' : p.lifecycleStatus) || (p.active ? 'ACTIVE' : 'INACTIVE'),
       availableFrom: availableFromStr,
       discontinuedOn: discontinuedOnStr,
       replacementProductId: p.replacementProductId,
       isSellable: p.isSellable !== undefined ? p.isSellable : true,
       attributes: attributesObj,
+      attribute_1: p.attribute1 || null,
+      attribute_2: p.attribute2 || null,
+      attribute_3: p.attribute3 || null,
+      attribute_4: p.attribute4 || null,
+      attribute_5: p.attribute5 || null,
+      attribute_6: p.attribute6 || null,
+      attribute_7: p.attribute7 || null,
+      attribute_8: p.attribute8 || null,
+      attribute_9: p.attribute9 || null,
+      attribute_10: p.attribute10 || null,
       active: p.active,
       createdAt: p.createdAt ? p.createdAt.toISOString() : nowIso,
       updatedAt: p.updatedAt ? p.updatedAt.toISOString() : nowIso,
@@ -3334,7 +3396,7 @@ export class CatalogService {
       base_uom: p.baseUom || 'Unit',
       pack_size: p.packSize || '10 x 10 Strip',
       pack_uom: p.packUom || 'Strip',
-      lifecycle_status: p.lifecycleStatus || (p.active ? 'ACTIVE' : 'INACTIVE'),
+      lifecycle_status: (p.lifecycleStatus === 'EOL' ? 'END_OF_LIFE' : p.lifecycleStatus) || (p.active ? 'ACTIVE' : 'INACTIVE'),
       available_from: availableFromStr,
       discontinued_on: discontinuedOnStr,
       replacement_product_id: p.replacementProductId,
@@ -3704,7 +3766,7 @@ export class CatalogService {
       const numId = BigInt(id);
       const byId = await this.prisma.manufacturerRegistration.findUnique({ where: { id: numId } });
       if (byId) return byId;
-    } catch {}
+    } catch { }
 
     return this.prisma.manufacturerRegistration.findFirst({
       where: {
@@ -3769,7 +3831,7 @@ export class CatalogService {
     if (query.manufacturerId) {
       try {
         where.registrationId = BigInt(query.manufacturerId);
-      } catch {}
+      } catch { }
     }
     if (query.status && query.status.toUpperCase() !== 'ALL') {
       where.lifecycleStatus = query.status.toUpperCase();

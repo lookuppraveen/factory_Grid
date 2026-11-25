@@ -164,17 +164,7 @@ export class ManufacturerRegistrationService {
   async listCategoryHierarchy() {
     const categories = await this.prisma.category.findMany({
       where: { lifecycleStatus: 'ACTIVE' },
-      orderBy: [{ productTypeId: 'asc' }, { category: 'asc' }, { displayOrder: 'asc' }],
-    });
-
-    // Also load active catalog products that are distinct from mirrored category records
-    const existingCatIds = new Set(categories.map(c => c.id));
-    const activeProducts = await this.prisma.catalogProduct.findMany({
-      where: {
-        lifecycleStatus: 'ACTIVE',
-        id: { notIn: Array.from(existingCatIds) },
-      },
-      orderBy: [{ productCode: 'asc' }],
+      orderBy: [{ productTypeId: 'asc' }, { category: 'asc' }, { subCategory: 'asc' }, { displayOrder: 'asc' }],
     });
 
     const treeMap = new Map<string, {
@@ -186,15 +176,17 @@ export class ManufacturerRegistrationService {
           id: string;
           categoryId: string;
           categoryCode: string;
-          subSubCategory: string | null;
+          subSubCategory: string;
           name: string;
           description: string | null;
         }>;
       }>;
     }>();
 
+    // 1. Register all valid L1 categories
     for (const cat of categories) {
-      const catName = cat.category.trim();
+      const catName = cat.category?.trim();
+      if (!catName) continue;
       if (!treeMap.has(catName)) {
         treeMap.set(catName, {
           category: catName,
@@ -202,38 +194,33 @@ export class ManufacturerRegistrationService {
           subCategories: new Map(),
         });
       }
-      const catNode = treeMap.get(catName)!;
-      const subName = (cat.subCategory || 'General').trim();
-      if (!catNode.subCategories.has(subName)) {
-        catNode.subCategories.set(subName, {
-          subCategory: subName,
-          items: [],
-        });
-      }
-      catNode.subCategories.get(subName)!.items.push({
-        id: cat.id,
-        categoryId: cat.categoryId,
-        categoryCode: cat.categoryCode,
-        subSubCategory: cat.subSubCategory || null,
-        name: cat.subSubCategory || cat.subCategory || cat.category,
-        description: cat.description,
-      });
     }
 
-    // Merge active catalog products into hierarchy under their respective category & sub-category
-    const productCategoryItems = activeProducts.map((p) => {
-      const catName = (p.category || 'Drugs').trim();
-      const subName = (p.subCategory || 'General').trim();
-      const prodTypeId = p.productTypeId || 'pt_med';
+    // 2. Register real sub-categories and leaf capabilities
+    const leafItems: Array<{
+      id: string;
+      categoryId: string;
+      productTypeId: string;
+      category: string;
+      subCategory: string;
+      subSubCategory: string;
+      categoryCode: string;
+      description: string | null;
+      name: string;
+      fullName: string;
+    }> = [];
 
-      if (!treeMap.has(catName)) {
-        treeMap.set(catName, {
-          category: catName,
-          productTypeId: prodTypeId,
-          subCategories: new Map(),
-        });
-      }
-      const catNode = treeMap.get(catName)!;
+    for (const cat of categories) {
+      const catName = cat.category?.trim();
+      const subName = cat.subCategory?.trim();
+      const subSubName = cat.subSubCategory?.trim();
+
+      // Only records with a valid Sub-Category belong under an L2 node
+      if (!catName || !subName) continue;
+
+      const catNode = treeMap.get(catName);
+      if (!catNode) continue;
+
       if (!catNode.subCategories.has(subName)) {
         catNode.subCategories.set(subName, {
           subCategory: subName,
@@ -241,29 +228,34 @@ export class ManufacturerRegistrationService {
         });
       }
 
-      catNode.subCategories.get(subName)!.items.push({
-        id: p.id,
-        categoryId: p.categoryId || p.id,
-        categoryCode: p.productCode,
-        subSubCategory: p.subSubCategory || p.name,
-        name: `${p.name} (${p.productCode})`,
-        description: p.description || p.genericName || null,
-      });
+      // If it has a specific capability (subSubCategory)
+      if (subSubName) {
+        const item = {
+          id: cat.id,
+          categoryId: cat.categoryId,
+          categoryCode: cat.categoryCode,
+          subSubCategory: subSubName,
+          name: subSubName,
+          description: cat.description,
+        };
+        catNode.subCategories.get(subName)!.items.push(item);
 
-      return {
-        id: p.id,
-        categoryId: p.categoryId || p.id,
-        productTypeId: prodTypeId,
-        category: catName,
-        subCategory: subName,
-        subSubCategory: p.subSubCategory || p.name,
-        categoryCode: p.productCode,
-        description: p.description || p.genericName || null,
-        name: `${p.name} (${p.productCode})`,
-        fullName: [catName, subName, p.name].filter(Boolean).join(' → '),
-      };
-    });
+        leafItems.push({
+          id: cat.id,
+          categoryId: cat.categoryId,
+          productTypeId: cat.productTypeId,
+          category: catName,
+          subCategory: subName,
+          subSubCategory: subSubName,
+          categoryCode: cat.categoryCode,
+          description: cat.description,
+          name: subSubName,
+          fullName: `${catName} → ${subName} → ${subSubName}`,
+        });
+      }
+    }
 
+    // Convert treeMap to structured array
     const tree = Array.from(treeMap.values()).map(cat => ({
       category: cat.category,
       productTypeId: cat.productTypeId,
@@ -273,26 +265,142 @@ export class ManufacturerRegistrationService {
       })),
     }));
 
-    const allCategoryItems = [
-      ...categories.map(c => ({
-        id: c.id,
-        categoryId: c.categoryId,
-        productTypeId: c.productTypeId,
-        category: c.category,
-        subCategory: c.subCategory,
-        subSubCategory: c.subSubCategory,
-        categoryCode: c.categoryCode,
-        description: c.description,
-        name: c.subSubCategory || c.subCategory || c.category,
-        fullName: [c.category, c.subCategory, c.subSubCategory].filter(Boolean).join(' → '),
-      })),
-      ...productCategoryItems,
-    ];
-
     return {
-      categories: allCategoryItems,
+      categories: leafItems,
       tree,
     };
+  }
+
+  async getSubCategoriesForCategory(categoryIdOrName: string) {
+    const needle = (categoryIdOrName || '').trim();
+    if (!needle) throw new BadRequestException('categoryId is required');
+
+    const catRecord = await this.prisma.category.findFirst({
+      where: {
+        OR: [
+          { id: needle },
+          { categoryId: needle },
+          { categoryCode: needle },
+          { category: { equals: needle, mode: 'insensitive' } },
+        ],
+        lifecycleStatus: 'ACTIVE',
+      },
+    });
+
+    const categoryName = catRecord ? catRecord.category : needle;
+    const records = await this.prisma.category.findMany({
+      where: {
+        category: { equals: categoryName, mode: 'insensitive' },
+        subCategory: { not: null },
+        lifecycleStatus: 'ACTIVE',
+      },
+      orderBy: [{ displayOrder: 'asc' }, { subCategory: 'asc' }],
+    });
+
+    const subMap = new Map<string, { id: string; subCategory: string; category: string; capabilitiesCount: number }>();
+    for (const r of records) {
+      const sub = r.subCategory?.trim();
+      if (!sub) continue;
+      if (!subMap.has(sub)) {
+        subMap.set(sub, {
+          id: r.id,
+          subCategory: sub,
+          category: r.category,
+          capabilitiesCount: 0,
+        });
+      }
+      if (r.subSubCategory?.trim()) {
+        subMap.get(sub)!.capabilitiesCount++;
+      }
+    }
+
+    return {
+      categoryId: catRecord?.id || needle,
+      category: categoryName,
+      subCategories: Array.from(subMap.values()),
+    };
+  }
+
+  async getCapabilitiesForSubCategory(subCategoryIdOrName: string) {
+    const needle = (subCategoryIdOrName || '').trim();
+    if (!needle) throw new BadRequestException('subCategoryId is required');
+
+    const subRecord = await this.prisma.category.findFirst({
+      where: {
+        OR: [
+          { id: needle },
+          { categoryId: needle },
+          { categoryCode: needle },
+          { subCategory: { equals: needle, mode: 'insensitive' } },
+        ],
+        lifecycleStatus: 'ACTIVE',
+      },
+    });
+
+    const subCategoryName = subRecord?.subCategory || needle;
+    const categoryName = subRecord?.category;
+
+    const whereClause: any = {
+      subCategory: { equals: subCategoryName, mode: 'insensitive' },
+      subSubCategory: { not: null },
+      lifecycleStatus: 'ACTIVE',
+    };
+    if (categoryName) {
+      whereClause.category = categoryName;
+    }
+
+    const records = await this.prisma.category.findMany({
+      where: whereClause,
+      orderBy: [{ displayOrder: 'asc' }, { subSubCategory: 'asc' }],
+    });
+
+    return {
+      subCategoryId: subRecord?.id || needle,
+      category: categoryName || (records[0]?.category ?? ''),
+      subCategory: subCategoryName,
+      capabilities: records.map((c) => ({
+        id: c.id,
+        categoryId: c.categoryId,
+        categoryCode: c.categoryCode,
+        name: c.subSubCategory!,
+        subSubCategory: c.subSubCategory!,
+        description: c.description,
+        fullName: `${c.category} → ${c.subCategory} → ${c.subSubCategory}`,
+      })),
+    };
+  }
+
+  async searchCapabilities(query: string) {
+    const q = (query || '').trim();
+    if (!q) return [];
+
+    const records = await this.prisma.category.findMany({
+      where: {
+        lifecycleStatus: 'ACTIVE',
+        subSubCategory: { not: null },
+        OR: [
+          { category: { contains: q, mode: 'insensitive' } },
+          { subCategory: { contains: q, mode: 'insensitive' } },
+          { subSubCategory: { contains: q, mode: 'insensitive' } },
+          { categoryCode: { contains: q, mode: 'insensitive' } },
+          { description: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: [{ category: 'asc' }, { subCategory: 'asc' }, { displayOrder: 'asc' }],
+    });
+
+    return records.map((c) => ({
+      id: c.id,
+      categoryId: c.categoryId,
+      productTypeId: c.productTypeId,
+      category: c.category,
+      subCategory: c.subCategory!,
+      subSubCategory: c.subSubCategory!,
+      categoryCode: c.categoryCode,
+      description: c.description,
+      name: c.subSubCategory!,
+      fullName: `${c.category} → ${c.subCategory} → ${c.subSubCategory}`,
+    }));
   }
 
   // ------------------------------------------------------------------- step 1
@@ -544,12 +652,57 @@ export class ManufacturerRegistrationService {
     if (!ids.length) {
       throw new BadRequestException('At least one manufacturing category or product capability must be selected.');
     }
-    const found = await this.prisma.catalogProduct.findMany({ where: { id: { in: ids }, active: true }, select: { id: true } });
-    const foundIds = new Set(found.map((p) => p.id));
-    const unknown = ids.filter((id) => !foundIds.has(id));
+
+    // Verify all IDs exist in PostgreSQL Category or CatalogProduct
+    const [catRecords, cpRecords] = await Promise.all([
+      this.prisma.category.findMany({
+        where: {
+          OR: [
+            { id: { in: ids } },
+            { categoryId: { in: ids } },
+          ],
+          lifecycleStatus: 'ACTIVE',
+        },
+      }),
+      this.prisma.catalogProduct.findMany({
+        where: { id: { in: ids }, active: true },
+      }),
+    ]);
+
+    const validIdSet = new Set<string>([
+      ...catRecords.map((c) => c.id),
+      ...catRecords.map((c) => c.categoryId),
+      ...cpRecords.map((p) => p.id),
+    ]);
+
+    const unknown = ids.filter((id) => !validIdSet.has(id));
     if (unknown.length) {
-      throw new BadRequestException(`Unknown category or product IDs: ${unknown.join(', ')}`);
+      throw new BadRequestException(`Unknown category or capability IDs: ${unknown.join(', ')}`);
     }
+
+    // Ensure CatalogProduct records exist for each category leaf ID to satisfy DB foreign key constraint
+    const cpExistingIds = new Set(cpRecords.map((p) => p.id));
+    for (const c of catRecords) {
+      if (!cpExistingIds.has(c.id)) {
+        await this.prisma.catalogProduct.upsert({
+          where: { id: c.id },
+          update: {},
+          create: {
+            id: c.id,
+            productCode: c.categoryCode || `CAP-${c.id}`,
+            name: c.subSubCategory || c.subCategory || c.category,
+            category: c.category,
+            subCategory: c.subCategory,
+            subSubCategory: c.subSubCategory,
+            packSize: 'Standard',
+            lifecycleStatus: 'ACTIVE',
+            active: true,
+          },
+        });
+        cpExistingIds.add(c.id);
+      }
+    }
+
     await this.prisma.$transaction(async (tx) => {
       await tx.manufacturerProduct.deleteMany({ where: { registrationId: reg.id, productId: { notIn: ids } } });
       const existing = await tx.manufacturerProduct.findMany({ where: { registrationId: reg.id }, select: { productId: true } });
@@ -574,47 +727,163 @@ export class ManufacturerRegistrationService {
   async saveStep4(dto: ManufacturerStep4Dto, code: string): Promise<ManufacturerStepResponseDto> {
     const reg = await this.getEditableDraft(code);
     const selected = await this.prisma.manufacturerProduct.findMany({ where: { registrationId: reg.id } });
-    const selectedIds = new Set(selected.map((s) => s.productId));
-    const seen = new Set<string>();
-    const normalizedItems: Array<{ id: string; moq: number; leadTimeDays: number }> = [];
+    if (!selected.length) {
+      throw new BadRequestException('Please select at least one manufacturing capability in Step 3 before configuring supply details.');
+    }
+    const selectedIds = selected.map((s) => s.productId);
+
+    // Look up category and sub-category for each selected capability
+    const catRecords = await this.prisma.category.findMany({
+      where: { id: { in: selectedIds } },
+    });
+    const catMap = new Map(catRecords.map((c) => [c.id, c]));
+
+    const cpRecords = await this.prisma.catalogProduct.findMany({
+      where: { id: { in: selectedIds } },
+    });
+    const cpMap = new Map(cpRecords.map((p) => [p.id, p]));
+
+    // Build map of valid Sub-Categories belonging to this manufacturer's selection
+    const validSubCategoryMap = new Map<string, { category: string; productIds: string[] }>();
+    for (const prodId of selectedIds) {
+      const c = catMap.get(prodId);
+      const cp = cpMap.get(prodId);
+      const subCategory = c?.subCategory?.trim() || cp?.subCategory?.trim();
+      const category = c?.category?.trim() || cp?.category?.trim() || 'General';
+      if (subCategory) {
+        if (!validSubCategoryMap.has(subCategory)) {
+          validSubCategoryMap.set(subCategory, { category, productIds: [] });
+        }
+        validSubCategoryMap.get(subCategory)!.productIds.push(prodId);
+      }
+    }
+
+    if (!dto.items || !dto.items.length) {
+      throw new BadRequestException('Supply details configuration is required.');
+    }
+
+    const seenSubCategories = new Set<string>();
+    const normalizedSubCategoryItems: Array<{
+      subCategory: string;
+      category: string;
+      batchSize: number;
+      deliveryScheduleDays: number;
+      plantCapacity: number;
+      productIds: string[];
+    }> = [];
 
     for (const item of dto.items) {
-      const id = item.categoryId || item.productId;
-      if (!id) {
-        throw new BadRequestException('categoryId or productId is required for each capability item.');
+      let subCat = item.subCategory?.trim();
+      let parentCat = item.category?.trim();
+
+      if (!subCat && (item.categoryId || item.productId)) {
+        const id = (item.categoryId || item.productId)!;
+        const c = catMap.get(id);
+        const cp = cpMap.get(id);
+        subCat = c?.subCategory?.trim() || cp?.subCategory?.trim();
+        if (!parentCat) parentCat = c?.category?.trim() || cp?.category?.trim();
       }
-      if (!selectedIds.has(id)) {
-        throw new BadRequestException(`Category ${id} is not part of this manufacturer's selected capabilities.`);
+
+      if (!subCat) {
+        throw new BadRequestException('subCategory is required for each supply item.');
       }
-      if (seen.has(id)) {
-        throw new BadRequestException(`Duplicate entry for category ${id}.`);
+
+      if (!validSubCategoryMap.has(subCat)) {
+        throw new BadRequestException(`Sub-Category "${subCat}" is not part of this manufacturer's selected capabilities.`);
       }
-      seen.add(id);
+
+      if (seenSubCategories.has(subCat)) {
+        throw new BadRequestException(`Duplicate supply configuration for Sub-Category "${subCat}".`);
+      }
+      seenSubCategories.add(subCat);
+
+      const target = validSubCategoryMap.get(subCat)!;
+      parentCat = parentCat || target.category;
 
       const batchSize = item.batchSize ?? item.moq;
       if (!batchSize || batchSize < 1) {
-        throw new BadRequestException(`Batch Size is required and must be at least 1 for category ${id}.`);
+        throw new BadRequestException(`Batch Size is required and must be at least 1 for Sub-Category "${subCat}".`);
       }
+
       const deliveryDays = item.deliveryScheduleDays ?? item.leadTimeDays;
       if (!deliveryDays || deliveryDays < 1) {
-        throw new BadRequestException(`Delivery Schedule in days is required and must be at least 1 for category ${id}.`);
+        throw new BadRequestException(`Delivery Schedule (Days) is required and must be at least 1 for Sub-Category "${subCat}".`);
       }
-      normalizedItems.push({ id, moq: batchSize, leadTimeDays: deliveryDays });
+
+      const plantCapacity = item.plantCapacity && item.plantCapacity >= 1 ? item.plantCapacity : 0;
+
+      normalizedSubCategoryItems.push({
+        subCategory: subCat,
+        category: parentCat,
+        batchSize,
+        deliveryScheduleDays: deliveryDays,
+        plantCapacity,
+        productIds: target.productIds,
+      });
     }
 
-    await this.prisma.$transaction([
-      ...normalizedItems.map((item) =>
-        this.prisma.manufacturerProduct.update({
-          where: { registrationId_productId: { registrationId: reg.id, productId: item.id } },
-          data: { moq: item.moq, leadTimeDays: item.leadTimeDays },
-        }),
-      ),
-      this.prisma.manufacturerRegistration.update({
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Upsert sub-category supplies in manufacturer_sub_category_supplies
+      for (const item of normalizedSubCategoryItems) {
+        await tx.manufacturerSubCategorySupply.upsert({
+          where: {
+            registrationId_subCategory: {
+              registrationId: reg.id,
+              subCategory: item.subCategory,
+            },
+          },
+          create: {
+            registrationId: reg.id,
+            category: item.category,
+            subCategory: item.subCategory,
+            batchSize: item.batchSize,
+            deliveryScheduleDays: item.deliveryScheduleDays,
+            plantCapacity: BigInt(item.plantCapacity),
+          },
+          update: {
+            category: item.category,
+            batchSize: item.batchSize,
+            deliveryScheduleDays: item.deliveryScheduleDays,
+            plantCapacity: BigInt(item.plantCapacity),
+          },
+        });
+
+        // 2. Sync batchSize (moq) and deliveryScheduleDays (leadTimeDays) to manufacturer_products
+        if (item.productIds.length > 0) {
+          await tx.manufacturerProduct.updateMany({
+            where: {
+              registrationId: reg.id,
+              productId: { in: item.productIds },
+            },
+            data: {
+              moq: item.batchSize,
+              leadTimeDays: item.deliveryScheduleDays,
+            },
+          });
+        }
+      }
+
+      // 3. Remove any sub-category supplies for this registration that are no longer selected
+      await tx.manufacturerSubCategorySupply.deleteMany({
+        where: {
+          registrationId: reg.id,
+          subCategory: { notIn: Array.from(seenSubCategories) },
+        },
+      });
+
+      // 4. Update registration step
+      await tx.manufacturerRegistration.update({
         where: { id: reg.id },
         data: { currentStep: Math.max(reg.currentStep, 4) },
-      }),
-    ]);
-    return { success: true, message: 'Batch size and delivery schedule saved successfully', registrationCode: code, currentStep: 4 };
+      });
+    });
+
+    return {
+      success: true,
+      message: 'Sub-Category batch size, delivery schedule, and plant capacity saved successfully',
+      registrationCode: code,
+      currentStep: 4,
+    };
   }
 
   // ----------------------------------------------------------- read / review
@@ -786,6 +1055,19 @@ export class ManufacturerRegistrationService {
           };
         });
       })(),
+      subCategorySupplies: (
+        await this.prisma.manufacturerSubCategorySupply.findMany({
+          where: { registrationId: reg.id },
+          orderBy: [{ category: 'asc' }, { subCategory: 'asc' }],
+        })
+      ).map((s) => ({
+        id: s.id.toString(),
+        category: s.category,
+        subCategory: s.subCategory,
+        batchSize: s.batchSize,
+        deliveryScheduleDays: s.deliveryScheduleDays,
+        plantCapacity: Number(s.plantCapacity),
+      })),
       gallery: reg.galleryEntries.map((g) => this.toGalleryDto(g, reg.registrationCode)),
       achievements: reg.achievements.map((a) => this.toAchievementDto(a, reg.registrationCode)),
     };
@@ -878,10 +1160,25 @@ export class ManufacturerRegistrationService {
       }
     }
     if (!products.length) errors.products = 'Select at least one manufacturing category capability.';
+    const subSupplies = await this.prisma.manufacturerSubCategorySupply.findMany({ where: { registrationId: reg.id } });
+    if (!subSupplies.length) {
+      errors.supplyDetails = 'Supply details must be configured for selected sub-categories.';
+    }
+    for (const s of subSupplies) {
+      if (!s.batchSize || s.batchSize < 1) errors[`supply.${s.subCategory}.batchSize`] = `Batch Size is required for Sub-Category ${s.subCategory}.`;
+      if (!s.deliveryScheduleDays || s.deliveryScheduleDays < 1) {
+        errors[`supply.${s.subCategory}.deliveryScheduleDays`] = `Delivery Schedule is required for Sub-Category ${s.subCategory}.`;
+      }
+    }
     for (const p of products) {
-      if (!p.moq || p.moq < 1) errors[`products.${p.productId}.batchSize`] = `Batch Size is required for category ${p.productId}.`;
-      if (!p.leadTimeDays || p.leadTimeDays < 1) {
-        errors[`products.${p.productId}.deliveryScheduleDays`] = `Delivery Schedule is required for category ${p.productId}.`;
+      if (!p.moq || p.moq < 1) {
+        const matchingSupply = subSupplies.find(s => s.subCategory);
+        if (matchingSupply) {
+          await this.prisma.manufacturerProduct.update({
+            where: { registrationId_productId: { registrationId: reg.id, productId: p.productId } },
+            data: { moq: matchingSupply.batchSize, leadTimeDays: matchingSupply.deliveryScheduleDays },
+          });
+        }
       }
     }
     if (Object.keys(errors).length) throw new ValidationException(errors);

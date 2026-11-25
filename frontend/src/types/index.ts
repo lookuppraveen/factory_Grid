@@ -259,7 +259,7 @@ export interface Manufacturer {
   recentReviews?: any[];
 }
 
-export type LifecycleStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED' | 'EOL';
+export type LifecycleStatus = 'ACTIVE' | 'DISCONTINUED' | 'END_OF_LIFE' | 'DRAFT' | 'INACTIVE' | 'EOL';
 
 export interface ProductType {
   product_type_id: string;
@@ -433,6 +433,8 @@ export interface Product {
   discontinued_on?: string | null;
   replacement_product_id?: string | null;
   is_sellable?: boolean;
+  pharma_reference?: string | null;
+  pharmaReference?: string | null;
   created_at?: string;
   updated_at?: string;
 
@@ -442,6 +444,8 @@ export interface Product {
   name: string;
   genericName?: string;
   dosageForm?: string;
+  pharmaReference?: string | null;
+  pharma_reference?: string | null;
   composition?: string;
   packSize?: string;
   moq?: number;

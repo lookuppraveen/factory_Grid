@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Factory, FileText, CheckCircle2, Upload,
@@ -38,14 +38,14 @@ export interface CertDocState {
 /** Complete original statutory certifications & compliance documents list for manufacturer onboarding */
 export const ORIGINAL_MANUFACTURER_DOCUMENTS = [
   { key: 'mfgLicense', name: 'Manufacturing License', isMandatory: true },
-  { key: 'gmpCert', name: 'GMP Certificate', isMandatory: true },
+  { key: 'gmpCert', name: 'GLP Certificate', isMandatory: true },
   { key: 'whoGmpCert', name: 'WHO-GMP Certificate', isMandatory: true },
-  { key: 'isoCert', name: 'ISO Certification', isMandatory: true },
-  { key: 'pollutionCert', name: 'Pollution Certificate', isMandatory: true },
+  { key: 'isoCert', name: 'ISO Certification', isMandatory: false },
+  { key: 'pollutionCert', name: 'Pollution Certificate', isMandatory: false },
   { key: 'factoryReg', name: 'Factory Registration', isMandatory: false },
 ] as const;
 
-const MANDATORY_CERTIFICATIONS = ORIGINAL_MANUFACTURER_DOCUMENTS;
+const MANDATORY_CERTIFICATIONS = ORIGINAL_MANUFACTURER_DOCUMENTS.filter(c => c.isMandatory);
 
 /** 28 States and 8 Union Territories in India for state selection */
 export const INDIAN_STATES = [
@@ -85,16 +85,6 @@ export const INDIAN_STATES = [
   'Ladakh',
   'Lakshadweep',
   'Puducherry'
-];
-
-/** The 6 canonical manufacturing categories supported by FactoryGrid. */
-export const SUPPORTED_MANUFACTURING_CATEGORIES = [
-  { id: 'cat-tablets', name: 'Tablets', code: 'CAT-TAB', description: 'Oral Solid Dosage — Tablets, Coated & Effervescent' },
-  { id: 'cat-capsules', name: 'Capsules', code: 'CAT-CAP', description: 'Hard Gelatin & Softgel Capsules' },
-  { id: 'cat-injectables', name: 'Injectables', code: 'CAT-INJ', description: 'Sterile Vials, Ampoules & Lyophilized Parenterals' },
-  { id: 'cat-syrups', name: 'Syrups & Oral Liquids', code: 'CAT-SYR', description: 'Liquid Orals, Suspensions & Pediatric Drops' },
-  { id: 'cat-ointments', name: 'Ointments & Creams', code: 'CAT-ONT', description: 'Topical Creams, Gels & Medicated Ointments' },
-  { id: 'cat-nutraceuticals', name: 'Nutraceuticals', code: 'CAT-NUT', description: 'Dietary Supplements, Herbal Formulations & Vitamins' },
 ];
 
 export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizardProps> = ({
@@ -210,7 +200,7 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   // STEP 2 — Certifications State (Initial state: unuploaded)
   const [certificationsMap, setCertificationsMap] = useState<Record<string, CertDocState>>({
     mfgLicense: { key: 'mfgLicense', name: 'Manufacturing License', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
-    gmpCert: { key: 'gmpCert', name: 'GMP Certificate', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
+    gmpCert: { key: 'gmpCert', name: 'GLP Certificate', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
     whoGmpCert: { key: 'whoGmpCert', name: 'WHO-GMP Certificate', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
     isoCert: { key: 'isoCert', name: 'ISO Certification', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
     pollutionCert: { key: 'pollutionCert', name: 'Pollution Certificate', code: '', fileName: '', uploaded: false, issueDate: '', expiryDate: '', documentNumber: '' },
@@ -241,8 +231,10 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [categorySearchTerm, setCategorySearchTerm] = useState('');
 
-  // STEP 4 — Batch Size & Delivery Schedule State (renamed from MOQ & Lead Time)
-  const [categorySupplyDetailsMap, setCategorySupplyDetailsMap] = useState<Record<string, { batchSize: number; deliveryScheduleDays: number }>>({});
+  // STEP 4 — Batch Size, Delivery Schedule & Plant Capacity State (Maintained at SUB-CATEGORY Level)
+  const [subCategorySupplyDetailsMap, setSubCategorySupplyDetailsMap] = useState<
+    Record<string, { batchSize: number; deliveryScheduleDays: number; plantCapacity: number }>
+  >({});
 
   // STEP 5 — Confirmation & Submission State
   const [isAccurateConfirmed, setIsAccurateConfirmed] = useState(false);
@@ -260,10 +252,16 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
         setCategoriesList(cats);
         setCategoryTree(tree);
         if (tree.length > 0) {
-          setActiveCategory(prev => prev || tree[0].category);
-          if (tree[0].subCategories.length > 0) {
-            setActiveSubCategory(prev => prev || tree[0].subCategories[0].subCategory);
+          setActiveCategory(prev => (prev && tree.some(t => t.category === prev) ? prev : tree[0].category));
+          const currentTree = (activeCategory && tree.find(t => t.category === activeCategory)) || tree[0];
+          if (currentTree && currentTree.subCategories.length > 0) {
+            setActiveSubCategory(prev => (prev && currentTree.subCategories.some(s => s.subCategory === prev) ? prev : currentTree.subCategories[0].subCategory));
+          } else {
+            setActiveSubCategory(null);
           }
+        } else {
+          setActiveCategory(null);
+          setActiveSubCategory(null);
         }
       })
       .catch(err => {
@@ -337,18 +335,34 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
         if (reg?.whoGmpApplicable !== undefined) {
           setWhoGmpApplicable(reg.whoGmpApplicable);
         }
+        // Reload saved sub-category supplies and selected capabilities from PostgreSQL
+        if (reg?.subCategorySupplies && Array.isArray(reg.subCategorySupplies) && reg.subCategorySupplies.length > 0) {
+          const supplyMap: Record<string, { batchSize: number; deliveryScheduleDays: number; plantCapacity: number }> = {};
+          reg.subCategorySupplies.forEach((s: any) => {
+            supplyMap[s.subCategory] = {
+              batchSize: Number(s.batchSize) || 1000,
+              deliveryScheduleDays: Number(s.deliveryScheduleDays) || 14,
+              plantCapacity: Number(s.plantCapacity) || 50000,
+            };
+          });
+          setSubCategorySupplyDetailsMap(prev => ({ ...supplyMap, ...prev }));
+        } else if (reg?.products && Array.isArray(reg.products) && reg.products.length > 0) {
+          const supplyMap: Record<string, { batchSize: number; deliveryScheduleDays: number; plantCapacity: number }> = {};
+          reg.products.forEach((p: any) => {
+            const subCat = p.subCategory;
+            if (subCat && !supplyMap[subCat]) {
+              supplyMap[subCat] = {
+                batchSize: Number(p.batchSize || p.moq) || 1000,
+                deliveryScheduleDays: Number(p.deliveryScheduleDays || p.leadTimeDays) || 14,
+                plantCapacity: 50000,
+              };
+            }
+          });
+          setSubCategorySupplyDetailsMap(prev => ({ ...supplyMap, ...prev }));
+        }
         if (reg?.products && Array.isArray(reg.products) && reg.products.length > 0) {
           const ids = reg.products.map((p: any) => p.productId || p.categoryId);
           setSelectedCategoryIds(prev => prev.length === 0 ? ids : prev);
-          const supplyMap: Record<string, { batchSize: number; deliveryScheduleDays: number }> = {};
-          reg.products.forEach((p: any) => {
-            const id = p.productId || p.categoryId;
-            supplyMap[id] = {
-              batchSize: p.batchSize || p.moq || 1000,
-              deliveryScheduleDays: p.deliveryScheduleDays || p.leadTimeDays || 14,
-            };
-          });
-          setCategorySupplyDetailsMap(prev => ({ ...supplyMap, ...prev }));
         }
         if (reg?.company) {
           setCompanyDetails(prev => ({
@@ -415,8 +429,9 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   };
 
   const validateStep4 = () => {
-    for (const catId of selectedCategoryIds) {
-      const supply = categorySupplyDetailsMap[catId];
+    if (selectedSubCategories.length === 0) return false;
+    for (const group of selectedSubCategories) {
+      const supply = subCategorySupplyDetailsMap[group.subCategory];
       if (!supply || !supply.batchSize || supply.batchSize <= 0 || !supply.deliveryScheduleDays || supply.deliveryScheduleDays <= 0) {
         return false;
       }
@@ -500,18 +515,20 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
         setCurrentStep(4);
       } else if (currentStep === 4) {
         if (!validateStep4()) {
-          setApiError('Please define valid Batch Size and Delivery Schedule for all selected categories.');
+          setApiError('Please define valid Batch Size, Delivery Schedule, and Plant Capacity for all selected sub-categories.');
           return;
         }
         setIsSaving(true);
-        const items = selectedCategoryIds.map(categoryId => ({
-          categoryId,
-          productId: categoryId,
-          batchSize: categorySupplyDetailsMap[categoryId]?.batchSize || 1000,
-          moq: categorySupplyDetailsMap[categoryId]?.batchSize || 1000,
-          deliveryScheduleDays: categorySupplyDetailsMap[categoryId]?.deliveryScheduleDays || 14,
-          leadTimeDays: categorySupplyDetailsMap[categoryId]?.deliveryScheduleDays || 14,
-        }));
+        const items = selectedSubCategories.map(group => {
+          const supply = subCategorySupplyDetailsMap[group.subCategory] || { batchSize: 1000, deliveryScheduleDays: 14, plantCapacity: 50000 };
+          return {
+            category: group.category,
+            subCategory: group.subCategory,
+            batchSize: supply.batchSize || 1000,
+            deliveryScheduleDays: supply.deliveryScheduleDays || 14,
+            plantCapacity: supply.plantCapacity || 50000,
+          };
+        });
         await manufacturerRegistrationApi.saveStep4(items, registrationCode);
         setCurrentStep(5);
       }
@@ -535,10 +552,12 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
       setSelectedCategoryIds(prev => prev.filter(id => id !== catId));
     } else {
       setSelectedCategoryIds(prev => [...prev, catId]);
-      if (!categorySupplyDetailsMap[catId]) {
-        setCategorySupplyDetailsMap(prev => ({
+      const found = categoriesList.find(c => c.id === catId || c.categoryId === catId);
+      const subCat = found?.subCategory?.trim();
+      if (subCat && !subCategorySupplyDetailsMap[subCat]) {
+        setSubCategorySupplyDetailsMap(prev => ({
           ...prev,
-          [catId]: { batchSize: 1000, deliveryScheduleDays: 14 }
+          [subCat]: { batchSize: 1000, deliveryScheduleDays: 14, plantCapacity: 50000 }
         }));
       }
     }
@@ -782,10 +801,10 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
         targetMarkets: whoGmpApplicable ? 'Domestic & Exports (WHO Pre-qualified, SE Asia, Africa)' : 'Domestic Schedule M Market',
         drugCategories: selectedCategoryIds.map(id => {
           const cat = categoriesList.find(c => c.id === id || c.categoryId === id);
-          return cat ? cat.fullName : (SUPPORTED_MANUFACTURING_CATEGORIES.find(c => c.id === id)?.name || id);
+          return cat ? cat.fullName : id;
         }),
-        certifications: MANDATORY_CERTIFICATIONS.filter(c => certificationsMap[c.key]?.uploaded).map(c => c.name),
-        documents: MANDATORY_CERTIFICATIONS.filter(c => certificationsMap[c.key]?.uploaded).map(c => ({
+        certifications: ORIGINAL_MANUFACTURER_DOCUMENTS.filter(c => certificationsMap[c.key]?.uploaded).map(c => c.name),
+        documents: ORIGINAL_MANUFACTURER_DOCUMENTS.filter(c => certificationsMap[c.key]?.uploaded).map(c => ({
           name: certificationsMap[c.key]?.fileName || `${c.name}.pdf`,
           type: c.key,
           status: 'PENDING' as const,
@@ -805,44 +824,56 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
     }
   };
 
-  const selectedCategoriesList = selectedCategoryIds.map(id => {
-    const found = categoriesList.find(c => c.id === id || c.categoryId === id);
-    if (found) {
-      return {
+  const selectedCategoriesList = useMemo(() => {
+    return selectedCategoryIds
+      .map(id => {
+        const found = categoriesList.find(c => c.id === id || c.categoryId === id);
+        if (found) {
+          return {
+            id: found.id,
+            name: found.name,
+            code: found.categoryCode,
+            description: found.description || found.name,
+            fullName: found.fullName,
+            category: found.category,
+            subCategory: found.subCategory,
+            subSubCategory: found.subSubCategory,
+          };
+        }
+        return null;
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null);
+  }, [selectedCategoryIds, categoriesList]);
+
+  // Group selected capabilities by Sub-Category for Step 4 & Step 5
+  interface SubCategoryGroup {
+    subCategory: string;
+    category: string;
+    capabilities: Array<{ id: string; name: string; description?: string | null }>;
+  }
+
+  const selectedSubCategories = useMemo<SubCategoryGroup[]>(() => {
+    const map = new Map<string, SubCategoryGroup>();
+    selectedCategoryIds.forEach(id => {
+      const found = categoriesList.find(c => c.id === id || c.categoryId === id);
+      if (!found) return;
+      const subCat = found.subCategory?.trim() || 'General';
+      const cat = found.category?.trim() || 'General';
+      if (!map.has(subCat)) {
+        map.set(subCat, {
+          subCategory: subCat,
+          category: cat,
+          capabilities: [],
+        });
+      }
+      map.get(subCat)!.capabilities.push({
         id: found.id,
         name: found.name,
-        code: found.categoryCode,
-        description: found.description || found.name,
-        fullName: found.fullName,
-        category: found.category,
-        subCategory: found.subCategory,
-        subSubCategory: found.subSubCategory,
-      };
-    }
-    const legacy = SUPPORTED_MANUFACTURING_CATEGORIES.find(c => c.id === id);
-    if (legacy) {
-      return {
-        id: legacy.id,
-        name: legacy.name,
-        code: legacy.code,
-        description: legacy.description,
-        fullName: legacy.name,
-        category: legacy.name,
-        subCategory: null,
-        subSubCategory: null,
-      };
-    }
-    return {
-      id,
-      name: id,
-      code: id,
-      description: id,
-      fullName: id,
-      category: id,
-      subCategory: null,
-      subSubCategory: null,
-    };
-  });
+        description: found.description,
+      });
+    });
+    return Array.from(map.values());
+  }, [selectedCategoryIds, categoriesList]);
 
   // Step 5 Review Edit Modals State
   type MfgReviewSection = 'company' | 'certifications' | 'capabilities' | null;
@@ -853,7 +884,9 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   const [draftCompanyDetails, setDraftCompanyDetails] = useState({ ...companyDetails });
   const [draftCertificationsMap, setDraftCertificationsMap] = useState<Record<string, CertDocState>>({ ...certificationsMap });
   const [draftOtherCertsList, setDraftOtherCertsList] = useState<CertDocState[]>([...otherCertsList]);
-  const [draftSupplyDetailsMap, setDraftSupplyDetailsMap] = useState<Record<string, { batchSize: number; deliveryScheduleDays: number }>>({ ...categorySupplyDetailsMap });
+  const [draftSubCategorySupplyMap, setDraftSubCategorySupplyMap] = useState<
+    Record<string, { batchSize: number; deliveryScheduleDays: number; plantCapacity: number }>
+  >({ ...subCategorySupplyDetailsMap });
 
   const handleOpenMfgModal = (section: 'company' | 'certifications' | 'capabilities') => {
     setMfgModalError(null);
@@ -863,7 +896,7 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
       setDraftCertificationsMap({ ...certificationsMap });
       setDraftOtherCertsList([...otherCertsList]);
     } else if (section === 'capabilities') {
-      setDraftSupplyDetailsMap({ ...categorySupplyDetailsMap });
+      setDraftSubCategorySupplyMap({ ...subCategorySupplyDetailsMap });
     }
     setActiveMfgModal(section);
   };
@@ -1018,24 +1051,26 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
 
   const handleSaveMfgCapabilities = async () => {
     setMfgModalError(null);
-    for (const catId of selectedCategoryIds) {
-      const supply = draftSupplyDetailsMap[catId];
+    for (const group of selectedSubCategories) {
+      const supply = draftSubCategorySupplyMap[group.subCategory];
       if (!supply || !supply.batchSize || supply.batchSize <= 0 || !supply.deliveryScheduleDays || supply.deliveryScheduleDays <= 0) {
-        setMfgModalError('Please define valid positive Batch Size and Delivery Schedule days for all capabilities.');
+        setMfgModalError(`Please define valid positive Batch Size and Delivery Schedule days for Sub-Category "${group.subCategory}".`);
         return;
       }
     }
-    setCategorySupplyDetailsMap({ ...draftSupplyDetailsMap });
+    setSubCategorySupplyDetailsMap({ ...draftSubCategorySupplyMap });
     if (registrationCode) {
       try {
-        const items = selectedCategoryIds.map(categoryId => ({
-          categoryId,
-          productId: categoryId,
-          batchSize: draftSupplyDetailsMap[categoryId]?.batchSize || 1000,
-          moq: draftSupplyDetailsMap[categoryId]?.batchSize || 1000,
-          deliveryScheduleDays: draftSupplyDetailsMap[categoryId]?.deliveryScheduleDays || 14,
-          leadTimeDays: draftSupplyDetailsMap[categoryId]?.deliveryScheduleDays || 14,
-        }));
+        const items = selectedSubCategories.map(group => {
+          const supply = draftSubCategorySupplyMap[group.subCategory] || { batchSize: 1000, deliveryScheduleDays: 14, plantCapacity: 50000 };
+          return {
+            category: group.category,
+            subCategory: group.subCategory,
+            batchSize: supply.batchSize || 1000,
+            deliveryScheduleDays: supply.deliveryScheduleDays || 14,
+            plantCapacity: supply.plantCapacity || 50000,
+          };
+        });
         await manufacturerRegistrationApi.saveStep4(items, registrationCode);
       } catch (err: any) {
         console.warn('Backend sync warning for mfg step 4:', err?.message);
@@ -1956,7 +1991,6 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                             }}
                           >
                             <span>✓ {c.fullName || c.name}</span>
-                            <span style={{ fontSize: 10, opacity: 0.85 }}>({c.code})</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveCategorySelection(c.id)}
@@ -1979,7 +2013,7 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                     <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748B' }} />
                     <input
                       type="text"
-                      placeholder="Search capabilities by category, sub-category, capability name or code..."
+                      placeholder="Search capabilities by category, sub-category, or capability name..."
                       value={categorySearchTerm}
                       onChange={e => setCategorySearchTerm(e.target.value)}
                       style={{
@@ -2034,7 +2068,7 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                       </div>
                       {searchResults.length === 0 ? (
                         <div style={{ padding: 32, textAlign: 'center', color: '#64748B', fontSize: 13 }}>
-                          No categories or capabilities matching "{categorySearchTerm}".
+                          No capabilities matching "{categorySearchTerm}".
                         </div>
                       ) : (
                         searchResults.map(c => {
@@ -2060,10 +2094,11 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                                 <div style={{ fontSize: 13.5, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A', marginTop: 2 }}>
                                   {c.name}
                                 </div>
-                                <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
-                                  <span style={{ fontWeight: 700, color: isSelected ? '#14B8A6' : '#64748B' }}>{c.categoryCode}</span>
-                                  {c.description ? ` • ${c.description}` : ''}
-                                </div>
+                                {c.description && (
+                                  <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
+                                    {c.description}
+                                  </div>
+                                )}
                               </div>
                               <button
                                 type="button"
@@ -2091,6 +2126,11 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
 
                   {/* 3-PANEL HIERARCHICAL DRILLDOWN SELECTION FLOW (Default Mode) */}
                   {!isLoadingCategories && !isSearching && (
+                    categoryTree.length === 0 ? (
+                      <div style={{ padding: 48, textAlign: 'center', color: '#64748B', fontSize: 13, background: isPublicPage ? '#1E293B' : '#F8FAFC', borderRadius: 10, border: '1px solid #CBD5E1' }}>
+                        No manufacturing categories available.
+                      </div>
+                    ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.35fr', gap: 12, minHeight: 400 }}>
 
                       {/* 1. Category Column */}
@@ -2212,7 +2252,7 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', maxHeight: 350, paddingRight: 4 }}>
                           {currentItems.length === 0 ? (
                             <div style={{ padding: 24, textAlign: 'center', color: '#64748B', fontSize: 12 }}>
-                              Please select a Category and Sub-Category to view specific capabilities.
+                              {currentSubNode ? 'No capabilities available for this sub-category.' : 'Please select a Sub-Category to view specific capabilities.'}
                             </div>
                           ) : (
                             currentItems.map(item => {
@@ -2244,9 +2284,6 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                                       <span style={{ fontSize: 13, fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A' }}>
                                         {item.name}
                                       </span>
-                                      <span style={{ fontSize: 10, fontWeight: 700, background: isSelected ? '#14B8A6' : '#64748B', color: '#FFF', borderRadius: 4, padding: '1px 5px' }}>
-                                        {item.categoryCode}
-                                      </span>
                                     </div>
                                     {item.description && (
                                       <div style={{ fontSize: 11, color: '#64748B', marginTop: 3, lineHeight: 1.4 }}>
@@ -2262,6 +2299,7 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                       </div>
 
                     </div>
+                  )
                   )}
 
                   {apiError && (
@@ -2306,67 +2344,108 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
               );
             })()}
 
-            {/* STEP 4 — CATEGORY SUPPLY DETAILS (BATCH SIZE & DELIVERY SCHEDULE) */}
+            {/* STEP 4 — CATEGORY SUPPLY DETAILS (BATCH SIZE, DELIVERY SCHEDULE & PLANT CAPACITY AT SUB-CATEGORY LEVEL) */}
             {currentStep === 4 && (
               <div style={{ background: isPublicPage ? '#0F172A' : '#FFFFFF', border: isPublicPage ? '1px solid #1E293B' : '1px solid #E2E8F0', borderRadius: 14, padding: 28 }}>
                 <div style={{ marginBottom: 20 }}>
                   <h2 style={{ fontSize: 20, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A', margin: 0 }}>Category Supply Details</h2>
-                  <div style={{ fontSize: 12.5, color: isPublicPage ? '#94A3B8' : '#64748B', marginTop: 2 }}>Define Batch Size and typical delivery schedule for each category you manufacture.</div>
+                  <div style={{ fontSize: 12.5, color: isPublicPage ? '#94A3B8' : '#64748B', marginTop: 2 }}>
+                    Define Batch Size, Delivery Schedule, and Plant Capacity for each sub-category you manufacture.
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {selectedCategoriesList.map(category => {
-                    const supply = categorySupplyDetailsMap[category.id] || { batchSize: 1000, deliveryScheduleDays: 14 };
-                    return (
-                      <div key={category.id} style={{ background: isPublicPage ? '#1E293B' : '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 18 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <div style={{ fontSize: 14, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A' }}>
-                            {category.fullName || category.name}
-                          </div>
-                          <span style={{ fontSize: 11, fontWeight: 700, background: '#14B8A6', color: '#FFF', borderRadius: 4, padding: '2px 7px' }}>
-                            {category.code}
-                          </span>
-                        </div>
-                        {category.description && category.description !== category.name && (
-                          <div style={{ fontSize: 11.5, color: '#64748B', marginBottom: 14 }}>{category.description}</div>
-                        )}
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                          {/* Renamed MOQ to Batch Size */}
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Batch Size *</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={supply.batchSize}
-                              onChange={e => setCategorySupplyDetailsMap(prev => ({
-                                ...prev,
-                                [category.id]: { ...prev[category.id], batchSize: Number(e.target.value) || 0 }
-                              }))}
-                              style={{ width: '100%', height: 38, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, outline: 'none', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
-                            />
-                            <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 2 }}>Units / Batch</div>
+                  {selectedSubCategories.length === 0 ? (
+                    <div style={{ padding: 36, textAlign: 'center', color: '#64748B', fontSize: 13 }}>
+                      No manufacturing capabilities selected. Please go back to Step 3 and select capabilities.
+                    </div>
+                  ) : (
+                    selectedSubCategories.map(group => {
+                      const supply = subCategorySupplyDetailsMap[group.subCategory] || { batchSize: 1000, deliveryScheduleDays: 14, plantCapacity: 50000 };
+                      return (
+                        <div key={group.subCategory} style={{ background: isPublicPage ? '#1E293B' : '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 18 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span style={{ fontSize: 15, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A' }}>
+                                {group.subCategory}
+                              </span>
+                              <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: 'rgba(20,184,166,0.15)', color: '#14B8A6' }}>
+                                Category: {group.category}
+                              </span>
+                            </div>
                           </div>
 
-                          {/* Renamed delivery field to Delivery Schedule */}
-                          <div>
-                            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Delivery Schedule (Days) *</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={supply.deliveryScheduleDays}
-                              onChange={e => setCategorySupplyDetailsMap(prev => ({
-                                ...prev,
-                                [category.id]: { ...prev[category.id], deliveryScheduleDays: Number(e.target.value) || 0 }
-                              }))}
-                              style={{ width: '100%', height: 38, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, outline: 'none', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
-                            />
-                            <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 2 }}>Days from PO receipt to dispatch</div>
+                          {/* Selected Capabilities under this Sub-Category */}
+                          <div style={{ fontSize: 12, color: '#64748B', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <strong style={{ color: isPublicPage ? '#CBD5E1' : '#475569' }}>Selected Capabilities:</strong>
+                            <span>{group.capabilities.map(c => c.name).join(', ')}</span>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                            {/* Batch Size */}
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Batch Size *</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={supply.batchSize}
+                                onChange={e => setSubCategorySupplyDetailsMap(prev => ({
+                                  ...prev,
+                                  [group.subCategory]: {
+                                    batchSize: Number(e.target.value) || 0,
+                                    deliveryScheduleDays: prev[group.subCategory]?.deliveryScheduleDays || 14,
+                                    plantCapacity: prev[group.subCategory]?.plantCapacity || 50000,
+                                  }
+                                }))}
+                                style={{ width: '100%', height: 38, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, outline: 'none', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
+                              />
+                              <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 2 }}>Units / Batch</div>
+                            </div>
+
+                            {/* Delivery Schedule */}
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Delivery Schedule (Days) *</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={supply.deliveryScheduleDays}
+                                onChange={e => setSubCategorySupplyDetailsMap(prev => ({
+                                  ...prev,
+                                  [group.subCategory]: {
+                                    batchSize: prev[group.subCategory]?.batchSize || 1000,
+                                    deliveryScheduleDays: Number(e.target.value) || 0,
+                                    plantCapacity: prev[group.subCategory]?.plantCapacity || 50000,
+                                  }
+                                }))}
+                                style={{ width: '100%', height: 38, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, outline: 'none', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
+                              />
+                              <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 2 }}>Days from PO receipt to dispatch</div>
+                            </div>
+
+                            {/* Plant Capacity */}
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: isPublicPage ? '#CBD5E1' : '#334155', marginBottom: 4 }}>Plant Capacity *</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={supply.plantCapacity}
+                                onChange={e => setSubCategorySupplyDetailsMap(prev => ({
+                                  ...prev,
+                                  [group.subCategory]: {
+                                    batchSize: prev[group.subCategory]?.batchSize || 1000,
+                                    deliveryScheduleDays: prev[group.subCategory]?.deliveryScheduleDays || 14,
+                                    plantCapacity: Number(e.target.value) || 0,
+                                  }
+                                }))}
+                                style={{ width: '100%', height: 38, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 13, outline: 'none', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A' }}
+                              />
+                              <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 2 }}>Units / Month</div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
 
                 {apiError && (
@@ -2483,37 +2562,55 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                     </div>
                   </div>
 
-                  {/* Section 3 & 4: Category Capabilities, Batch Size & Delivery Schedules Table */}
-                  {/* Category column removed from final review page as explicitly required */}
+                  {/* Section 3 & 4: Sub-Category Capabilities, Batch Size, Delivery Schedules & Plant Capacity Table */}
                   <div style={{ background: isPublicPage ? '#1E293B' : '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #CBD5E1', paddingBottom: 8, marginBottom: 10 }}>
-                      <span style={{ fontWeight: 800, fontSize: 13, color: isPublicPage ? '#FFF' : '#0F172A' }}>3 & 4. Manufacturing Capabilities & Supply Details ({selectedCategoriesList.length} Capabilities)</span>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: isPublicPage ? '#FFF' : '#0F172A' }}>
+                        3 & 4. Manufacturing Capabilities & Supply Details ({selectedSubCategories.length} Sub-Categories, {selectedCategoriesList.length} Capabilities)
+                      </span>
                       <button type="button" onClick={() => handleOpenMfgModal('capabilities')} style={{ background: 'none', border: 'none', color: '#14B8A6', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Edit</button>
                     </div>
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid #CBD5E1', color: '#64748B' }}>
-                            <th style={{ padding: '6px 8px' }}>Capability / Specification</th>
+                            <th style={{ padding: '6px 8px' }}>Category</th>
+                            <th style={{ padding: '6px 8px' }}>Sub-Category</th>
+                            <th style={{ padding: '6px 8px' }}>Selected Capabilities</th>
                             <th style={{ padding: '6px 8px' }}>Batch Size</th>
                             <th style={{ padding: '6px 8px' }}>Delivery Schedule</th>
+                            <th style={{ padding: '6px 8px' }}>Plant Capacity</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {selectedCategoriesList.map(c => {
-                            const supply = categorySupplyDetailsMap[c.id] || { batchSize: 1000, deliveryScheduleDays: 14 };
+                          {selectedSubCategories.map(group => {
+                            const supply = subCategorySupplyDetailsMap[group.subCategory] || { batchSize: 1000, deliveryScheduleDays: 14, plantCapacity: 50000 };
                             return (
-                              <tr key={c.id} style={{ borderBottom: '1px solid #E2E8F0' }}>
-                                <td style={{ padding: '8px' }}>
+                              <tr key={`${group.category}-${group.subCategory}`} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                                <td style={{ padding: '8px', verticalAlign: 'top' }}>
+                                  <span style={{ fontSize: 11, background: 'rgba(20,184,166,0.1)', color: '#14B8A6', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                                    {group.category}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '8px', verticalAlign: 'top' }}>
                                   <div style={{ fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A' }}>
-                                    {c.fullName || c.name}
-                                  </div>
-                                  <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 2 }}>
-                                    Capability Code: <span style={{ fontWeight: 700 }}>{c.code}</span>
+                                    {group.subCategory}
                                   </div>
                                 </td>
-                                <td style={{ padding: '8px', fontWeight: 700 }}>{supply.batchSize.toLocaleString()} Units</td>
-                                <td style={{ padding: '8px', fontWeight: 700, color: '#14B8A6' }}>{supply.deliveryScheduleDays} Days</td>
+                                <td style={{ padding: '8px', verticalAlign: 'top' }}>
+                                  <div style={{ fontSize: 11.5, color: isPublicPage ? '#94A3B8' : '#64748B', maxWidth: 240 }}>
+                                    {group.capabilities.map(c => c.name).join(', ')}
+                                  </div>
+                                </td>
+                                <td style={{ padding: '8px', fontWeight: 700, verticalAlign: 'top' }}>
+                                  {supply.batchSize.toLocaleString()} Units
+                                </td>
+                                <td style={{ padding: '8px', fontWeight: 700, color: '#14B8A6', verticalAlign: 'top' }}>
+                                  {supply.deliveryScheduleDays} Days
+                                </td>
+                                <td style={{ padding: '8px', fontWeight: 700, verticalAlign: 'top' }}>
+                                  {supply.plantCapacity ? `${supply.plantCapacity.toLocaleString()} Units/Mo` : 'N/A'}
+                                </td>
                               </tr>
                             );
                           })}
@@ -2915,13 +3012,13 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
               {activeMfgModal === 'capabilities' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div style={{ fontSize: 12, color: isPublicPage ? '#94A3B8' : '#64748B' }}>
-                    Adjust Batch Size (Units) and Delivery Schedule (Days) for each of your selected manufacturing capabilities.
+                    Adjust Batch Size (Units/Batch), Delivery Schedule (Days), and Plant Capacity (Units/Month) for each of your selected Sub-Categories.
                   </div>
-                  {selectedCategoriesList.map(category => {
-                    const supply = draftSupplyDetailsMap[category.id] || { batchSize: 1000, deliveryScheduleDays: 14 };
+                  {selectedSubCategories.map(group => {
+                    const supply = draftSubCategorySupplyMap[group.subCategory] || { batchSize: 1000, deliveryScheduleDays: 14, plantCapacity: 50000 };
                     return (
                       <div
-                        key={category.id}
+                        key={`${group.category}-${group.subCategory}`}
                         style={{
                           padding: 14,
                           borderRadius: 8,
@@ -2929,17 +3026,23 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                           border: isPublicPage ? '1px solid #334155' : '1px solid #CBD5E1'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                           <div>
                             <span style={{ fontSize: 13, fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A' }}>
-                              {category.fullName || category.name}
+                              {group.subCategory}
                             </span>
-                            <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, background: '#14B8A6', color: '#FFF', borderRadius: 4, padding: '1px 6px' }}>
-                              {category.code}
+                            <span style={{ marginLeft: 8, fontSize: 11, background: 'rgba(20,184,166,0.1)', color: '#14B8A6', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                              {group.category}
                             </span>
                           </div>
+                          <span style={{ fontSize: 11, color: '#64748B' }}>
+                            {group.capabilities.length} {group.capabilities.length === 1 ? 'Capability' : 'Capabilities'}
+                          </span>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div style={{ fontSize: 11, color: isPublicPage ? '#94A3B8' : '#64748B', marginBottom: 12 }}>
+                          {group.capabilities.map(c => c.name).join(', ')}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                           <div>
                             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>
                               Batch Size (Units) *
@@ -2948,12 +3051,12 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                               type="number"
                               min="1"
                               value={supply.batchSize}
-                              onChange={e => setDraftSupplyDetailsMap(prev => ({
+                              onChange={e => setDraftSubCategorySupplyMap(prev => ({
                                 ...prev,
-                                [category.id]: {
-                                  ...prev[category.id],
+                                [group.subCategory]: {
                                   batchSize: Number(e.target.value) || 0,
-                                  deliveryScheduleDays: prev[category.id]?.deliveryScheduleDays || 14
+                                  deliveryScheduleDays: prev[group.subCategory]?.deliveryScheduleDays || 14,
+                                  plantCapacity: prev[group.subCategory]?.plantCapacity || 50000
                                 }
                               }))}
                               style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A', fontSize: 12.5 }}
@@ -2967,12 +3070,31 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                               type="number"
                               min="1"
                               value={supply.deliveryScheduleDays}
-                              onChange={e => setDraftSupplyDetailsMap(prev => ({
+                              onChange={e => setDraftSubCategorySupplyMap(prev => ({
                                 ...prev,
-                                [category.id]: {
-                                  ...prev[category.id],
-                                  batchSize: prev[category.id]?.batchSize || 1000,
-                                  deliveryScheduleDays: Number(e.target.value) || 0
+                                [group.subCategory]: {
+                                  batchSize: prev[group.subCategory]?.batchSize || 1000,
+                                  deliveryScheduleDays: Number(e.target.value) || 0,
+                                  plantCapacity: prev[group.subCategory]?.plantCapacity || 50000
+                                }
+                              }))}
+                              style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A', fontSize: 12.5 }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 4 }}>
+                              Plant Capacity (Units/Mo) *
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={supply.plantCapacity}
+                              onChange={e => setDraftSubCategorySupplyMap(prev => ({
+                                ...prev,
+                                [group.subCategory]: {
+                                  batchSize: prev[group.subCategory]?.batchSize || 1000,
+                                  deliveryScheduleDays: prev[group.subCategory]?.deliveryScheduleDays || 14,
+                                  plantCapacity: Number(e.target.value) || 0
                                 }
                               }))}
                               style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', background: isPublicPage ? '#0F172A' : '#FFF', color: isPublicPage ? '#FFF' : '#0F172A', fontSize: 12.5 }}

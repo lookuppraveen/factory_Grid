@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Product, CategoryMaster, CategoryMargin, MarginRule, Manufacturer, MarginType } from '../../types';
+import { Product, Category, CategoryMaster, CategoryMargin, MarginRule, Manufacturer, MarginType } from '../../types';
+import * as marginApi from '../../services/marginApi';
 import {
   Percent, Search, Filter, CheckCircle2, ArrowRight, DollarSign,
   Package, Layers, Edit3, ShieldAlert, Sparkles, RefreshCw, Sliders,
@@ -8,12 +9,19 @@ import {
   Building2, Factory, HelpCircle, ChevronRight, ChevronDown, Plus, Trash2,
   Download, UploadCloud, FileSpreadsheet, CheckCheck
 } from 'lucide-react';
-import { EnterpriseMetricBar } from '../common/EnterpriseMetricBar';
+import {
+  MasterBreadcrumbs,
+  MasterPageHeader,
+  MasterStatsStrip,
+  MasterStatusBadge
+} from '../common/MasterComponents';
 
 export const MarginEngineModule: React.FC = () => {
   const {
     currentRole,
     categories,
+    unifiedCategories,
+    refreshUnifiedCategories,
     products,
     manufacturers,
     mappings,
@@ -35,6 +43,51 @@ export const MarginEngineModule: React.FC = () => {
     updateProductMargin,
     bulkUpdateProductMargins
   } = useApp();
+
+  // Backend category margins from PostgreSQL (category_margin_configs)
+  const [backendCategoryMargins, setBackendCategoryMargins] = useState<marginApi.BackendCategoryMargin[]>([]);
+  const [isLoadingMargins, setIsLoadingMargins] = useState(false);
+  const [isSavingCatId, setIsSavingCatId] = useState<string | null>(null);
+  const [marginSaveSuccess, setMarginSaveSuccess] = useState<Record<string, boolean>>({});
+
+  const refreshMarginsFromBackend = useCallback(async () => {
+    setIsLoadingMargins(true);
+    try {
+      const data = await marginApi.fetchCategoryMargins();
+      if (Array.isArray(data)) {
+        setBackendCategoryMargins(data);
+      }
+    } catch (err) {
+      console.warn('Failed to load category margins from backend:', err);
+    } finally {
+      setIsLoadingMargins(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof refreshUnifiedCategories === 'function') {
+      refreshUnifiedCategories();
+    }
+    refreshMarginsFromBackend();
+  }, [refreshUnifiedCategories, refreshMarginsFromBackend]);
+
+  // Canonical category list derived from PostgreSQL-backed unifiedCategories (from Admin -> Product Type & Category Master)
+  const distinctCategoryList = useMemo(() => {
+    const source = (unifiedCategories && unifiedCategories.length > 0) ? unifiedCategories : categories;
+    const seen = new Set<string>();
+    const list: Category[] = [];
+
+    for (const c of source) {
+      const name = (c.category || c.name || '').trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push(c);
+      }
+    }
+    return list;
+  }, [unifiedCategories, categories]);
 
   // Active Sub-view: 'CONFIG' (Category Matrix) | 'MFG_CONFIG' (Manufacturer Matrix) | 'SKU_INSPECTOR' (Product List / SKU Margin Matrix)
   const [activeSubTab, setActiveSubTab] = useState<'CONFIG' | 'MFG_CONFIG' | 'SKU_INSPECTOR'>('CONFIG');
@@ -63,8 +116,14 @@ export const MarginEngineModule: React.FC = () => {
   const [savedCategoryToast, setSavedCategoryToast] = useState<string | null>(null);
 
   // Manufacturer + Category override creation inputs
-  const [overrideCatId, setOverrideCatId] = useState<string>(categories[0]?.id || 'cat_drugs');
+  const [overrideCatId, setOverrideCatId] = useState<string>('');
   const [overrideMarginPct, setOverrideMarginPct] = useState<number>(12);
+
+  useEffect(() => {
+    if (!overrideCatId && distinctCategoryList.length > 0) {
+      setOverrideCatId(distinctCategoryList[0].category_id || distinctCategoryList[0].id || distinctCategoryList[0].category || '');
+    }
+  }, [distinctCategoryList, overrideCatId]);
 
   // Quick Preset values
   const PRESET_MARGINS = [5, 8, 10, 12, 15, 18, 20];
@@ -171,6 +230,12 @@ export const MarginEngineModule: React.FC = () => {
     if (p.category && p.category.toLowerCase().trim() === filter) {
       return true;
     }
+    if ((p as any).category_id && (p as any).category_id.toLowerCase().trim() === filter) {
+      return true;
+    }
+    if ((p as any).categoryId && (p as any).categoryId.toLowerCase().trim() === filter) {
+      return true;
+    }
     if (!p.category && p.dosageForm) {
       const df = p.dosageForm.toLowerCase().trim();
       if (df === filter || filter.startsWith(df) || df.startsWith(filter)) {
@@ -194,48 +259,68 @@ export const MarginEngineModule: React.FC = () => {
     return mfgIds.includes(mfgFilter);
   };
 
-  // Guarantee every category has at least one demo product with a valid SKU
+  // Products loaded from PostgreSQL database
   const allAvailableProducts = useMemo(() => {
-    const list = [...products];
+    return products || [];
+  }, [products]);
 
-    categories.forEach(cat => {
-      const hasCatProduct = list.some(p => matchesCategory(p, cat.name));
-      if (!hasCatProduct) {
-        const skuPrefix = cat.code ? cat.code.replace(/^CAT-/, '').substring(0, 3).toUpperCase() : cat.name.substring(0, 3).toUpperCase();
-        const fallbackProduct: Product = {
-          id: `demo_${cat.id || cat.code || cat.name}`,
-          code: `PRD-${cat.code || cat.name.substring(0, 3).toUpperCase()}-001`,
-          sku: `${skuPrefix}-100`,
-          name: `${cat.name} Formulation 100mg`,
-          genericName: `Standard ${cat.name} Compound`,
-          saltCombination: `${cat.name} Active Extract 100mg`,
-          dosageForm: 'Tablet',
-          strength: '100mg',
-          packSize: '10 x 10 Strip',
-          uom: 'Boxes',
-          description: `Standard formulation for ${cat.name}`,
-          category: cat.name,
-          basePrice: 25.00,
-          manufacturersCount: 1,
-          moq: 1000,
-          regulatoryInfo: ['Standard Quality']
-        };
-        list.push(fallbackProduct);
-      }
+  // Helper to resolve category margin from backend or context
+  const getCategoryMarginFromBackend = useCallback((c: Category): { marginType: MarginType; marginValue: number; updatedAt?: string; updatedBy?: string } => {
+    const cid = (c.category_id || c.id || '').toLowerCase().trim();
+    const cname = (c.category || c.name || '').toLowerCase().trim();
+    const ccode = (c.category_code || c.code || '').toLowerCase().trim();
+
+    const found = backendCategoryMargins.find(m => {
+      const mcId = (m.categoryId || '').toLowerCase().trim();
+      const mcName = (m.categoryName || '').toLowerCase().trim();
+      return (
+        (cid && mcId === cid) ||
+        (cname && mcName === cname) ||
+        (cname && mcId === cname) ||
+        (cid && mcName === cid) ||
+        (ccode && mcId === ccode)
+      );
     });
 
-    return list;
-  }, [products, categories]);
+    if (found) {
+      return {
+        marginType: found.marginMode || 'PERCENTAGE',
+        marginValue: Number(found.marginValue),
+        updatedAt: found.updatedAt,
+        updatedBy: found.updatedBy
+      };
+    }
+
+    const fromContext = getCategoryMarginConfig(c.category || c.name);
+    return {
+      marginType: fromContext.marginType || 'PERCENTAGE',
+      marginValue: fromContext.marginValue ?? 10
+    };
+  }, [backendCategoryMargins, getCategoryMarginConfig]);
 
   // Summary Metrics
   const metrics = useMemo(() => {
-    const configuredCount = categoryMargins.length;
-    const totalPercentage = categoryMargins.reduce((sum, m) => {
-      const type = m.marginType || 'PERCENTAGE';
-      return sum + (type === 'PERCENTAGE' ? m.marginPercentage : 0);
-    }, 0);
-    const pctCount = categoryMargins.filter(m => (m.marginType || 'PERCENTAGE') === 'PERCENTAGE').length;
-    const avgMargin = pctCount > 0 ? (totalPercentage / pctCount).toFixed(1) : '10.0';
+    const configuredCount = distinctCategoryList.filter(cat => {
+      const cid = (cat.category_id || cat.id || '').toLowerCase().trim();
+      const cname = (cat.category || cat.name || '').toLowerCase().trim();
+      return (
+        backendCategoryMargins.some(m => (m.categoryId && m.categoryId.toLowerCase() === cid) || (m.categoryName && m.categoryName.toLowerCase() === cname)) ||
+        categoryMargins.some(m => (m.categoryId && m.categoryId.toLowerCase() === cid) || (m.categoryName && m.categoryName.toLowerCase() === cname))
+      );
+    }).length;
+
+    const totalPercentage = backendCategoryMargins.length > 0
+      ? backendCategoryMargins.reduce((sum, m) => sum + (m.marginMode === 'PERCENTAGE' ? Number(m.marginValue) : 0), 0)
+      : categoryMargins.reduce((sum, m) => {
+          const type = m.marginType || 'PERCENTAGE';
+          return sum + (type === 'PERCENTAGE' ? m.marginPercentage : 0);
+        }, 0);
+
+    const pctCount = backendCategoryMargins.length > 0
+      ? backendCategoryMargins.filter(m => m.marginMode === 'PERCENTAGE').length
+      : categoryMargins.filter(m => (m.marginType || 'PERCENTAGE') === 'PERCENTAGE').length;
+
+    const avgMargin = pctCount > 0 ? (totalPercentage / pctCount).toFixed(1) : (distinctCategoryList.length > 0 ? '10.0' : '0.0');
     const activeRulesCount = marginRules.filter(r => r.status === 'Active').length;
     const mfgRulesCount = marginRules.filter(r => r.status === 'Active' && r.manufacturer_id).length;
 
@@ -246,15 +331,17 @@ export const MarginEngineModule: React.FC = () => {
       mfgRulesCount,
       totalProducts: allAvailableProducts.length
     };
-  }, [categoryMargins, marginRules, allAvailableProducts]);
+  }, [distinctCategoryList, backendCategoryMargins, categoryMargins, marginRules, allAvailableProducts]);
 
   // Filtered categories for config tab
   const filteredCategoryList = useMemo(() => {
-    return categories.filter(c => {
+    return distinctCategoryList.filter(c => {
       const q = catSearchTerm.toLowerCase().trim();
-      return q === '' || c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q);
+      const name = (c.category || c.name || '').toLowerCase();
+      const code = (c.category_code || c.code || '').toLowerCase();
+      return q === '' || name.includes(q) || code.includes(q);
     });
-  }, [categories, catSearchTerm]);
+  }, [distinctCategoryList, catSearchTerm]);
 
   // Filtered manufacturers for mfg tab
   const filteredMfgList = useMemo(() => {
@@ -307,9 +394,12 @@ export const MarginEngineModule: React.FC = () => {
   };
 
   // Handle Save Category Margin
-  const handleSaveCategoryMargin = (cat: CategoryMaster) => {
-    const currentConfig = getCategoryMarginConfig(cat.name);
-    const draft = editingMargins[cat.id] || { type: currentConfig.marginType, value: currentConfig.marginValue };
+  const handleSaveCategoryMargin = async (cat: Category) => {
+    const catId = cat.category_id || cat.id || '';
+    const catName = cat.category || cat.name || '';
+    const catKey = catId || catName;
+    const currentConfig = getCategoryMarginFromBackend(cat);
+    const draft = editingMargins[catKey] || { type: currentConfig.marginType, value: currentConfig.marginValue };
 
     if (draft.value === undefined || draft.value === null || isNaN(draft.value)) {
       alert('Please enter a valid numeric margin value.');
@@ -324,10 +414,53 @@ export const MarginEngineModule: React.FC = () => {
       return;
     }
 
-    updateCategoryMargin(cat.name, draft.value, draft.type);
-    const displayUnit = draft.type === 'FIXED_RATE' ? `₹${draft.value}/unit` : `${draft.value}%`;
-    setSavedCategoryToast(`Margin for ${cat.name} updated to ${displayUnit}`);
-    setTimeout(() => setSavedCategoryToast(null), 3000);
+    setIsSavingCatId(catKey);
+    try {
+      // 1. Call backend API to persist to PostgreSQL category_margin_configs
+      await marginApi.saveCategoryMargin(
+        catId || catName,
+        draft.value,
+        draft.type,
+        'ACTIVE',
+        catName
+      );
+
+      // 2. Update local context & audit log
+      updateCategoryMargin(catName, draft.value, draft.type);
+
+      // 3. Clear draft editing state for this category
+      setEditingMargins(prev => {
+        const next = { ...prev };
+        delete next[catKey];
+        return next;
+      });
+
+      // 4. Refresh row data from backend
+      await refreshMarginsFromBackend();
+
+      // 5. User feedback
+      const displayUnit = draft.type === 'FIXED_RATE' ? `₹${draft.value}/unit` : `${draft.value}%`;
+      setSavedCategoryToast(`Margin for ${catName} saved successfully as ${displayUnit}`);
+      setMarginSaveSuccess(prev => ({ ...prev, [catKey]: true }));
+      setTimeout(() => {
+        setMarginSaveSuccess(prev => ({ ...prev, [catKey]: false }));
+      }, 2500);
+      setTimeout(() => setSavedCategoryToast(null), 3500);
+    } catch (err: any) {
+      console.error('Failed to save category margin to PostgreSQL:', err);
+      // Fallback update to context so user can continue
+      updateCategoryMargin(catName, draft.value, draft.type);
+      setEditingMargins(prev => {
+        const next = { ...prev };
+        delete next[catKey];
+        return next;
+      });
+      const displayUnit = draft.type === 'FIXED_RATE' ? `₹${draft.value}/unit` : `${draft.value}%`;
+      setSavedCategoryToast(`Saved locally: Margin for ${catName} set to ${displayUnit}`);
+      setTimeout(() => setSavedCategoryToast(null), 3500);
+    } finally {
+      setIsSavingCatId(null);
+    }
   };
 
   // Handle Save Manufacturer Margin
@@ -370,21 +503,23 @@ export const MarginEngineModule: React.FC = () => {
   // Handle Save Manufacturer + Category Margin Override
   const handleSaveMfgCategoryOverride = (mfgId: string, catId: string, marginPct: number) => {
     const mfg = allManufacturers.find(m => m.id === mfgId);
-    const cat = categories.find(c => c.id === catId);
+    const cat = distinctCategoryList.find(c => (c.category_id || c.id) === catId || (c.category || c.name) === catId);
     if (!mfg || !cat) return;
     if (marginPct < 0 || marginPct > 100) return;
+    const catName = cat.category || cat.name || catId;
+    const resolvedCatId = cat.category_id || cat.id || catId;
 
     addOrUpdateMarginRule({
       manufacturer_id: mfg.id,
       manufacturer_name: mfg.brandName || mfg.companyName || mfg.name,
-      category_id: cat.id,
-      category_name: cat.name,
+      category_id: resolvedCatId,
+      category_name: catName,
       margin_percentage: marginPct,
       priority: 2,
       status: 'Active'
     });
 
-    setSavedCategoryToast(`Saved ${mfg.brandName || mfg.name} + ${cat.name} margin override: ${marginPct}%`);
+    setSavedCategoryToast(`Saved ${mfg.brandName || mfg.name} + ${catName} margin override: ${marginPct}%`);
     setTimeout(() => setSavedCategoryToast(null), 3000);
   };
 
@@ -751,78 +886,46 @@ BioCure Pharmaceuticals Ltd,BIO-MET-500,MET-500,Metformin SR 500mg Tablets,Perce
         </div>
       )}
 
-      {/* ── Top Header Bar (Enterprise Flat Command Bar) ── */}
-      <div style={{
-        background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 6, padding: '18px 24px',
-        boxShadow: '0 1px 2px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between',
-        alignItems: 'center', flexWrap: 'wrap', gap: 16
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(15, 118, 110, 0.1)', border: '1px solid rgba(15, 118, 110, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F766E' }}>
-            <Percent size={22} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0F766E' }}>
-              COMMERCIAL CONTROLS & MARGIN GOVERNANCE
-            </div>
-            <h1 style={{ margin: '2px 0 0 0', fontSize: 22, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
-              MARGIN ENGINE
-            </h1>
-            <p style={{ margin: '3px 0 0 0', fontSize: 13, color: '#64748B', fontWeight: 500 }}>
-              Configure hierarchical commercial margins across Manufacturers, Categories, and SKUs with strict priority overrides.
-            </p>
-          </div>
-        </div>
+      {/* ── Breadcrumbs ── */}
+      <MasterBreadcrumbs
+        pageTitle="Margin Engine"
+        onBack={() => setActiveTab?.('settings')}
+      />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            type="button"
-            onClick={() => setIsPlatformFeeModalOpen(true)}
-            style={{
-              padding: '9px 14px', borderRadius: 8, background: '#F8FAFC',
-              color: '#0F766E', border: '1px solid #CBD5E1', fontWeight: 700,
-              fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6
-            }}
-          >
-            <DollarSign size={15} /> Platform Fee: {platformFeeConfig?.feeValue ?? 2.0}%
-          </button>
+      {/* ── Top Header Bar ── */}
+      <MasterPageHeader
+        icon={Percent}
+        domainLabel="COMMERCIAL CONTROLS & MARGIN GOVERNANCE"
+        title="Margin Engine"
+        description="Configure hierarchical commercial margins across Manufacturers, Categories, and SKUs with strict priority overrides."
+        primaryAction={{
+          label: "Upload Product Margins (Excel)",
+          icon: FileSpreadsheet,
+          onClick: () => setIsExcelMarginModalOpen(true)
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setIsPlatformFeeModalOpen(true)}
+          style={{
+            padding: '7px 14px', borderRadius: 6, background: '#F8FAFC',
+            color: '#0F766E', border: '1px solid #CBD5E1', fontWeight: 600,
+            fontSize: 12.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6
+          }}
+        >
+          <DollarSign size={14} /> Platform Fee: {platformFeeConfig?.feeValue ?? 2.0}%
+        </button>
+      </MasterPageHeader>
 
-          <button
-            type="button"
-            onClick={() => setIsExcelMarginModalOpen(true)}
-            style={{
-              padding: '9px 16px', borderRadius: 8, background: '#0F766E',
-              color: '#FFFFFF', border: 'none', fontWeight: 700,
-              fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-              boxShadow: '0 1px 3px rgba(15,118,110,0.3)'
-            }}
-          >
-            <FileSpreadsheet size={15} /> Upload Product Margins (Excel)
-          </button>
-
-          <button
-            onClick={() => setActiveTab('category-master')}
-            style={{
-              padding: '9px 16px', borderRadius: 8, background: '#F8FAFC',
-              color: '#475569', border: '1px solid #CBD5E1', fontWeight: 700,
-              fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6
-            }}
-          >
-            <Layers size={15} /> Category Master →
-          </button>
-        </div>
-      </div>
-
-      {/* ── KPI Summary Bar (Replaces 4 Floating Cards) ── */}
-      <EnterpriseMetricBar
-        title="MARGIN ENGINE GOVERNANCE OVERVIEW"
-        subtitle="Hierarchical Margin & Multi-Tier Pricing Rule Status"
-        metrics={[
-          { label: 'Configured Categories', value: metrics.configuredCount, sub: 'Active category margins', color: '#0F172A' },
-          { label: 'Manufacturer Rules', value: metrics.mfgRulesCount, sub: 'Manufacturer-specific rules', color: '#0F766E' },
-          { label: 'Active Margin Rules', value: metrics.activeRulesCount, sub: 'Tiered commercial rules', color: '#2563EB' },
-          { label: 'Catalog SKUs Monitored', value: metrics.totalProducts, sub: 'Products in margin hierarchy', color: '#0F172A' },
+      {/* ── KPI Summary Strip ── */}
+      <MasterStatsStrip
+        stats={[
+          { label: 'CONFIGURED CATEGORIES', value: metrics.configuredCount, color: '#0F766E' },
+          { label: 'MANUFACTURER RULES', value: metrics.mfgRulesCount, color: '#0F766E' },
+          { label: 'ACTIVE MARGIN RULES', value: metrics.activeRulesCount, color: '#2563EB' },
+          { label: 'CATALOG SKUS MONITORED', value: metrics.totalProducts }
         ]}
+        modelTag="Governance Model: HIERARCHICAL_MARGIN_ENGINE"
       />
 
       {/* ── View Mode Navigation Tabs ── */}
@@ -900,205 +1003,281 @@ BioCure Pharmaceuticals Ltd,BIO-MET-500,MET-500,Metformin SR 500mg Tablets,Perce
 
           {/* Margin Configuration Matrix Table */}
           <div style={{ background: '#FFFFFF', borderRadius: 10, border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15,23,42,0.04)', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
-              <thead>
-                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                  <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>CATEGORY</th>
-                  <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>CODE</th>
-                  <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>PRODUCTS</th>
-                  <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>MARGIN CONFIGURATION</th>
-                  <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', textAlign: 'right', paddingRight: 16 }}>ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCategoryList.map(cat => {
-                  const currentConfig = getCategoryMarginConfig(cat.name);
-                  const draftMargin = editingMargins[cat.id] || { type: currentConfig.marginType, value: currentConfig.marginValue };
-                  const isModified = editingMargins[cat.id] !== undefined && (
-                    editingMargins[cat.id].type !== currentConfig.marginType ||
-                    editingMargins[cat.id].value !== currentConfig.marginValue
-                  );
-                  const isInvalid = draftMargin.value === undefined || draftMargin.value === null || isNaN(draftMargin.value) || draftMargin.value < 0 || (draftMargin.type === 'PERCENTAGE' && draftMargin.value > 100);
-                  const mappedCount = allAvailableProducts.filter(p => matchesCategory(p, cat.name)).length;
+            {distinctCategoryList.length === 0 ? (
+              <div style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                  <Sliders size={24} color="#64748B" />
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', marginBottom: 6 }}>
+                  No categories configured yet.
+                </div>
+                <div style={{ fontSize: 13, color: '#64748B', maxWidth: 460, lineHeight: 1.5, marginBottom: 18 }}>
+                  Categories created under <strong>Admin → Product Type & Category Master</strong> will automatically appear here for sector margin benchmarking.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('category-master')}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    borderRadius: 6,
+                    background: '#0F766E',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
+                  }}
+                >
+                  <Plus size={14} /> Go to Product Type & Category Master
+                </button>
+              </div>
+            ) : filteredCategoryList.length === 0 ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B' }}>
+                <Search size={24} style={{ margin: '0 auto 8px', color: '#94A3B8' }} />
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>
+                  No categories found matching "{catSearchTerm}"
+                </div>
+                <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
+                  Try clearing the search term to view all {distinctCategoryList.length} categories.
+                </div>
+              </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>CATEGORY</th>
+                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>CODE</th>
+                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>PRODUCTS</th>
+                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>MARGIN CONFIGURATION</th>
+                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', textAlign: 'right', paddingRight: 16 }}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCategoryList.map(cat => {
+                    const catId = cat.category_id || cat.id || '';
+                    const catName = cat.category || cat.name || '';
+                    const catCode = cat.category_code || cat.code || '—';
+                    const catKey = catId || catName;
+                    const currentConfig = getCategoryMarginFromBackend(cat);
+                    const draftMargin = editingMargins[catKey] || { type: currentConfig.marginType, value: currentConfig.marginValue };
+                    const isModified = editingMargins[catKey] !== undefined && (
+                      editingMargins[catKey].type !== currentConfig.marginType ||
+                      editingMargins[catKey].value !== currentConfig.marginValue
+                    );
+                    const isInvalid = draftMargin.value === undefined || draftMargin.value === null || isNaN(draftMargin.value) || draftMargin.value < 0 || (draftMargin.type === 'PERCENTAGE' && draftMargin.value > 100);
+                    const isSaving = isSavingCatId === catKey;
+                    const isSavedRecently = !!marginSaveSuccess[catKey];
+                    const mappedCount = allAvailableProducts.filter(p => matchesCategory(p, catName)).length;
+                    const isActive = (cat.lifecycle_status || cat.status) === 'ACTIVE' || cat.status === 'Active';
 
-                  return (
-                    <tr
-                      key={cat.id}
-                      style={{ borderBottom: '1px solid #F1F5F9', background: isModified ? '#F0FDF4' : 'transparent', transition: 'background 0.15s ease' }}
-                    >
-                      <td style={{ padding: '14px 14px', fontWeight: 800, color: '#0F172A' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: cat.status === 'Active' ? '#10B981' : '#94A3B8' }} />
-                          <div>
-                            <div>{cat.name}</div>
-                            {cat.description && (
-                              <div style={{ fontSize: 11, color: '#64748B', fontWeight: 400, maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {cat.description}
+                    return (
+                      <tr
+                        key={catKey}
+                        style={{
+                          borderBottom: '1px solid #F1F5F9',
+                          background: isSavedRecently ? '#F0FDF4' : isModified ? '#FFFBEB' : 'transparent',
+                          transition: 'background 0.2s ease'
+                        }}
+                      >
+                        <td style={{ padding: '14px 14px', fontWeight: 800, color: '#0F172A' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: isActive ? '#10B981' : '#94A3B8' }} />
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span>{catName}</span>
+                                {currentConfig.updatedAt && (
+                                  <span title={`Saved in PostgreSQL: ${currentConfig.updatedAt}`} style={{ fontSize: 10, fontWeight: 600, color: '#0F766E', background: '#F0FDFA', padding: '1px 5px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
+                                    DB Synced
+                                  </span>
+                                )}
                               </div>
-                            )}
+                              {cat.description && (
+                                <div style={{ fontSize: 11, color: '#64748B', fontWeight: 400, maxWidth: 240, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {cat.description}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td style={{ padding: '14px 14px' }}>
-                        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11.5, background: '#F1F5F9', color: '#0F766E', padding: '3px 8px', borderRadius: 4, border: '1px solid #E2E8F0' }}>
-                          {cat.code}
-                        </span>
-                      </td>
+                        <td style={{ padding: '14px 14px' }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11.5, background: '#F1F5F9', color: '#0F766E', padding: '3px 8px', borderRadius: 4, border: '1px solid #E2E8F0' }}>
+                            {catCode}
+                          </span>
+                        </td>
 
-                      <td style={{ padding: '14px 14px' }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
-                          {mappedCount} Products
-                        </span>
-                      </td>
+                        <td style={{ padding: '14px 14px' }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                            {mappedCount} Products
+                          </span>
+                        </td>
 
-                      {/* Margin Configuration */}
-                      <td style={{ padding: '14px 14px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {/* Margin Type Selection */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, fontWeight: draftMargin.type === 'PERCENTAGE' ? 700 : 500, color: draftMargin.type === 'PERCENTAGE' ? '#0F766E' : '#64748B' }}>
-                              <input
-                                type="radio"
-                                name={`cat_margin_type_${cat.id}`}
-                                checked={draftMargin.type === 'PERCENTAGE'}
-                                onChange={() => setEditingMargins(prev => ({
-                                  ...prev,
-                                  [cat.id]: { type: 'PERCENTAGE', value: draftMargin.type === 'PERCENTAGE' ? draftMargin.value : 10 }
-                                }))}
-                                style={{ accentColor: '#0F766E', cursor: 'pointer' }}
-                              />
-                              Percentage
-                            </label>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, fontWeight: draftMargin.type === 'FIXED_RATE' ? 700 : 500, color: draftMargin.type === 'FIXED_RATE' ? '#0F766E' : '#64748B' }}>
-                              <input
-                                type="radio"
-                                name={`cat_margin_type_${cat.id}`}
-                                checked={draftMargin.type === 'FIXED_RATE'}
-                                onChange={() => setEditingMargins(prev => ({
-                                  ...prev,
-                                  [cat.id]: { type: 'FIXED_RATE', value: draftMargin.type === 'FIXED_RATE' ? draftMargin.value : 5 }
-                                }))}
-                                style={{ accentColor: '#0F766E', cursor: 'pointer' }}
-                              />
-                              Fixed Rate
-                            </label>
-                          </div>
-
-                          {/* Single active input based on selected type */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {draftMargin.type === 'PERCENTAGE' ? (
-                              <div style={{ position: 'relative', width: 110 }}>
+                        {/* Margin Configuration */}
+                        <td style={{ padding: '14px 14px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {/* Margin Type Selection */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, fontWeight: draftMargin.type === 'PERCENTAGE' ? 700 : 500, color: draftMargin.type === 'PERCENTAGE' ? '#0F766E' : '#64748B' }}>
                                 <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="0.5"
-                                  value={draftMargin.value}
-                                  onChange={e => {
-                                    const val = e.target.value === '' ? ('' as any) : parseFloat(e.target.value);
-                                    setEditingMargins(prev => ({
-                                      ...prev,
-                                      [cat.id]: { type: 'PERCENTAGE', value: val }
-                                    }));
-                                  }}
-                                  style={{
-                                    width: '100%', padding: '6px 24px 6px 10px',
-                                    fontSize: 13, fontWeight: 800, fontFamily: 'monospace',
-                                    border: isModified ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
-                                    borderRadius: 6, outline: 'none',
-                                    background: isModified ? '#FFFFFF' : '#F8FAFC',
-                                    color: '#0F172A'
-                                  }}
+                                  type="radio"
+                                  name={`cat_margin_type_${catKey}`}
+                                  checked={draftMargin.type === 'PERCENTAGE'}
+                                  onChange={() => setEditingMargins(prev => ({
+                                    ...prev,
+                                    [catKey]: { type: 'PERCENTAGE', value: draftMargin.type === 'PERCENTAGE' ? draftMargin.value : 10 }
+                                  }))}
+                                  style={{ accentColor: '#0F766E', cursor: 'pointer' }}
                                 />
-                                <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 12, fontWeight: 700, color: '#64748B' }}>
-                                  %
-                                </span>
-                              </div>
-                            ) : (
-                              <div style={{ position: 'relative', width: 130 }}>
-                                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 12, fontWeight: 700, color: '#64748B' }}>
-                                  ₹
-                                </span>
+                                Percentage
+                              </label>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, fontWeight: draftMargin.type === 'FIXED_RATE' ? 700 : 500, color: draftMargin.type === 'FIXED_RATE' ? '#0F766E' : '#64748B' }}>
                                 <input
-                                  type="number"
-                                  min="0"
-                                  step="0.25"
-                                  value={draftMargin.value}
-                                  onChange={e => {
-                                    const val = e.target.value === '' ? ('' as any) : parseFloat(e.target.value);
-                                    setEditingMargins(prev => ({
-                                      ...prev,
-                                      [cat.id]: { type: 'FIXED_RATE', value: val }
-                                    }));
-                                  }}
-                                  style={{
-                                    width: '100%', padding: '6px 42px 6px 22px',
-                                    fontSize: 13, fontWeight: 800, fontFamily: 'monospace',
-                                    border: isModified ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
-                                    borderRadius: 6, outline: 'none',
-                                    background: isModified ? '#FFFFFF' : '#F8FAFC',
-                                    color: '#0F172A'
-                                  }}
+                                  type="radio"
+                                  name={`cat_margin_type_${catKey}`}
+                                  checked={draftMargin.type === 'FIXED_RATE'}
+                                  onChange={() => setEditingMargins(prev => ({
+                                    ...prev,
+                                    [catKey]: { type: 'FIXED_RATE', value: draftMargin.type === 'FIXED_RATE' ? draftMargin.value : 5 }
+                                  }))}
+                                  style={{ accentColor: '#0F766E', cursor: 'pointer' }}
                                 />
-                                <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, fontWeight: 600, color: '#64748B' }}>
-                                  /unit
+                                Fixed Rate
+                              </label>
+                            </div>
+
+                            {/* Single active input based on selected type */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {draftMargin.type === 'PERCENTAGE' ? (
+                                <div style={{ position: 'relative', width: 110 }}>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.5"
+                                    value={draftMargin.value}
+                                    onChange={e => {
+                                      const val = e.target.value === '' ? ('' as any) : parseFloat(e.target.value);
+                                      setEditingMargins(prev => ({
+                                        ...prev,
+                                        [catKey]: { type: 'PERCENTAGE', value: val }
+                                      }));
+                                    }}
+                                    style={{
+                                      width: '100%', padding: '6px 24px 6px 10px',
+                                      fontSize: 13, fontWeight: 800, fontFamily: 'monospace',
+                                      border: isModified ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
+                                      borderRadius: 6, outline: 'none',
+                                      background: isModified ? '#FFFFFF' : '#F8FAFC',
+                                      color: '#0F172A'
+                                    }}
+                                  />
+                                  <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 12, fontWeight: 700, color: '#64748B' }}>
+                                    %
+                                  </span>
+                                </div>
+                              ) : (
+                                <div style={{ position: 'relative', width: 130 }}>
+                                  <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 12, fontWeight: 700, color: '#64748B' }}>
+                                    ₹
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.25"
+                                    value={draftMargin.value}
+                                    onChange={e => {
+                                      const val = e.target.value === '' ? ('' as any) : parseFloat(e.target.value);
+                                      setEditingMargins(prev => ({
+                                        ...prev,
+                                        [catKey]: { type: 'FIXED_RATE', value: val }
+                                      }));
+                                    }}
+                                    style={{
+                                      width: '100%', padding: '6px 42px 6px 22px',
+                                      fontSize: 13, fontWeight: 800, fontFamily: 'monospace',
+                                      border: isModified ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
+                                      borderRadius: 6, outline: 'none',
+                                      background: isModified ? '#FFFFFF' : '#F8FAFC',
+                                      color: '#0F172A'
+                                    }}
+                                  />
+                                  <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, fontWeight: 600, color: '#64748B' }}>
+                                    /unit
+                                  </span>
+                                </div>
+                              )}
+                              {isModified && (
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: 4 }}>
+                                  Unsaved
                                 </span>
-                              </div>
-                            )}
-                            {isModified && (
-                              <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#DCFCE7', padding: '2px 6px', borderRadius: 4 }}>
-                                Changed
-                              </span>
-                            )}
+                              )}
+                              {isSavedRecently && (
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#DCFCE7', padding: '2px 6px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                  <Check size={12} /> Saved
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Actions */}
-                      <td style={{ padding: '14px 14px', textAlign: 'right', paddingRight: 16 }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <button
-                            onClick={() => {
-                              const matchingPrd = allAvailableProducts.find(p => matchesCategory(p, cat.name));
-                              if (matchingPrd) {
-                                handleSelectProductForSim(matchingPrd);
-                              }
-                              setSelectedCategoryFilter(cat.name);
-                              setSkuSearchQuery('');
-                              setActiveSubTab('SKU_INSPECTOR');
-                            }}
-                            title={`View Products in ${cat.name}`}
-                            style={{
-                              padding: '6px 12px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
-                              background: '#F0FDFA', color: '#0F766E', border: '1px solid #99F6E4',
-                              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
-                            <Eye size={13} style={{ color: '#0F766E' }} /> View Product
-                          </button>
+                        {/* Actions */}
+                        <td style={{ padding: '14px 14px', textAlign: 'right', paddingRight: 16 }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const matchingPrd = allAvailableProducts.find(p => matchesCategory(p, catName));
+                                if (matchingPrd) {
+                                  handleSelectProductForSim(matchingPrd);
+                                }
+                                setSelectedCategoryFilter(catName);
+                                setSkuSearchQuery('');
+                                setActiveSubTab('SKU_INSPECTOR');
+                              }}
+                              title={`View Products in ${catName}`}
+                              style={{
+                                padding: '6px 12px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
+                                background: '#F0FDFA', color: '#0F766E', border: '1px solid #99F6E4',
+                                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <Eye size={13} style={{ color: '#0F766E' }} /> View Product
+                            </button>
 
-                          <button
-                            onClick={() => handleSaveCategoryMargin(cat)}
-                            disabled={!isModified || isInvalid}
-                            style={{
-                              padding: '6px 12px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
-                              background: isModified && !isInvalid ? '#0F766E' : '#E2E8F0',
-                              color: isModified && !isInvalid ? '#FFFFFF' : '#94A3B8',
-                              border: 'none', cursor: isModified && !isInvalid ? 'pointer' : 'default',
-                              boxShadow: isModified && !isInvalid ? '0 1px 2px rgba(15,118,110,0.2)' : 'none'
-                            }}
-                          >
-                            Save Margin
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveCategoryMargin(cat)}
+                              disabled={!isModified || isInvalid || isSaving}
+                              style={{
+                                padding: '6px 12px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
+                                background: isSaving ? '#0D9488' : isModified && !isInvalid ? '#0F766E' : '#E2E8F0',
+                                color: isSaving || (isModified && !isInvalid) ? '#FFFFFF' : '#94A3B8',
+                                border: 'none', cursor: isModified && !isInvalid && !isSaving ? 'pointer' : 'default',
+                                boxShadow: isModified && !isInvalid ? '0 1px 2px rgba(15,118,110,0.2)' : 'none',
+                                display: 'inline-flex', alignItems: 'center', gap: 5
+                              }}
+                            >
+                              {isSaving ? (
+                                <>
+                                  <RefreshCw size={12} className="animate-spin" /> Saving...
+                                </>
+                              ) : (
+                                'Save Margin'
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}
@@ -1394,9 +1573,13 @@ BioCure Pharmaceuticals Ltd,BIO-MET-500,MET-500,Metformin SR 500mg Tablets,Perce
                 }}
               >
                 <option value="ALL">All Categories</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
+                {distinctCategoryList.map(c => {
+                  const catName = c.category || c.name || '';
+                  const catId = c.category_id || c.id || catName;
+                  return (
+                    <option key={catId} value={catName}>{catName}</option>
+                  );
+                })}
               </select>
             </div>
 

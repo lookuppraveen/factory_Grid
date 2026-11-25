@@ -241,15 +241,26 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
       // Call real PostgreSQL IAM service
       const authRes = await authApi.login(trimmedEmail, password, portalType);
 
-      // Derive authorized role from verified database roles
+      // Derive authorized role from verified database roles and active portal selection
       const roles = authRes.user.roles || [];
       let mappedRole: UserRole = 'BUYER';
-      if (roles.includes('ROLE_ADMIN')) mappedRole = 'ADMIN';
-      else if (roles.includes('ROLE_MANUFACTURER') || roles.includes('ROLE_SUPPLIER')) mappedRole = 'SUPPLIER';
-      else if (roles.includes('ROLE_COMPLIANCE_OFFICER')) mappedRole = 'COMPLIANCE_OFFICER';
-      else if (roles.includes('ROLE_SALES_MANAGER')) mappedRole = 'SALES_MANAGER';
-      else if (roles.includes('ROLE_ACCOUNTS_MANAGER')) mappedRole = 'ACCOUNTS_MANAGER';
-      else mappedRole = 'BUYER';
+      if (activeCategory === 'MANUFACTURER_COMPANY' && (roles.includes('ROLE_MANUFACTURER') || roles.includes('ROLE_SUPPLIER') || roles.includes('ROLE_ADMIN'))) {
+        mappedRole = 'SUPPLIER';
+      } else if (activeCategory === 'BUYER_COMPANY' && (roles.includes('ROLE_BUYER') || roles.includes('ROLE_ADMIN'))) {
+        mappedRole = 'BUYER';
+      } else if (roles.includes('ROLE_ADMIN')) {
+        mappedRole = 'ADMIN';
+      } else if (roles.includes('ROLE_MANUFACTURER') || roles.includes('ROLE_SUPPLIER')) {
+        mappedRole = 'SUPPLIER';
+      } else if (roles.includes('ROLE_COMPLIANCE_OFFICER')) {
+        mappedRole = 'COMPLIANCE_OFFICER';
+      } else if (roles.includes('ROLE_SALES_MANAGER')) {
+        mappedRole = 'SALES_MANAGER';
+      } else if (roles.includes('ROLE_ACCOUNTS_MANAGER')) {
+        mappedRole = 'ACCOUNTS_MANAGER';
+      } else {
+        mappedRole = 'BUYER';
+      }
 
       // Intercept with Two-Factor Authentication if Enabled
       if (twoFactorState.isEnabled) {

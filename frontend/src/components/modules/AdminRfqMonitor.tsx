@@ -1,57 +1,107 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { RFQ } from '../../types';
+import { adminRfqApi, AdminRfqItem, AdminRfqStats } from '../../services/adminRfqApi';
 import {
   FileText, Search, Eye, X, Clock, CheckCircle2, ShieldCheck, Filter,
-  Star, DollarSign, Check, AlertCircle, Building2, Tag, Calendar, Layers
+  Star, DollarSign, Check, AlertCircle, Building2, Tag, Calendar, Layers, RefreshCw
 } from 'lucide-react';
 
 export const AdminRfqMonitor: React.FC = () => {
-  const { rfqs, currentRole, internalPriceList, submitGenericAdminPricing } = useApp();
+  const { currentRole, internalPriceList } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTabFilter, setActiveTabFilter] = useState<'ALL' | 'GENERIC' | 'BRANDED'>('ALL');
 
+  // Real Database Data State from PostgreSQL
+  const [rfqsList, setRfqsList] = useState<AdminRfqItem[]>([]);
+  const [stats, setStats] = useState<AdminRfqStats>({
+    totalRfqs: 0,
+    genericRfqs: 0,
+    pendingGenericCount: 0,
+    brandedRfqs: 0,
+    activeQuotedCount: 0,
+    closedAwardedCount: 0,
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isSavingPricing, setIsSavingPricing] = useState<boolean>(false);
+  const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(false);
+
   // Generic Pricing Desk Modal State
-  const [selectedGenericRfq, setSelectedGenericRfq] = useState<RFQ | null>(null);
+  const [selectedGenericRfq, setSelectedGenericRfq] = useState<AdminRfqItem | null>(null);
   const [genericLinePrices, setGenericLinePrices] = useState<Record<string, number>>({});
   const [pricingSuccessToast, setPricingSuccessToast] = useState<string | null>(null);
 
   // Standard Read-Only RFQ Inspection Modal State (for Branded or Inspection)
-  const [selectedRfq, setSelectedRfq] = useState<RFQ | null>(null);
+  const [selectedRfq, setSelectedRfq] = useState<AdminRfqItem | null>(null);
 
-  const totalRfqs = rfqs.length;
-  const genericRfqs = rfqs.filter(r => r.isGeneric || r.lines?.some(l => l.productType === 'GENERIC'));
-  const pendingGenericCount = genericRfqs.filter(r => r.status === 'Submitted' || r.genericStatus === 'SUBMITTED').length;
-  const brandedRfqs = rfqs.filter(r => !r.isGeneric && !r.lines?.some(l => l.productType === 'GENERIC'));
+  // Load Real Data from PostgreSQL via Backend API
+  const loadAdminRfqs = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setApiError(null);
+      const [rfqsData, statsData] = await Promise.all([
+        adminRfqApi.listAdminRfqs(),
+        adminRfqApi.getAdminRfqStats(),
+      ]);
+      setRfqsList(rfqsData || []);
+      setStats(statsData || {
+        totalRfqs: 0,
+        genericRfqs: 0,
+        pendingGenericCount: 0,
+        brandedRfqs: 0,
+        activeQuotedCount: 0,
+        closedAwardedCount: 0,
+      });
+    } catch (err: any) {
+      console.error('Failed to load Admin RFQs from PostgreSQL:', err);
+      setApiError(err?.message || 'Failed to connect to backend RFQ monitoring service.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const pendingCount = rfqs.filter(r => r.status === 'Open' || r.status === 'Draft' || r.status === 'Submitted').length;
-  const quotedCount = rfqs.filter(r => r.status === 'Quoted' || r.status === 'Under Review').length;
-  const closedCount = rfqs.filter(r => r.status === 'Closed' || r.status === 'Awarded').length;
+  useEffect(() => {
+    loadAdminRfqs();
+  }, [loadAdminRfqs]);
 
-  const filteredRfqs = rfqs.filter(r => {
-    // Tab filter
-    if (activeTabFilter === 'GENERIC' && !(r.isGeneric || r.lines?.some(l => l.productType === 'GENERIC'))) return false;
-    if (activeTabFilter === 'BRANDED' && (r.isGeneric || r.lines?.some(l => l.productType === 'GENERIC'))) return false;
+  // Dynamic Metrics calculated directly from real backend stats
+  const totalRfqs = stats.totalRfqs;
+  const genericRfqsCount = stats.genericRfqs;
+  const pendingGenericCount = stats.pendingGenericCount;
+  const brandedRfqsCount = stats.brandedRfqs;
+  const quotedCount = stats.activeQuotedCount;
+  const closedCount = stats.closedAwardedCount;
 
-    // Search filter
-    const matchSearch =
-      r.rfqNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.lines?.some(l => (l.molecule || l.productName || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  // Real Filtered List
+  const filteredRfqs = useMemo(() => {
+    return rfqsList.filter(r => {
+      // Tab filter
+      if (activeTabFilter === 'GENERIC' && !(r.isGeneric || r.lines?.some(l => l.productType === 'GENERIC'))) return false;
+      if (activeTabFilter === 'BRANDED' && (r.isGeneric || r.lines?.some(l => l.productType === 'GENERIC'))) return false;
 
-    return matchSearch;
-  });
+      // Search filter
+      if (!searchTerm.trim()) return true;
+      const term = searchTerm.toLowerCase();
+      const matchSearch =
+        r.rfqNumber.toLowerCase().includes(term) ||
+        r.customerName.toLowerCase().includes(term) ||
+        (r.customerCode && r.customerCode.toLowerCase().includes(term)) ||
+        r.lines?.some(l => (l.molecule || l.productName || '').toLowerCase().includes(term));
 
-  // Open Generic Pricing Desk and pre-fill prices from FactoryGrid Internal Price List
-  const handleOpenGenericPricing = (rfq: RFQ) => {
+      return matchSearch;
+    });
+  }, [rfqsList, activeTabFilter, searchTerm]);
+
+  // Open Generic Pricing Desk and pre-fill prices from FactoryGrid Internal Price List or DB
+  const handleOpenGenericPricing = (rfq: AdminRfqItem) => {
     const initialPrices: Record<string, number> = {};
-    rfq.lines.forEach(line => {
-      if (line.internalPrice) {
-        initialPrices[line.id] = line.internalPrice;
+    (rfq.lines || []).forEach(line => {
+      if (line.targetPrice || line.internalPrice) {
+        initialPrices[line.id] = Number(line.targetPrice || line.internalPrice);
       } else {
         // Look up matching molecule in FactoryGrid internal price list
-        const lineMolecule = (line.molecule || line.genericName || line.productName || '').toLowerCase();
-        const matchedItem = internalPriceList.find(item =>
+        const lineMolecule = (line.molecule || line.productName || '').toLowerCase();
+        const matchedItem = (internalPriceList || []).find(item =>
           item.molecule.toLowerCase().includes(lineMolecule) || lineMolecule.includes(item.molecule.toLowerCase())
         );
         initialPrices[line.id] = matchedItem ? matchedItem.internalPrice : 4.20;
@@ -62,17 +112,47 @@ export const AdminRfqMonitor: React.FC = () => {
     setSelectedGenericRfq(rfq);
   };
 
-  // Submit Generic Pricing to existing Quote/Order Flow
-  const handleSaveAndSubmitGenericPricing = () => {
+  // Submit Generic Pricing to real Backend API & PostgreSQL
+  const handleSaveAndSubmitGenericPricing = async () => {
     if (!selectedGenericRfq) return;
 
-    submitGenericAdminPricing(selectedGenericRfq.id, genericLinePrices);
-    setPricingSuccessToast(`✔ Generic pricing applied successfully for ${selectedGenericRfq.rfqNumber}. Platform quotation issued to Buyer.`);
-    setSelectedGenericRfq(null);
+    try {
+      setIsSavingPricing(true);
+      await adminRfqApi.submitGenericPricing(
+        selectedGenericRfq.id,
+        genericLinePrices,
+        'Platform quotation priced via FactoryGrid Admin internal price list.'
+      );
 
-    setTimeout(() => {
-      setPricingSuccessToast(null);
-    }, 4000);
+      setPricingSuccessToast(`✔ Generic pricing applied and persisted in PostgreSQL for ${selectedGenericRfq.rfqNumber}. Platform quotation issued.`);
+      setSelectedGenericRfq(null);
+
+      // Refresh list and stats from PostgreSQL
+      await loadAdminRfqs();
+
+      setTimeout(() => {
+        setPricingSuccessToast(null);
+      }, 4000);
+    } catch (err: any) {
+      console.error('Failed to persist generic pricing in backend:', err);
+      alert(`Error saving generic pricing to PostgreSQL: ${err?.message || 'API error'}`);
+    } finally {
+      setIsSavingPricing(false);
+    }
+  };
+
+  // Open Detailed RFQ Inspection Modal from Real Backend
+  const handleOpenRfqDetail = async (rfq: AdminRfqItem) => {
+    try {
+      setIsLoadingDetail(true);
+      const detail = await adminRfqApi.getAdminRfqDetail(rfq.id);
+      setSelectedRfq(detail);
+    } catch (err: any) {
+      console.warn('Could not fetch single RFQ detail from backend, using item record:', err);
+      setSelectedRfq(rfq);
+    } finally {
+      setIsLoadingDetail(false);
+    }
   };
 
   return (
@@ -99,25 +179,63 @@ export const AdminRfqMonitor: React.FC = () => {
             Governance monitor for buyer RFQs, branded formulation lines, and FactoryGrid internal price list pricing for generic medicines.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => loadAdminRfqs()}
+            disabled={isLoading}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              padding: '6px 14px',
+              borderRadius: 6,
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#475569',
+              cursor: isLoading ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F0FDF4', border: '1px solid #BBF7D0', padding: '6px 14px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, color: '#15803D' }}>
-            <DollarSign size={14} /> INTERNAL PRICE LIST ACTIVE
+            <DollarSign size={14} /> POSTGRESQL CONNECTED
           </div>
         </div>
       </div>
+
+      {/* API Error Banner */}
+      {apiError && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#991B1B', fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertCircle size={18} />
+            <span><strong>Database Sync Error:</strong> {apiError}</span>
+          </div>
+          <button
+            onClick={() => loadAdminRfqs()}
+            style={{ padding: '4px 12px', background: '#991B1B', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Retry Connection
+          </button>
+        </div>
+      )}
 
       {/* KPI Strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
         {[
           { label: 'TOTAL RFQS', val: totalRfqs, color: '#2563EB', bg: '#EFF6FF' },
-          { label: 'GENERIC REQUESTS', val: genericRfqs.length, color: '#0F766E', bg: '#F0FDFA', subtitle: `${pendingGenericCount} pending pricing` },
-          { label: 'BRANDED RFQS', val: brandedRfqs.length, color: '#6366F1', bg: '#EEF2FF' },
+          { label: 'GENERIC REQUESTS', val: genericRfqsCount, color: '#0F766E', bg: '#F0FDFA', subtitle: `${pendingGenericCount} pending pricing` },
+          { label: 'BRANDED RFQS', val: brandedRfqsCount, color: '#6366F1', bg: '#EEF2FF' },
           { label: 'ACTIVE / QUOTED', val: quotedCount, color: '#16A34A', bg: '#DCFCE7' },
           { label: 'CLOSED / AWARDED', val: closedCount, color: '#4F46E5', bg: '#EEF2FF' },
         ].map((card, i) => (
           <div key={i} style={{ background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#64748B' }}>{card.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: card.color, marginTop: 4 }}>{card.val}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: card.color, marginTop: 4 }}>
+              {isLoading ? '...' : card.val}
+            </div>
             {card.subtitle && (
               <div style={{ fontSize: 11, color: '#0F766E', fontWeight: 700, marginTop: 2 }}>{card.subtitle}</div>
             )}
@@ -164,7 +282,7 @@ export const AdminRfqMonitor: React.FC = () => {
                 gap: 6
               }}
             >
-              <span>🧪 Generic Medicine ({genericRfqs.length})</span>
+              <span>🧪 Generic Medicine ({genericRfqsCount})</span>
               {pendingGenericCount > 0 && (
                 <span style={{ background: '#F59E0B', color: '#FFF', fontSize: 10, padding: '1px 5px', borderRadius: 999 }}>
                   {pendingGenericCount}
@@ -185,7 +303,7 @@ export const AdminRfqMonitor: React.FC = () => {
                 boxShadow: activeTabFilter === 'BRANDED' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
               }}
             >
-              🏷️ Branded RFQs ({brandedRfqs.length})
+              🏷️ Branded RFQs ({brandedRfqsCount})
             </button>
           </div>
 
@@ -214,16 +332,27 @@ export const AdminRfqMonitor: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredRfqs.length === 0 ? (
+            {isLoading ? (
               <tr>
-                <td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#64748B' }}>
-                  No RFQs match the current filter.
+                <td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+                    <div style={{ width: 16, height: 16, border: '2px solid #0F766E', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                    Loading real RFQ data from PostgreSQL...
+                  </div>
+                </td>
+              </tr>
+            ) : filteredRfqs.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
+                  {rfqsList.length === 0
+                    ? 'No RFQs currently exist in the database.'
+                    : 'No RFQs match the current search or tab filter.'}
                 </td>
               </tr>
             ) : (
               filteredRfqs.map(rfq => {
                 const isGeneric = rfq.isGeneric || rfq.lines?.some(l => l.productType === 'GENERIC');
-                const needsPricing = isGeneric && (rfq.status === 'Submitted' || rfq.genericStatus === 'SUBMITTED');
+                const needsPricing = isGeneric && (rfq.status === 'Submitted' || rfq.status === 'Draft' || rfq.genericStatus === 'SUBMITTED');
 
                 return (
                   <tr key={rfq.id} style={{ borderBottom: '1px solid #F1F5F9', background: needsPricing ? '#F0FDF4' : '#FFFFFF' }}>
@@ -259,15 +388,15 @@ export const AdminRfqMonitor: React.FC = () => {
 
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ fontWeight: 700, color: isGeneric ? '#0F766E' : '#1E293B' }}>
-                        {isGeneric && rfq.lines[0]?.molecule ? `Molecule: ${rfq.lines[0].molecule}` : rfq.lines[0]?.productName}
+                        {isGeneric && rfq.lines[0]?.molecule ? `Molecule: ${rfq.lines[0].molecule}` : rfq.lines[0]?.productName || rfq.title || '—'}
                       </div>
                       <div style={{ fontSize: 11, color: '#64748B', marginTop: 1 }}>
                         {rfq.lines?.reduce((sum, l) => sum + (Number(l.quantity) || 0), 0).toLocaleString()} units · {rfq.lines?.length || 1} line(s)
                       </div>
                     </td>
 
-                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{rfq.createdDate || rfq.createdAt || '2026-08-01'}</td>
-                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{rfq.targetDeliveryDate || '2026-09-15'}</td>
+                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{rfq.createdDate || (rfq.createdAt ? rfq.createdAt.split('T')[0] : '—')}</td>
+                    <td style={{ padding: '12px 16px', color: '#64748B' }}>{rfq.targetDeliveryDate || rfq.deadlineDate || '—'}</td>
 
                     <td style={{ padding: '12px 16px' }}>
                       {isGeneric ? (
@@ -275,7 +404,7 @@ export const AdminRfqMonitor: React.FC = () => {
                           {rfq.genericStatus === 'PRICED' || rfq.status === 'Quoted' ? 'PRICED' : 'SUBMITTED (ADMIN PROCESSING)'}
                         </span>
                       ) : (
-                        <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: rfq.status === 'Closed' ? '#F1F5F9' : rfq.status === 'Quoted' ? '#DCFCE7' : '#FEF3C7', color: rfq.status === 'Closed' ? '#64748B' : rfq.status === 'Quoted' ? '#15803D' : '#B45309' }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: rfq.status === 'Closed' || rfq.status === 'Awarded' || rfq.status === 'Vendor Selected' ? '#F1F5F9' : rfq.status === 'Quoted' ? '#DCFCE7' : '#FEF3C7', color: rfq.status === 'Closed' || rfq.status === 'Awarded' || rfq.status === 'Vendor Selected' ? '#64748B' : rfq.status === 'Quoted' ? '#15803D' : '#B45309' }}>
                           {rfq.status}
                         </span>
                       )}
@@ -303,7 +432,7 @@ export const AdminRfqMonitor: React.FC = () => {
                         </button>
                       ) : (
                         <button
-                          onClick={() => setSelectedRfq(rfq)}
+                          onClick={() => handleOpenRfqDetail(rfq)}
                           style={{ padding: '5px 12px', background: '#2563EB', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
                         >
                           View Details
@@ -375,7 +504,7 @@ export const AdminRfqMonitor: React.FC = () => {
               </div>
               <div>
                 <span style={{ color: '#64748B', display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Required Delivery:</span>
-                <strong style={{ color: '#0F172A' }}>{selectedGenericRfq.lines[0]?.requiredDate || selectedGenericRfq.deadlineDate}</strong>
+                <strong style={{ color: '#0F172A' }}>{selectedGenericRfq.targetDeliveryDate || selectedGenericRfq.deadlineDate || '—'}</strong>
               </div>
             </div>
 
@@ -391,9 +520,9 @@ export const AdminRfqMonitor: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {selectedGenericRfq.lines.map((line, idx) => {
-                  const lineMolecule = (line.molecule || line.genericName || 'Paracetamol').toLowerCase();
-                  const matchedItems = internalPriceList.filter(item =>
+                {(selectedGenericRfq.lines || []).map((line, idx) => {
+                  const lineMolecule = (line.molecule || line.productName || 'Paracetamol').toLowerCase();
+                  const matchedItems = (internalPriceList || []).filter(item =>
                     item.molecule.toLowerCase().includes(lineMolecule) || lineMolecule.includes(item.molecule.toLowerCase())
                   );
                   const currentPrice = genericLinePrices[line.id] !== undefined ? genericLinePrices[line.id] : 4.20;
@@ -407,7 +536,7 @@ export const AdminRfqMonitor: React.FC = () => {
                             {line.productName || `${line.molecule} (Generic)`}
                           </div>
                           <div style={{ fontSize: 12, color: '#64748B', marginTop: 2, display: 'flex', gap: 12 }}>
-                            <span><strong>Molecule:</strong> {line.molecule || line.genericName || 'Paracetamol'}</span>
+                            <span><strong>Molecule:</strong> {line.molecule || line.productName || 'Paracetamol'}</span>
                             <span><strong>Dosage Form:</strong> {line.dosageForm || 'Tablet'}</span>
                             <span><strong>Quantity:</strong> {Number(line.quantity).toLocaleString()} units</span>
                           </div>
@@ -493,7 +622,7 @@ export const AdminRfqMonitor: React.FC = () => {
                           />
                         </div>
                         <div style={{ fontSize: 12, color: '#64748B', marginTop: 16 }}>
-                          Price is directly taken from FactoryGrid internal price list to form the platform quote.
+                          Price is directly persisted in PostgreSQL to form the real platform quote.
                         </div>
                       </div>
                     </div>
@@ -507,35 +636,40 @@ export const AdminRfqMonitor: React.FC = () => {
               <div>
                 <span style={{ fontSize: 12, color: '#64748B' }}>Total Generic Quotation Value:</span>
                 <span style={{ fontSize: 18, fontWeight: 800, color: '#0F766E', marginLeft: 8, fontFamily: 'monospace' }}>
-                  ₹{selectedGenericRfq.lines.reduce((sum, l) => sum + (Number(l.quantity) || 0) * (genericLinePrices[l.id] !== undefined ? genericLinePrices[l.id] : 4.20), 0).toLocaleString('en-IN')}
+                  ₹{(selectedGenericRfq.lines || []).reduce((sum, l) => sum + (Number(l.quantity) || 0) * (genericLinePrices[l.id] !== undefined ? genericLinePrices[l.id] : 4.20), 0).toLocaleString('en-IN')}
                 </span>
               </div>
 
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
+                  type="button"
+                  disabled={isSavingPricing}
                   onClick={() => setSelectedGenericRfq(null)}
-                  style={{ padding: '9px 18px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer' }}
+                  style={{ padding: '9px 18px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, color: '#475569', cursor: isSavingPricing ? 'not-allowed' : 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
+                  disabled={isSavingPricing}
                   onClick={handleSaveAndSubmitGenericPricing}
                   style={{
                     padding: '9px 22px',
-                    background: '#0F766E',
+                    background: isSavingPricing ? '#94A3B8' : '#0F766E',
                     border: 'none',
                     borderRadius: 6,
                     fontSize: 13,
                     fontWeight: 800,
                     color: '#FFFFFF',
-                    cursor: 'pointer',
+                    cursor: isSavingPricing ? 'not-allowed' : 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 6,
                     boxShadow: '0 2px 6px rgba(15,118,110,0.3)'
                   }}
                 >
-                  <Check size={16} /> Apply Internal Price & Issue Platform Quote
+                  {isSavingPricing && <div style={{ width: 14, height: 14, border: '2px solid #FFF', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}
+                  <Check size={16} /> {isSavingPricing ? 'Saving to Database...' : 'Apply Internal Price & Issue Platform Quote'}
                 </button>
               </div>
             </div>
@@ -546,10 +680,10 @@ export const AdminRfqMonitor: React.FC = () => {
       {/* ── STANDARD READ-ONLY RFQ DETAIL MODAL (BRANDED RFQS) ── */}
       {selectedRfq && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#FFF', borderRadius: 14, width: '100%', maxWidth: 750, padding: 24, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+          <div style={{ background: '#FFF', borderRadius: 14, width: '100%', maxWidth: 780, maxHeight: '90vh', overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: 12 }}>
               <div>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase' }}>Read-Only Governance Inspection</span>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase' }}>Read-Only Governance Inspection · PostgreSQL Record</span>
                 <h3 style={{ margin: '2px 0 0', fontSize: 18, fontWeight: 800 }}>RFQ Details: {selectedRfq.rfqNumber}</h3>
               </div>
               <button onClick={() => setSelectedRfq(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={18} /></button>
@@ -570,8 +704,13 @@ export const AdminRfqMonitor: React.FC = () => {
                 )}
               </div>
               <div><strong>Status:</strong> {selectedRfq.status}</div>
-              <div><strong>Created Date:</strong> {selectedRfq.createdDate || selectedRfq.createdAt || '2026-08-01'}</div>
-              <div><strong>Target Delivery:</strong> {selectedRfq.targetDeliveryDate || '2026-09-15'}</div>
+              <div><strong>Created Date:</strong> {selectedRfq.createdDate || (selectedRfq.createdAt ? selectedRfq.createdAt.split('T')[0] : '—')}</div>
+              <div><strong>Target Delivery:</strong> {selectedRfq.targetDeliveryDate || selectedRfq.deadlineDate || '—'}</div>
+              {selectedRfq.deliveryLocation && (
+                <div style={{ gridColumn: 'span 2' }}>
+                  <strong>Delivery Location:</strong> <span>{selectedRfq.deliveryLocation}</span>
+                </div>
+              )}
             </div>
 
             <h4 style={{ margin: '8px 0 0', fontSize: 14, fontWeight: 800 }}>Formulation Line Items:</h4>
@@ -591,11 +730,50 @@ export const AdminRfqMonitor: React.FC = () => {
                       <td style={{ padding: 10, fontWeight: 700 }}>{l.productName}</td>
                       <td style={{ padding: 10 }}>{l.dosageForm || 'Tablet / Capsule'}</td>
                       <td style={{ padding: 10, fontFamily: 'monospace' }}>{l.quantity?.toLocaleString()}</td>
-                      <td style={{ padding: 10, fontFamily: 'monospace' }}>₹{l.targetPrice || l.unitPrice || '—'}</td>
+                      <td style={{ padding: 10, fontFamily: 'monospace' }}>₹{l.targetPrice || l.internalPrice || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Submitted Manufacturer Quotations from PostgreSQL */}
+            <h4 style={{ margin: '8px 0 0', fontSize: 14, fontWeight: 800 }}>
+              Submitted Manufacturer Quotations ({selectedRfq.quotes?.length || 0}):
+            </h4>
+            <div style={{ background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
+              {(selectedRfq.quotes && selectedRfq.quotes.length > 0) ? (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontWeight: 800 }}>
+                      <th style={{ padding: 10 }}>Quote #</th>
+                      <th style={{ padding: 10 }}>Manufacturer</th>
+                      <th style={{ padding: 10 }}>Total Amount</th>
+                      <th style={{ padding: 10 }}>Status</th>
+                      <th style={{ padding: 10 }}>Valid Until</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedRfq.quotes.map((q: any, i: number) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: 10, fontWeight: 700, fontFamily: 'monospace', color: '#7C3AED' }}>{q.quoteNumber}</td>
+                        <td style={{ padding: 10, fontWeight: 600 }}>{q.manufacturerName}</td>
+                        <td style={{ padding: 10, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>₹{Number(q.totalAmount).toLocaleString('en-IN')}</td>
+                        <td style={{ padding: 10 }}>
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: q.status === 'ACCEPTED' ? '#DCFCE7' : '#F1F5F9', color: q.status === 'ACCEPTED' ? '#15803D' : '#475569' }}>
+                            {q.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: 10, color: '#64748B' }}>{q.validUntil || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ padding: '16px 20px', fontSize: 12.5, color: '#64748B', textAlign: 'center' }}>
+                  No manufacturer quotations submitted yet for this RFQ in PostgreSQL.
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 10 }}>

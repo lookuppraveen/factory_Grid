@@ -27,8 +27,8 @@ export const MANUFACTURER_DOCUMENT_CATEGORIES = [
   { key: 'mfgLicense', name: 'Manufacturing License', isMandatory: true, description: 'Manufacturing License' },
   { key: 'gmpCert', name: 'GMP Certificate', isMandatory: true, description: 'GMP Certificate' },
   { key: 'whoGmpCert', name: 'WHO-GMP Certificate', isMandatory: true, description: 'WHO-GMP Certificate' },
-  { key: 'isoCert', name: 'ISO Certification', isMandatory: true, description: 'ISO Certification' },
-  { key: 'pollutionCert', name: 'Pollution Certificate', isMandatory: true, description: 'Pollution Certificate' },
+  { key: 'isoCert', name: 'ISO Certification', isMandatory: false, description: 'ISO Certification' },
+  { key: 'pollutionCert', name: 'Pollution Certificate', isMandatory: false, description: 'Pollution Certificate' },
   { key: 'factoryReg', name: 'Factory Registration', isMandatory: false, description: 'Factory Registration' },
   { key: 'otherCert', name: 'Other Certificates', isMandatory: false, description: 'Other Certificates' },
 ] as const;
@@ -37,8 +37,6 @@ export const MANDATORY_MANUFACTURER_DOCUMENT_KEYS = [
   'mfgLicense',
   'gmpCert',
   'whoGmpCert',
-  'isoCert',
-  'pollutionCert',
 ] as const;
 
 export const MANUFACTURER_CATEGORY_KEYS = MANUFACTURER_DOCUMENT_CATEGORIES.map((c) => c.key);
@@ -187,6 +185,16 @@ export class ManufacturerStep3Dto {
 }
 
 export class ManufacturerSupplyItemDto {
+  @ApiPropertyOptional({ example: 'Cosmetic', description: 'Parent category name' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ example: 'FACIAL CREME', description: 'Sub-Category name configured for supply' })
+  @IsOptional()
+  @IsString()
+  subCategory?: string;
+
   @ApiPropertyOptional({ example: 'p1' })
   @IsOptional()
   @IsString()
@@ -224,6 +232,13 @@ export class ManufacturerSupplyItemDto {
   @Min(1)
   @Max(3650)
   leadTimeDays?: number;
+
+  @ApiPropertyOptional({ example: 50000, description: 'Production plant capacity (positive integer)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(2_000_000_000)
+  plantCapacity?: number;
 }
 
 export class ManufacturerStep4Dto {

@@ -378,6 +378,30 @@ export const RFQModule: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [expandedRfqId, setExpandedRfqId] = useState<string | null>(null);
+  const [backendQuotesMap, setBackendQuotesMap] = useState<Record<string, any[]>>({});
+
+  useEffect(() => {
+    if (!expandedRfqId) return;
+    if (backendQuotesMap[expandedRfqId]) return;
+
+    let isMounted = true;
+    rfqApi.getQuotesForRfq(expandedRfqId).then((quotesList) => {
+      if (!isMounted) return;
+      const formatted = (quotesList || []).map((q: any) => ({
+        ...q,
+        quoteLines: q.lines || [],
+        manufacturerName: q.manufacturerName || 'Verified Manufacturer',
+        mfgId: q.manufacturerId,
+      }));
+      setBackendQuotesMap((prev) => ({ ...prev, [expandedRfqId]: formatted }));
+    }).catch((err) => {
+      console.warn('Could not fetch quotes for RFQ:', err);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [expandedRfqId, backendQuotesMap]);
 
   const uniqueMatchedMfgs = useMemo(() => {
     if (!liveMatchingResult?.matchedLines) return [];
@@ -1823,7 +1847,10 @@ export const RFQModule: React.FC = () => {
             ) : (
               paginatedRfqs.map(rfq => {
                 const isExpanded = expandedRfqId === rfq.id;
-                const rfqQuotes = quotes.filter(q => q.rfqId === rfq.id);
+                const rfqQuotes = [
+                  ...quotes.filter(q => q.rfqId === rfq.id),
+                  ...(backendQuotesMap[rfq.id] || [])
+                ].filter((q, idx, self) => self.findIndex(s => s.id === q.id) === idx);
 
                 return (
                   <React.Fragment key={rfq.id}>
@@ -1967,7 +1994,10 @@ export const RFQModule: React.FC = () => {
 
                             {/* SECTION: MANUFACTURER RFQS / SUBMITTED QUOTES */}
                             {(() => {
-                              const rfqQuotes = quotes.filter(q => q.rfqId === rfq.id);
+                              const rfqQuotes = [
+                                ...quotes.filter(q => q.rfqId === rfq.id),
+                                ...(backendQuotesMap[rfq.id] || [])
+                              ].filter((q, idx, self) => self.findIndex(s => s.id === q.id) === idx);
                               const uniqueMfgIds = new Set(rfqQuotes.map(q => q.mfgId || q.manufacturerId));
                               const uniqueMfgCount = uniqueMfgIds.size;
 

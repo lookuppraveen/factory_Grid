@@ -4,6 +4,13 @@ import { Manufacturer, ManufacturerLifecycleStatus } from '../../types';
 import { PaginationControl } from '../common/PaginationControl';
 import { usePagination } from '../../hooks/usePagination';
 import {
+  MasterBreadcrumbs,
+  MasterPageHeader,
+  MasterStatsStrip,
+  MasterStatusBadge,
+  TableActionGroup
+} from '../common/MasterComponents';
+import {
   Factory, Search, Plus, Edit3, Trash2, CheckCircle2,
   AlertTriangle, X, Power, Eye, Package, ArrowRight,
   Calendar, Layers, Filter, Check, ShieldCheck
@@ -83,6 +90,16 @@ export const ManufacturerMasterModule: React.FC = () => {
         return { label: st, bg: '#F1F5F9', color: '#64748B', border: '#CBD5E1' };
     }
   };
+
+  // Master Statistics
+  const stats = useMemo(() => {
+    const list = manufacturers || [];
+    const total = list.length;
+    const active = list.filter(m => (m.lifecycle_status || m.status || 'ACTIVE').toUpperCase() === 'ACTIVE').length;
+    const inactive = total - active;
+    const withProducts = list.filter(m => getMappedProductsCount(m.id || m.manufacturer_id!) > 0).length;
+    return { total, active, inactive, withProducts };
+  }, [manufacturers, mappings]);
 
   // Filtered Manufacturers
   const filteredManufacturers = useMemo(() => {
@@ -291,88 +308,35 @@ export const ManufacturerMasterModule: React.FC = () => {
         </div>
       )}
 
-      {/* ── Enterprise Header ────────────────────────────────────── */}
-      <div style={{
-        background: '#FFFFFF',
-        border: '1px solid #E2E8F0',
-        borderRadius: 12,
-        padding: 24,
-        boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 16
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            background: 'rgba(15, 118, 110, 0.10)',
-            border: '1px solid rgba(15, 118, 110, 0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <Factory size={26} style={{ color: '#0F766E' }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#0F766E' }}>
-              MASTER DATA · CATALOGUE MANAGEMENT
-            </div>
-            <h1 style={{ margin: '2px 0 0 0', fontSize: 24, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
-              MANUFACTURER MASTER
-            </h1>
-            <p style={{ margin: '3px 0 0 0', fontSize: 13, color: '#475569', fontWeight: 500 }}>
-              Manage manufacturer records used across the FactoryGrid product catalogue.
-            </p>
-          </div>
-        </div>
+      {/* ── Breadcrumbs Bar ── */}
+      <MasterBreadcrumbs
+        pageTitle="Manufacturer Master"
+        onBack={() => setActiveTab('settings')}
+      />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={() => setActiveTab('products')}
-            title="Navigate to Product Catalog"
-            style={{
-              padding: '10px 16px',
-              borderRadius: 8,
-              background: '#F0FDFA',
-              color: '#0F766E',
-              border: '1px solid #99F6E4',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-          >
-            <Package size={16} /> View Product Catalog →
-          </button>
+      {/* ── Enterprise Header ── */}
+      <MasterPageHeader
+        icon={Factory}
+        domainLabel="MASTER DATA · CATALOGUE MANAGEMENT"
+        title="Manufacturer Master"
+        description="Manage manufacturer records used across the FactoryGrid product catalogue."
+        primaryAction={{
+          label: "Add Manufacturer",
+          icon: Plus,
+          onClick: handleOpenAddModal
+        }}
+      />
 
-          <button
-            onClick={handleOpenAddModal}
-            style={{
-              padding: '10px 20px',
-              borderRadius: 8,
-              background: '#0F766E',
-              color: '#FFFFFF',
-              border: 'none',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
-            }}
-          >
-            <Plus size={16} /> + Add Manufacturer
-          </button>
-        </div>
-      </div>
+      {/* ── Statistics Strip ── */}
+      <MasterStatsStrip
+        stats={[
+          { label: 'TOTAL MANUFACTURERS', value: stats.total },
+          { label: 'ACTIVE', value: stats.active, color: '#15803D' },
+          { label: 'INACTIVE', value: stats.inactive, color: '#B91C1C' },
+          { label: 'WITH PRODUCTS', value: stats.withProducts, color: '#0F766E' }
+        ]}
+        modelTag="Canonical Data Model: MANUFACTURER"
+      />
 
       {/* ── Search & Filter Controls Bar ────────────────────────────── */}
       <div style={{
@@ -535,17 +499,7 @@ export const ManufacturerMasterModule: React.FC = () => {
 
                     {/* Lifecycle Status */}
                     <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontSize: 10.5,
-                        fontWeight: 800,
-                        padding: '3px 8px',
-                        borderRadius: 4,
-                        background: badge.bg,
-                        color: badge.color,
-                        border: `1px solid ${badge.border}`
-                      }}>
-                        {badge.label}
-                      </span>
+                      <MasterStatusBadge status={statusStr} />
                     </td>
 
                     {/* Effective From */}
@@ -574,52 +528,14 @@ export const ManufacturerMasterModule: React.FC = () => {
                     </td>
 
                     {/* Actions */}
-                    <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => setSelectedMfgForDetail(mfg)}
-                          title="View Manufacturer Details"
-                          style={{ padding: '5px 8px', background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 4, color: '#0F766E', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                        >
-                          <Eye size={13} />
-                        </button>
-
-                        <button
-                          onClick={e => handleOpenEditModal(mfg, e)}
-                          title="Edit Manufacturer"
-                          style={{ padding: '5px 8px', background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 4, color: '#0F766E', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                        >
-                          <Edit3 size={13} />
-                        </button>
-
-                        <button
-                          onClick={e => handleToggleStatus(mfg, e)}
-                          title={statusStr === 'ACTIVE' ? 'Deactivate Manufacturer' : 'Activate Manufacturer'}
-                          style={{
-                            padding: '5px 8px',
-                            background: statusStr === 'ACTIVE' ? '#FEF2F2' : '#F0FDF4',
-                            border: statusStr === 'ACTIVE' ? '1px solid #FECACA' : '1px solid #BBF7D0',
-                            borderRadius: 4,
-                            color: statusStr === 'ACTIVE' ? '#DC2626' : '#16A34A',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Power size={13} />
-                        </button>
-
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            setConfirmDeleteMfg(mfg);
-                          }}
-                          title="Delete Manufacturer"
-                          style={{ padding: '5px 8px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 4, color: '#DC2626', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                      <TableActionGroup
+                        onView={() => setSelectedMfgForDetail(mfg)}
+                        onEdit={() => handleOpenEditModal(mfg)}
+                        status={statusStr}
+                        onToggleStatus={() => handleToggleStatus(mfg)}
+                        onDelete={() => setConfirmDeleteMfg(mfg)}
+                      />
                     </td>
                   </tr>
                 );

@@ -63,6 +63,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
         'product_code',
         'name',
         'generic_name',
+        'pharma_reference',
         'strength',
         'dosage_form',
         'pack_size',
@@ -82,6 +83,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
           'PRD-AMX-500',
           'Amoxicillin 500mg Capsules',
           'Amoxicillin Trihydrate',
+          'BP',
           '500mg',
           'Capsule',
           '10 x 10 Strip',
@@ -99,7 +101,8 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
           'Dispersible Tablets',
           'PRD-PCM-650',
           'Paracetamol 650mg Tablets',
-          'Paracetamol IP',
+          'Paracetamol',
+          'IP',
           '650mg',
           'Tablet',
           '10 x 10 Strip',
@@ -120,6 +123,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
         'product_code',
         'name',
         'generic_name',
+        'pharma_reference',
         'strength',
         'dosage_form',
         'pack_size',
@@ -136,6 +140,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
           'PRD-AMX-500',
           'Amoxicillin 500mg Capsules',
           'Amoxicillin Trihydrate',
+          'BP',
           '500mg',
           'Capsule',
           '10 x 10 Strip',
@@ -150,7 +155,8 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
           'Dispersible Tablets',
           'PRD-PCM-650',
           'Paracetamol 650mg Tablets',
-          'Paracetamol IP',
+          'Paracetamol',
+          'IP',
           '650mg',
           'Tablet',
           '10 x 10 Strip',
@@ -229,6 +235,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({
         else if (h === 'subsubcategory') rowObj.subSubCategory = val;
         else if (h === 'producttype' || h === 'producttypeid') rowObj.productTypeId = val;
         else if (h === 'genericname' || h === 'molecule') rowObj.genericName = val;
+        else if (h === 'pharmareference' || h === 'reference' || h === 'pharma_reference') rowObj.pharmaReference = val;
         else if (h === 'strength' || h === 'potency') rowObj.strength = val;
         else if (h === 'dosageform' || h === 'form') rowObj.dosageForm = val;
         else if (h === 'packsize' || h === 'packaging') rowObj.packSize = val;
