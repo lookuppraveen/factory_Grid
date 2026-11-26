@@ -1,0 +1,35 @@
+# Production stack for a single Lightsail instance. Run from the repo root:
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+# File storage uses a Lightsail bucket (S3 API), so there is no MinIO here.
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: factorygrid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: factorygrid
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U factorygrid"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env.prod
+    environment:
+      DATABASE_URL: postgresql://factorygrid:${POSTGRES_PASSWORD}@postgres:5432/factorygrid
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Only Nginx on the host reaches the API.
+    ports:
+      - "127.0.0.1:8081:8081"
+
+volumes:
+  pgdata:
