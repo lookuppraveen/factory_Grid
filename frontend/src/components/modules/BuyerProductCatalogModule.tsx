@@ -38,7 +38,7 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
     else setIsLoading(true);
     setApiError(null);
     try {
-      const data = await catalogApi.listProducts();
+      const data = await catalogApi.listProducts({ buyerView: true, lifecycleStatus: 'ACTIVE', activeOnly: true });
       if (Array.isArray(data) && data.length > 0) {
         setLiveProducts(data);
       }
@@ -217,13 +217,22 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
         selectedSubSubCategory === 'ALL' ||
         pSubSub === selectedSubSubCategory.toLowerCase().trim();
 
-      // 5. Status Filter
-      const pStatus = p.status || 'Active';
-      const matchesStatus =
-        selectedStatus === 'ALL' ||
-        pStatus.toLowerCase() === selectedStatus.toLowerCase();
+      // 5. Lifecycle Status Filter (Default: ONLY ACTIVE products for Buyers)
+      const rawLife = (p.lifecycle_status || p.lifecycleStatus || (p.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE')).toUpperCase();
+      const isDiscontinuedOrEol = rawLife === 'DISCONTINUED' || rawLife === 'END_OF_LIFE' || rawLife === 'EOL';
 
-      return matchesSearch && matchesCat && matchesSub && matchesSubSub && matchesStatus;
+      // Default Buyer View strictly excludes DISCONTINUED and END_OF_LIFE products
+      if (selectedStatus === 'ALL' && isDiscontinuedOrEol) {
+        return false;
+      }
+      if (selectedStatus !== 'ALL') {
+        const matchesSelected = (selectedStatus === 'END_OF_LIFE' || selectedStatus === 'EOL')
+          ? (rawLife === 'END_OF_LIFE' || rawLife === 'EOL')
+          : (selectedStatus.toUpperCase() === 'ACTIVE' ? (rawLife === 'ACTIVE' || p.status === 'Active') : rawLife === selectedStatus.toUpperCase());
+        if (!matchesSelected) return false;
+      }
+
+      return matchesSearch && matchesCat && matchesSub && matchesSubSub;
     });
   }, [products, searchTerm, selectedCategory, selectedSubCategory, selectedSubSubCategory, selectedStatus]);
 
@@ -455,7 +464,7 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
             <Search size={16} style={{ color: '#64748B', flexShrink: 0 }} />
             <input
               type="text"
-              placeholder="Search by Product Code / SKU, Product Name, Generic Name..."
+              placeholder="Search by Product Name, Generic Name..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               style={{ border: 'none', padding: 0, background: 'transparent', width: '100%', fontSize: 13, color: '#0F172A', outline: 'none' }}
@@ -626,17 +635,7 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
                     }}
                   >
                     <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
-                        <div>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>
-                            {prd.code}
-                          </span>
-                          {prd.sku && prd.sku !== prd.code && (
-                            <span style={{ fontSize: 10.5, color: '#64748B', fontFamily: 'monospace', marginLeft: 6 }}>
-                              ({prd.sku})
-                            </span>
-                          )}
-                        </div>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
                         <span style={{
                           fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
                           background: isActive ? '#DCFCE7' : '#F3F4F6',
@@ -721,7 +720,6 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
           <table style={{ width: '100%', minWidth: 1250, borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 120 }}>PRODUCT CODE / SKU</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 160 }}>PRODUCT NAME</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 160 }}>GENERIC NAME</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 90 }}>STRENGTH</th>
@@ -738,7 +736,7 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
             <tbody>
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={12} style={{ textAlign: 'center', padding: '56px 20px', color: '#64748B' }}>
+                  <td colSpan={11} style={{ textAlign: 'center', padding: '56px 20px', color: '#64748B' }}>
                     <Package size={40} style={{ color: '#94A3B8', marginBottom: 12, display: 'block', margin: '0 auto 12px' }} />
                     <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No central products found</div>
                     <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 16 }}>
@@ -769,18 +767,6 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
                       onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                       onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
                     >
-                      {/* 1. PRODUCT CODE / SKU */}
-                      <td style={{ padding: '12px 10px', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>
-                          {prd.code}
-                        </div>
-                        {prd.sku && prd.sku !== prd.code && (
-                          <div style={{ fontSize: 10.5, color: '#64748B', fontFamily: 'monospace', marginTop: 1 }}>
-                            SKU: {prd.sku}
-                          </div>
-                        )}
-                      </td>
-
                       {/* 2. PRODUCT NAME */}
                       <td style={{ padding: '12px 10px' }}>
                         <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', lineHeight: 1.3 }}>
@@ -903,14 +889,6 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
             <div style={{ padding: '20px 24px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: '#0F766E', fontWeight: 800, fontFamily: 'monospace' }}>
-                    {selectedProduct.code}
-                  </span>
-                  {selectedProduct.sku && selectedProduct.sku !== selectedProduct.code && (
-                    <span style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace' }}>
-                      ({selectedProduct.sku})
-                    </span>
-                  )}
                   <span style={{
                     fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
                     background: (selectedProduct.status || 'Active').toLowerCase() === 'active' ? '#DCFCE7' : '#F3F4F6',
@@ -945,12 +923,6 @@ export const BuyerProductCatalogModule: React.FC<BuyerProductCatalogProps> = ({ 
                   <Package size={14} /> 1. PRODUCT INFORMATION
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12.5 }}>
-                  <div>
-                    <span style={{ color: '#64748B' }}>Product Code / SKU:</span>
-                    <strong style={{ color: '#0F766E', fontFamily: 'monospace', display: 'block', marginTop: 2 }}>
-                      {selectedProduct.code} {selectedProduct.sku && selectedProduct.sku !== selectedProduct.code ? `(${selectedProduct.sku})` : ''}
-                    </strong>
-                  </div>
                   <div>
                     <span style={{ color: '#64748B' }}>Product Name:</span>
                     <strong style={{ color: '#0F172A', display: 'block', marginTop: 2 }}>

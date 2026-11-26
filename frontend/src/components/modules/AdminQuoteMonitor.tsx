@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { RFQ, ManufacturerQuote } from '../../types';
+import { adminRfqApi, AdminRfqItem } from '../../services/adminRfqApi';
 import {
   Tag, Search, Eye, CheckCircle2, Clock, Building2, X, FileText,
   ShieldCheck, ChevronRight, Filter, AlertCircle, RefreshCw, Layers, Edit, Slash, Send, Info, DollarSign
@@ -9,18 +9,25 @@ import { PaginationControl } from '../common/PaginationControl';
 import { usePagination } from '../../hooks/usePagination';
 
 export const AdminQuoteMonitor: React.FC = () => {
-  const { rfqs, quotes, manufacturers, customers, currentRole, addAuditLog } = useApp();
+  const { currentRole, addAuditLog } = useApp();
+
+  // Real Database Data State from PostgreSQL
+  const [rfqsList, setRfqsList] = useState<AdminRfqItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'RECEIVED' | 'PENDING' | 'SELECTED'>('ALL');
   
   // Read-only / Interactive modal state
-  const [selectedRfqForView, setSelectedRfqForView] = useState<RFQ | null>(null);
+  const [selectedRfqForView, setSelectedRfqForView] = useState<AdminRfqItem | null>(null);
+  const [selectedRfqQuotes, setSelectedRfqQuotes] = useState<any[]>([]);
+  const [isLoadingQuotes, setIsLoadingQuotes] = useState<boolean>(false);
 
   // Configurable Admin Price Control Flag
   const [isAdminPriceEditEnabled, setIsAdminPriceEditEnabled] = useState<boolean>(true);
 
-  // Admin Overrides State: Record<mfgId, { originalPrice: number; adjustedPrice?: number; isRejected?: boolean; rejectionReason?: string }>
+  // Admin Overrides State: Record<quoteOrMfgId, { originalPrice: number; adjustedPrice?: number; isRejected?: boolean; rejectionReason?: string }>
   const [adminQuoteOverrides, setAdminQuoteOverrides] = useState<Record<string, {
     originalPrice: number;
     adjustedPrice?: number;
@@ -29,20 +36,54 @@ export const AdminQuoteMonitor: React.FC = () => {
   }>>({});
 
   // Inline / Modal Edit Price State
-  const [editingMfgId, setEditingMfgId] = useState<string | null>(null);
+  const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
   const [tempAdjustedPrice, setTempAdjustedPrice] = useState<string>('');
 
   // Rejection Modal State
-  const [rejectingMfgId, setRejectingMfgId] = useState<string | null>(null);
+  const [rejectingQuoteId, setRejectingQuoteId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState<string>('');
   const [rejectionError, setRejectionError] = useState<string | null>(null);
 
   // Action Notification Banner State
   const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
 
-  // Helper to retrieve mfg quote info
-  const getMfgQuoteData = (mfgId: string, defaultOriginalPrice: number) => {
-    const override = adminQuoteOverrides[mfgId];
+  // Fetch real RFQ quote monitoring data from PostgreSQL
+  const loadData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setApiError(null);
+      const data = await adminRfqApi.listAdminRfqs();
+      setRfqsList(data || []);
+    } catch (err: any) {
+      console.error('Failed to load Quote Monitoring RFQs from PostgreSQL:', err);
+      setApiError(err?.message || 'Failed to connect to backend quote monitoring service.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Load quotes when an RFQ is opened for view
+  const handleOpenQuoteDetails = async (rfq: AdminRfqItem) => {
+    setSelectedRfqForView(rfq);
+    setIsLoadingQuotes(true);
+    try {
+      const quotes = await adminRfqApi.getQuotesForRfq(rfq.id);
+      setSelectedRfqQuotes(quotes || []);
+    } catch (err) {
+      console.warn('Could not load quote list from backend, using RFQ quotes summary:', err);
+      setSelectedRfqQuotes(rfq.quotes || []);
+    } finally {
+      setIsLoadingQuotes(false);
+    }
+  };
+
+  // Helper to retrieve quote info
+  const getMfgQuoteData = (quoteId: string, defaultOriginalPrice: number) => {
+    const override = adminQuoteOverrides[quoteId];
     const originalPrice = override?.originalPrice ?? defaultOriginalPrice;
     const adjustedPrice = override?.adjustedPrice;
     const isRejected = !!override?.isRejected;
@@ -63,39 +104,38 @@ export const AdminQuoteMonitor: React.FC = () => {
     };
   };
 
-  const handleSaveAdjustedPrice = (mfgId: string, defaultOrig: number) => {
+  const handleSaveAdjustedPrice = (quoteId: string, mfgName: string, defaultOrig: number) => {
     const val = parseFloat(tempAdjustedPrice);
     if (isNaN(val) || val <= 0) {
       return;
     }
-    const currentObj = adminQuoteOverrides[mfgId] || { originalPrice: defaultOrig };
+    const currentObj = adminQuoteOverrides[quoteId] || { originalPrice: defaultOrig };
     setAdminQuoteOverrides(prev => ({
       ...prev,
-      [mfgId]: {
+      [quoteId]: {
         ...currentObj,
         originalPrice: currentObj.originalPrice || defaultOrig,
         adjustedPrice: val
       }
     }));
 
-    const mfgName = manufacturers.find(m => m.id === mfgId)?.companyName || 'Manufacturer';
-    setEditingMfgId(null);
-    setNotificationMsg(`Price adjusted successfully for ${mfgName}. Original: ₹${defaultOrig.toFixed(2)} → Admin Adjusted Price: ₹${val.toFixed(2)}/strip.`);
+    setEditingQuoteId(null);
+    setNotificationMsg(`Price adjusted successfully for ${mfgName}. Original: ₹${defaultOrig.toFixed(2)} → Admin Adjusted Price: ₹${val.toFixed(2)}/unit.`);
     if (addAuditLog) {
       addAuditLog('Quote Engine', `Admin updated quotation price for ${mfgName} from ₹${defaultOrig.toFixed(2)} to ₹${val.toFixed(2)}.`);
     }
   };
 
-  const handleConfirmRejection = (mfgId: string, defaultOrig: number) => {
+  const handleConfirmRejection = (quoteId: string, mfgName: string, defaultOrig: number) => {
     if (!rejectionReasonInput.trim()) {
       setRejectionError('Rejection reason is mandatory.');
       return;
     }
 
-    const currentObj = adminQuoteOverrides[mfgId] || { originalPrice: defaultOrig };
+    const currentObj = adminQuoteOverrides[quoteId] || { originalPrice: defaultOrig };
     setAdminQuoteOverrides(prev => ({
       ...prev,
-      [mfgId]: {
+      [quoteId]: {
         ...currentObj,
         originalPrice: currentObj.originalPrice || defaultOrig,
         isRejected: true,
@@ -103,9 +143,8 @@ export const AdminQuoteMonitor: React.FC = () => {
       }
     }));
 
-    const mfgName = manufacturers.find(m => m.id === mfgId)?.companyName || 'Manufacturer';
     const reasonText = rejectionReasonInput.trim();
-    setRejectingMfgId(null);
+    setRejectingQuoteId(null);
     setRejectionReasonInput('');
     setRejectionError(null);
     setNotificationMsg(`Quotation from ${mfgName} rejected. Rejection notice logged: "${reasonText}".`);
@@ -114,26 +153,14 @@ export const AdminQuoteMonitor: React.FC = () => {
     }
   };
 
-  // Compute quote monitoring statistics
+  // Compute quote monitoring statistics based on real backend data
   const monitoredRfqs = useMemo(() => {
-    return rfqs.map(rfq => {
-      const rfqQuotes = quotes.filter(q => q.rfqId === rfq.id || q.rfqNumber === rfq.rfqNumber);
-      const responsesCount = rfqQuotes.length || (rfq.status === 'Quoted' ? 3 : 0);
-      
-      // Prices calculations
-      let lowestPrice = 0;
-      let highestPrice = 0;
-      if (rfqQuotes.length > 0) {
-        const totals = rfqQuotes.map(q => q.totalAmount);
-        lowestPrice = Math.min(...totals);
-        highestPrice = Math.max(...totals);
-      } else if (rfq.status === 'Quoted') {
-        lowestPrice = 145000;
-        highestPrice = 178000;
-      }
-
-      const isAwarded = rfq.status === 'Sub-Order Created' || rfq.status === 'Approved';
-      const selectedMfgName = isAwarded ? 'SunBio LifeSciences Ltd' : 'Selection Pending';
+    return rfqsList.map(rfq => {
+      const responsesCount = rfq.quotesCount;
+      const lowestPrice = rfq.lowestPrice;
+      const highestPrice = rfq.highestPrice;
+      const isAwarded = rfq.isAwarded;
+      const selectedMfgName = rfq.selectedManufacturerName;
 
       return {
         rfq,
@@ -142,10 +169,10 @@ export const AdminQuoteMonitor: React.FC = () => {
         highestPrice,
         isAwarded,
         selectedMfgName,
-        rfqQuotes
+        rfqQuotes: rfq.quotes || []
       };
     });
-  }, [rfqs, quotes]);
+  }, [rfqsList]);
 
   const filteredMonitoredRfqs = useMemo(() => {
     return monitoredRfqs.filter(item => {
@@ -153,7 +180,8 @@ export const AdminQuoteMonitor: React.FC = () => {
       const matchSearch =
         item.rfq.rfqNumber.toLowerCase().includes(q) ||
         item.rfq.customerName.toLowerCase().includes(q) ||
-        item.rfq.lines.some(l => l.productName.toLowerCase().includes(q));
+        (item.rfq.customerCode && item.rfq.customerCode.toLowerCase().includes(q)) ||
+        (item.rfq.lines || []).some(l => (l.productName || l.molecule || '').toLowerCase().includes(q));
 
       if (statusFilter === 'RECEIVED') return matchSearch && item.responsesCount > 0;
       if (statusFilter === 'PENDING') return matchSearch && !item.isAwarded;
@@ -161,13 +189,12 @@ export const AdminQuoteMonitor: React.FC = () => {
 
       return matchSearch;
     }).sort((a, b) => {
-      // Latest record first (created_at DESC), secondary stable sort on rfqNumber DESC
-      const timeA = new Date((a.rfq as any).createdAt || (a.rfq as any).created_at || a.rfq.createdDate || 0).getTime();
-      const timeB = new Date((b.rfq as any).createdAt || (b.rfq as any).created_at || b.rfq.createdDate || 0).getTime();
+      const timeA = new Date((a.rfq as any).createdAt || a.rfq.createdDate || 0).getTime();
+      const timeB = new Date((b.rfq as any).createdAt || b.rfq.createdDate || 0).getTime();
       if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
         return timeB - timeA;
       }
-      return String(b.rfq.rfqNumber || b.rfq.id || '').localeCompare(String(a.rfq.rfqNumber || a.rfq.id || ''));
+      return String(b.rfq.rfqNumber || '').localeCompare(String(a.rfq.rfqNumber || ''));
     });
   }, [monitoredRfqs, searchTerm, statusFilter]);
 
@@ -197,6 +224,18 @@ export const AdminQuoteMonitor: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={() => loadData()}
+            disabled={isLoading}
+            style={{
+              padding: '6px 14px', borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: isLoading ? 'not-allowed' : 'pointer',
+              border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569',
+              display: 'inline-flex', alignItems: 'center', gap: 6
+            }}
+          >
+            <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} /> Refresh
+          </button>
+
           {/* Configurable Admin Control Toggle */}
           <button
             onClick={() => {
@@ -215,6 +254,19 @@ export const AdminQuoteMonitor: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* API Error Banner */}
+      {apiError && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#991B1B', fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertCircle size={18} />
+            <span><strong>Database Error:</strong> {apiError}</span>
+          </div>
+          <button onClick={() => loadData()} style={{ padding: '4px 12px', background: '#991B1B', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Notification Banner */}
       {notificationMsg && (
@@ -244,10 +296,10 @@ export const AdminQuoteMonitor: React.FC = () => {
 
         <div style={{ display: 'flex', gap: 6, background: '#F1F5F9', padding: 4, borderRadius: 8 }}>
           {[
-            { key: 'ALL', label: 'All RFQs' },
-            { key: 'RECEIVED', label: 'Quotes Received' },
-            { key: 'PENDING', label: 'Evaluation Pending' },
-            { key: 'SELECTED', label: 'Manufacturer Selected' }
+            { key: 'ALL', label: `All RFQs (${monitoredRfqs.length})` },
+            { key: 'RECEIVED', label: `Quotes Received (${monitoredRfqs.filter(r => r.responsesCount > 0).length})` },
+            { key: 'PENDING', label: `Evaluation Pending (${monitoredRfqs.filter(r => r.responsesCount > 0 && !r.isAwarded).length})` },
+            { key: 'SELECTED', label: `Manufacturer Selected (${monitoredRfqs.filter(r => r.isAwarded).length})` }
           ].map(st => (
             <button
               key={st.key}
@@ -282,10 +334,21 @@ export const AdminQuoteMonitor: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredMonitoredRfqs.length === 0 ? (
+            {isLoading ? (
+              <tr>
+                <td colSpan={9} style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+                    <div style={{ width: 16, height: 16, border: '2px solid #7C3AED', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                    Loading real quote monitoring data from PostgreSQL...
+                  </div>
+                </td>
+              </tr>
+            ) : filteredMonitoredRfqs.length === 0 ? (
               <tr>
                 <td colSpan={9} style={{ padding: 40, textAlign: 'center', color: '#94A3B8' }}>
-                  No quote monitoring records match your search filter.
+                  {rfqsList.length === 0
+                    ? 'No RFQs currently exist in the database.'
+                    : 'No quote monitoring records match your search filter.'}
                 </td>
               </tr>
             ) : (
@@ -296,34 +359,39 @@ export const AdminQuoteMonitor: React.FC = () => {
                   </td>
                   <td style={{ padding: '14px 16px', fontWeight: 600, color: '#0F172A' }}>
                     {rfq.customerName}
-                    <div style={{ fontSize: 10.5, color: '#94A3B8' }}>{rfq.customerCode || 'CUS-101'}</div>
+                    <div style={{ fontSize: 10.5, color: '#94A3B8' }}>{rfq.customerCode || '—'}</div>
                   </td>
                   <td style={{ padding: '14px 16px', color: '#334155' }}>
-                    <div style={{ fontWeight: 600 }}>{rfq.lines[0]?.productName}</div>
+                    <div style={{ fontWeight: 600 }}>{rfq.lines[0]?.productName || rfq.lines[0]?.molecule || rfq.title || '—'}</div>
                     <div style={{ fontSize: 11, color: '#64748B' }}>{rfq.lines.length} Product Lines</div>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     <span style={{ fontSize: 11.5, fontWeight: 800, color: responsesCount > 0 ? '#15803D' : '#64748B', background: responsesCount > 0 ? '#DCFCE7' : '#F1F5F9', padding: '3px 10px', borderRadius: 999 }}>
-                      {responsesCount} Responses Received
+                      {responsesCount} {responsesCount === 1 ? 'Response' : 'Responses'} Received
                     </span>
+                    {responsesCount > 0 && lowestPrice > 0 && (
+                      <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 2, fontFamily: 'monospace' }}>
+                        ₹{lowestPrice.toLocaleString('en-IN')}{highestPrice > lowestPrice ? ` - ₹${highestPrice.toLocaleString('en-IN')}` : ''}
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 999, background: isAwarded ? '#DCFCE7' : responsesCount > 0 ? '#F5F3FF' : '#FEF3C7', color: isAwarded ? '#15803D' : responsesCount > 0 ? '#7C3AED' : '#B45309' }}>
-                      {isAwarded ? 'Completed' : responsesCount > 0 ? 'Quotes Received' : 'Awaiting Bids'}
+                      {isAwarded ? 'Completed / Awarded' : responsesCount > 0 ? 'Quotes Received' : 'Awaiting Bids'}
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px', fontWeight: 700, color: isAwarded ? '#0F172A' : '#94A3B8' }}>
                     {selectedMfgName}
                   </td>
                   <td style={{ padding: '14px 16px', color: '#64748B' }}>
-                    {rfq.createdDate}
+                    {rfq.createdDate || '—'}
                   </td>
                   <td style={{ padding: '14px 16px', color: '#64748B' }}>
-                    {rfq.deadlineDate}
+                    {rfq.targetDeliveryDate || rfq.deadlineDate || '—'}
                   </td>
                   <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                     <button
-                      onClick={() => setSelectedRfqForView(rfq)}
+                      onClick={() => handleOpenQuoteDetails(rfq)}
                       style={{ padding: '6px 12px', background: '#7C3AED', color: '#FFFFFF', border: 'none', borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                     >
                       <Eye size={13} /> View Quote Details
@@ -347,7 +415,7 @@ export const AdminQuoteMonitor: React.FC = () => {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    Quote Monitoring Desk
+                    Quote Monitoring Desk · PostgreSQL Records
                   </span>
                   <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: isAdminPriceEditEnabled ? '#7C3AED' : '#475569', color: '#FFFFFF' }}>
                     {isAdminPriceEditEnabled ? 'Admin Controls Active' : 'Read-Only Mode'}
@@ -373,11 +441,11 @@ export const AdminQuoteMonitor: React.FC = () => {
                 </div>
                 <div>
                   <span style={{ color: '#64748B', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Created Date</span>
-                  <div style={{ fontWeight: 700, color: '#0F172A', marginTop: 2 }}>{selectedRfqForView.createdDate}</div>
+                  <div style={{ fontWeight: 700, color: '#0F172A', marginTop: 2 }}>{selectedRfqForView.createdDate || '—'}</div>
                 </div>
                 <div>
                   <span style={{ color: '#64748B', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Bidding Deadline</span>
-                  <div style={{ fontWeight: 700, color: '#6D28D9', marginTop: 2 }}>{selectedRfqForView.deadlineDate}</div>
+                  <div style={{ fontWeight: 700, color: '#6D28D9', marginTop: 2 }}>{selectedRfqForView.targetDeliveryDate || selectedRfqForView.deadlineDate || '—'}</div>
                 </div>
                 <div>
                   <span style={{ color: '#64748B', fontSize: 11, textTransform: 'uppercase', fontWeight: 700 }}>Product Lines</span>
@@ -391,7 +459,7 @@ export const AdminQuoteMonitor: React.FC = () => {
                   <Info size={14} /> Pricing & Margin Engine Overview (Admin Control)
                 </div>
                 <div style={{ fontSize: 11.5, color: '#5B21B6', lineHeight: '1.4' }}>
-                  Admin can inspect seller-submitted prices, configure markup/margin overrides, and manage quotation rejections. Original seller prices are preserved for audit transparency.
+                  Admin can inspect seller-submitted prices from real database quotations, configure markup/margin overrides, and manage quotation rejections.
                 </div>
               </div>
 
@@ -402,244 +470,274 @@ export const AdminQuoteMonitor: React.FC = () => {
                     Submitted Manufacturer Quotations
                   </h4>
                   <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B' }}>
-                    {manufacturers.slice(0, 3).length} Quotations Received
+                    {isLoadingQuotes ? 'Loading quotes...' : `${selectedRfqQuotes.length} Quotation(s) in PostgreSQL`}
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {manufacturers.slice(0, 3).map((mfg, idx) => {
-                    const defaultOrigPrice = 14.50 + idx * 1.20;
-                    const mfgQuote = getMfgQuoteData(mfg.id, defaultOrigPrice);
-                    const isSelected = idx === 0;
+                {isLoadingQuotes ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: '#64748B', fontSize: 13 }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 16, height: 16, border: '2px solid #7C3AED', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                      Loading manufacturer quotations...
+                    </div>
+                  </div>
+                ) : selectedRfqQuotes.length === 0 ? (
+                  <div style={{ padding: 24, background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: 10, textAlign: 'center', color: '#64748B', fontSize: 13 }}>
+                    No manufacturer quotations submitted yet for RFQ #{selectedRfqForView.rfqNumber} in PostgreSQL.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {selectedRfqQuotes.map((q: any) => {
+                      const quoteId = q.id || q.quoteNumber;
+                      const mfgName = q.manufacturerName || q.manufacturer?.companyName || 'Verified Manufacturer';
+                      const defaultOrigPrice = Number(q.totalAmount || 0);
+                      const mfgQuote = getMfgQuoteData(quoteId, defaultOrigPrice);
+                      const isSelected = q.status === 'ACCEPTED' || q.status === 'PARTIALLY_ACCEPTED';
 
-                    return (
-                      <div
-                        key={mfg.id}
-                        style={{
-                          background: mfgQuote.isRejected ? '#FEF2F2' : '#FFFFFF',
-                          border: mfgQuote.isRejected ? '1px solid #FCA5A5' : isSelected ? '1px solid #86EFAC' : '1px solid #E2E8F0',
-                          borderRadius: 12, padding: 18, boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-                          <div>
+                      return (
+                        <div
+                          key={quoteId}
+                          style={{
+                            background: mfgQuote.isRejected ? '#FEF2F2' : '#FFFFFF',
+                            border: mfgQuote.isRejected ? '1px solid #FCA5A5' : isSelected ? '1px solid #86EFAC' : '1px solid #E2E8F0',
+                            borderRadius: 12, padding: 18, boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <h5 style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                                  {mfgName}
+                                </h5>
+                                <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#7C3AED' }}>
+                                  ({q.quoteNumber})
+                                </span>
+                                {isSelected && !mfgQuote.isRejected && (
+                                  <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC' }}>
+                                    ✓ Selected Supplier
+                                  </span>
+                                )}
+                                {mfgQuote.isRejected && (
+                                  <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5' }}>
+                                    Rejected
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 4 }}>
+                                Status: <strong>{q.status}</strong> {q.deliveryTerms ? `• ${q.deliveryTerms}` : ''} {q.validUntil ? `• Valid until: ${q.validUntil}` : ''}
+                              </div>
+                            </div>
+
+                            {/* Action Buttons: Edit Price & Reject */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <h5 style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                                {mfg.companyName}
-                              </h5>
-                              {isSelected && !mfgQuote.isRejected && (
-                                <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC' }}>
-                                  ✓ Selected Supplier
+                              {isAdminPriceEditEnabled && !mfgQuote.isRejected && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setEditingQuoteId(quoteId);
+                                      setTempAdjustedPrice(mfgQuote.effectivePrice.toString());
+                                    }}
+                                    style={{
+                                      padding: '5px 12px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
+                                      background: '#F5F3FF', border: '1px solid #DDD6FE', color: '#6D28D9',
+                                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
+                                    }}
+                                  >
+                                    <Edit size={12} /> Edit Price
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      setRejectingQuoteId(quoteId);
+                                      setRejectionReasonInput('');
+                                      setRejectionError(null);
+                                    }}
+                                    style={{
+                                      padding: '5px 12px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
+                                      background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#991B1B',
+                                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
+                                    }}
+                                  >
+                                    <Slash size={12} /> Reject Quote
+                                  </button>
+                                </>
+                              )}
+
+                              {!isAdminPriceEditEnabled && (
+                                <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600 }}>
+                                  Read-Only Inspection
                                 </span>
                               )}
-                              {mfgQuote.isRejected && (
-                                <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5' }}>
-                                  Rejected
-                                </span>
-                              )}
-                            </div>
-
-                            <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 4 }}>
-                              License: <strong>{mfg.mfgLicenseNo}</strong> • WHO-GMP Verified ✓ • 14-day SLA Dispatch
                             </div>
                           </div>
 
-                          {/* Action Buttons: Edit Price & Reject */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {isAdminPriceEditEnabled && !mfgQuote.isRejected && (
-                              <>
-                                <button
-                                  onClick={() => {
-                                    setEditingMfgId(mfg.id);
-                                    setTempAdjustedPrice(mfgQuote.effectivePrice.toString());
-                                  }}
-                                  style={{
-                                    padding: '5px 12px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
-                                    background: '#F5F3FF', border: '1px solid #DDD6FE', color: '#6D28D9',
-                                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
-                                  }}
-                                >
-                                  <Edit size={12} /> Edit Price
-                                </button>
-
-                                <button
-                                  onClick={() => {
-                                    setRejectingMfgId(mfg.id);
-                                    setRejectionReasonInput('');
-                                    setRejectionError(null);
-                                  }}
-                                  style={{
-                                    padding: '5px 12px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
-                                    background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#991B1B',
-                                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
-                                  }}
-                                >
-                                  <Slash size={12} /> Reject Quote
-                                </button>
-                              </>
-                            )}
-
-                            {!isAdminPriceEditEnabled && (
-                              <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600 }}>
-                                Read-Only Inspection
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Pricing & Margin Details Display */}
-                        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #F1F5F9', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, fontSize: 12 }}>
-                          <div style={{ background: '#F8FAFC', padding: '8px 12px', borderRadius: 6, border: '1px solid #E2E8F0' }}>
-                            <span style={{ fontSize: 10.5, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Original Seller Price</span>
-                            <div style={{ fontWeight: 800, color: '#0F172A', marginTop: 2, fontFamily: 'monospace' }}>
-                              ₹{mfgQuote.originalPrice.toFixed(2)} / strip
-                            </div>
-                          </div>
-
-                          <div style={{ background: mfgQuote.adjustedPrice !== undefined ? '#F5F3FF' : '#F8FAFC', padding: '8px 12px', borderRadius: 6, border: mfgQuote.adjustedPrice !== undefined ? '1px solid #DDD6FE' : '1px solid #E2E8F0' }}>
-                            <span style={{ fontSize: 10.5, color: mfgQuote.adjustedPrice !== undefined ? '#6D28D9' : '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Admin Adjusted Price</span>
-                            <div style={{ fontWeight: 800, color: mfgQuote.adjustedPrice !== undefined ? '#6D28D9' : '#0F172A', marginTop: 2, fontFamily: 'monospace' }}>
-                              {mfgQuote.adjustedPrice !== undefined ? `₹${mfgQuote.adjustedPrice.toFixed(2)} / strip` : 'Not Modified (Seller Price)'}
-                            </div>
-                          </div>
-
-                          <div style={{ background: '#F8FAFC', padding: '8px 12px', borderRadius: 6, border: '1px solid #E2E8F0' }}>
-                            <span style={{ fontSize: 10.5, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Margin / Markup</span>
-                            <div style={{ fontWeight: 800, color: mfgQuote.marginAmount > 0 ? '#15803D' : mfgQuote.marginAmount < 0 ? '#B91C1C' : '#64748B', marginTop: 2, fontFamily: 'monospace' }}>
-                              {mfgQuote.marginAmount !== 0 ? `${mfgQuote.marginAmount > 0 ? '+' : ''}₹${mfgQuote.marginAmount.toFixed(2)} (${mfgQuote.marginPercent > 0 ? '+' : ''}${mfgQuote.marginPercent.toFixed(1)}%)` : '0.00%'}
-                            </div>
-                          </div>
-
-                          <div style={{ background: '#F0FDF4', padding: '8px 12px', borderRadius: 6, border: '1px solid #86EFAC' }}>
-                            <span style={{ fontSize: 10.5, color: '#166534', fontWeight: 700, textTransform: 'uppercase' }}>Final Customer Price</span>
-                            <div style={{ fontWeight: 800, color: '#15803D', marginTop: 2, fontFamily: 'monospace' }}>
-                              ₹{mfgQuote.effectivePrice.toFixed(2)} / strip
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Rejection Details Banner if Rejected */}
-                        {mfgQuote.isRejected && (
-                          <div style={{ marginTop: 12, background: '#FEE2E2', border: '1px solid #FCA5A5', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#991B1B' }}>
-                            <strong>Rejection Reason:</strong> {mfgQuote.rejectionReason}
-                            <div style={{ fontSize: 10.5, color: '#B91C1C', marginTop: 2 }}>
-                              Notice logged. Seller notification is queued for delivery.
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Inline Edit Price Drawer */}
-                        {editingMfgId === mfg.id && (
-                          <div style={{ marginTop: 14, background: '#F5F3FF', border: '1px solid #C4B5FD', borderRadius: 8, padding: 14 }}>
-                            <div style={{ fontSize: 12, fontWeight: 800, color: '#6D28D9', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <Edit size={14} /> Modify Quotation Price for {mfg.companyName}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                              <div>
-                                <label style={{ fontSize: 11, color: '#64748B', display: 'block', fontWeight: 700 }}>Original Seller Price</label>
-                                <input
-                                  type="text"
-                                  disabled
-                                  value={`₹${mfgQuote.originalPrice.toFixed(2)} / strip`}
-                                  style={{ height: 34, padding: '0 10px', background: '#E2E8F0', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12, color: '#475569', width: 180, fontWeight: 700 }}
-                                />
+                          {/* Pricing & Margin Details Display */}
+                          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #F1F5F9', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, fontSize: 12 }}>
+                            <div style={{ background: '#F8FAFC', padding: '8px 12px', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+                              <span style={{ fontSize: 10.5, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Original Total Amount</span>
+                              <div style={{ fontWeight: 800, color: '#0F172A', marginTop: 2, fontFamily: 'monospace' }}>
+                                ₹{mfgQuote.originalPrice.toLocaleString('en-IN')}
                               </div>
+                            </div>
 
-                              <div>
-                                <label style={{ fontSize: 11, color: '#6D28D9', display: 'block', fontWeight: 700 }}>Admin Adjusted Price (₹/strip)</label>
-                                <input
-                                  type="number"
-                                  step="0.05"
-                                  value={tempAdjustedPrice}
-                                  onChange={e => setTempAdjustedPrice(e.target.value)}
-                                  style={{ height: 34, padding: '0 10px', background: '#FFFFFF', border: '1px solid #8B5CF6', borderRadius: 6, fontSize: 12, color: '#0F172A', width: 180, fontWeight: 800, outline: 'none' }}
-                                />
+                            <div style={{ background: mfgQuote.adjustedPrice !== undefined ? '#F5F3FF' : '#F8FAFC', padding: '8px 12px', borderRadius: 6, border: mfgQuote.adjustedPrice !== undefined ? '1px solid #DDD6FE' : '1px solid #E2E8F0' }}>
+                              <span style={{ fontSize: 10.5, color: mfgQuote.adjustedPrice !== undefined ? '#6D28D9' : '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Admin Adjusted Price</span>
+                              <div style={{ fontWeight: 800, color: mfgQuote.adjustedPrice !== undefined ? '#6D28D9' : '#0F172A', marginTop: 2, fontFamily: 'monospace' }}>
+                                {mfgQuote.adjustedPrice !== undefined ? `₹${mfgQuote.adjustedPrice.toLocaleString('en-IN')}` : 'Not Modified (Original)'}
                               </div>
+                            </div>
 
-                              <div style={{ display: 'flex', gap: 6, marginTop: 16 }}>
-                                <button
-                                  onClick={() => handleSaveAdjustedPrice(mfg.id, defaultOrigPrice)}
-                                  style={{ padding: '7px 16px', background: '#7C3AED', color: '#FFFFFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
-                                >
-                                  Save Adjusted Price
-                                </button>
-                                <button
-                                  onClick={() => setEditingMfgId(null)}
-                                  style={{ padding: '7px 14px', background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-                                >
-                                  Cancel
-                                </button>
+                            <div style={{ background: '#F8FAFC', padding: '8px 12px', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+                              <span style={{ fontSize: 10.5, color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Margin / Markup</span>
+                              <div style={{ fontWeight: 800, color: mfgQuote.marginAmount > 0 ? '#15803D' : mfgQuote.marginAmount < 0 ? '#B91C1C' : '#64748B', marginTop: 2, fontFamily: 'monospace' }}>
+                                {mfgQuote.marginAmount !== 0 ? `${mfgQuote.marginAmount > 0 ? '+' : ''}₹${mfgQuote.marginAmount.toLocaleString('en-IN')} (${mfgQuote.marginPercent > 0 ? '+' : ''}${mfgQuote.marginPercent.toFixed(1)}%)` : '0.00%'}
+                              </div>
+                            </div>
+
+                            <div style={{ background: '#F0FDF4', padding: '8px 12px', borderRadius: 6, border: '1px solid #86EFAC' }}>
+                              <span style={{ fontSize: 10.5, color: '#166534', fontWeight: 700, textTransform: 'uppercase' }}>Final Platform Price</span>
+                              <div style={{ fontWeight: 800, color: '#15803D', marginTop: 2, fontFamily: 'monospace' }}>
+                                ₹{mfgQuote.effectivePrice.toLocaleString('en-IN')}
                               </div>
                             </div>
                           </div>
-                        )}
 
-                        {/* Inline Rejection Reason Modal */}
-                        {rejectingMfgId === mfg.id && (
-                          <div style={{ marginTop: 14, background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: 14 }}>
-                            <div style={{ fontSize: 12, fontWeight: 800, color: '#991B1B', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <Slash size={14} /> Reject Quotation from {mfg.companyName}
+                          {/* Rejection Details Banner if Rejected */}
+                          {mfgQuote.isRejected && (
+                            <div style={{ marginTop: 12, background: '#FEE2E2', border: '1px solid #FCA5A5', padding: '10px 14px', borderRadius: 8, fontSize: 12, color: '#991B1B' }}>
+                              <strong>Rejection Reason:</strong> {mfgQuote.rejectionReason}
+                              <div style={{ fontSize: 10.5, color: '#B91C1C', marginTop: 2 }}>
+                                Notice logged. Seller notification is queued for delivery.
+                              </div>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              <label style={{ fontSize: 11, color: '#991B1B', fontWeight: 700 }}>
-                                Mandatory Rejection Reason (Required)
+                          )}
+
+                          {/* Inline Edit Price Drawer */}
+                          {editingQuoteId === quoteId && (
+                            <div style={{ marginTop: 14, background: '#F5F3FF', border: '1px solid #C4B5FD', borderRadius: 8, padding: 14 }}>
+                              <div style={{ fontSize: 12, fontWeight: 800, color: '#6D28D9', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Edit size={14} /> Modify Quotation Total for {mfgName}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <div>
+                                  <label style={{ fontSize: 11, color: '#64748B', display: 'block', fontWeight: 700 }}>Original Total Price</label>
+                                  <input
+                                    type="text"
+                                    disabled
+                                    value={`₹${mfgQuote.originalPrice.toLocaleString('en-IN')}`}
+                                    style={{ height: 34, padding: '0 10px', background: '#E2E8F0', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12, color: '#475569', width: 180, fontWeight: 700 }}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label style={{ fontSize: 11, color: '#6D28D9', display: 'block', fontWeight: 700 }}>Admin Adjusted Price (₹)</label>
+                                  <input
+                                    type="number"
+                                    step="100"
+                                    value={tempAdjustedPrice}
+                                    onChange={e => setTempAdjustedPrice(e.target.value)}
+                                    style={{ height: 34, padding: '0 10px', background: '#FFFFFF', border: '1px solid #8B5CF6', borderRadius: 6, fontSize: 12, color: '#0F172A', width: 180, fontWeight: 800, outline: 'none' }}
+                                  />
+                                </div>
+
+                                <div style={{ display: 'flex', gap: 6, marginTop: 16 }}>
+                                  <button
+                                    onClick={() => handleSaveAdjustedPrice(quoteId, mfgName, defaultOrigPrice)}
+                                    style={{ height: 34, padding: '0 14px', background: '#7C3AED', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                                  >
+                                    Apply Price
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingQuoteId(null)}
+                                    style={{ height: 34, padding: '0 12px', background: '#FFF', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Inline Rejection Drawer */}
+                          {rejectingQuoteId === quoteId && (
+                            <div style={{ marginTop: 14, background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: 14 }}>
+                              <div style={{ fontSize: 12, fontWeight: 800, color: '#991B1B', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Slash size={14} /> Reject Quotation from {mfgName}
+                              </div>
+
+                              <label style={{ fontSize: 11, color: '#991B1B', display: 'block', fontWeight: 700, marginBottom: 4 }}>
+                                Reason for Rejection *
                               </label>
-                              <input
-                                type="text"
-                                placeholder="e.g. Price not commercially viable / Lead time too long"
+                              <textarea
+                                rows={2}
+                                placeholder="Enter mandatory rejection reason (e.g. Lead time exceeds SLA requirement, pricing non-competitive)..."
                                 value={rejectionReasonInput}
                                 onChange={e => {
                                   setRejectionReasonInput(e.target.value);
-                                  if (e.target.value.trim()) setRejectionError(null);
+                                  setRejectionError(null);
                                 }}
-                                style={{ height: 36, padding: '0 12px', background: '#FFFFFF', border: rejectionError ? '1px solid #DC2626' : '1px solid #FCA5A5', borderRadius: 6, fontSize: 12, color: '#0F172A', outline: 'none' }}
+                                style={{ width: '100%', padding: '8px 10px', fontSize: 12, border: '1px solid #FCA5A5', borderRadius: 6, outline: 'none', resize: 'vertical' }}
                               />
                               {rejectionError && (
-                                <div style={{ fontSize: 11, color: '#DC2626', fontWeight: 700 }}>
+                                <div style={{ color: '#DC2626', fontSize: 11, fontWeight: 700, marginTop: 4 }}>
                                   {rejectionError}
                                 </div>
                               )}
 
-                              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                                 <button
-                                  onClick={() => handleConfirmRejection(mfg.id, defaultOrigPrice)}
-                                  style={{ padding: '7px 16px', background: '#DC2626', color: '#FFFFFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
+                                  onClick={() => handleConfirmRejection(quoteId, mfgName, defaultOrigPrice)}
+                                  style={{ padding: '6px 14px', background: '#DC2626', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
                                 >
                                   Confirm Rejection
                                 </button>
                                 <button
-                                  onClick={() => setRejectingMfgId(null)}
-                                  style={{ padding: '7px 14px', background: '#FFFFFF', color: '#475569', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                                  onClick={() => setRejectingQuoteId(null)}
+                                  style={{ padding: '6px 12px', background: '#FFF', color: '#64748B', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                                 >
                                   Cancel
                                 </button>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
-                      </div>
-                    );
-                  })}
-                </div>
+                          {/* Line Item Pricing Breakdown if available */}
+                          {q.lines && q.lines.length > 0 && (
+                            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #E2E8F0' }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 6 }}>
+                                Quoted Line Items:
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                {q.lines.map((ql: any, idx: number) => (
+                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: '#334155', background: '#F8FAFC', padding: '4px 8px', borderRadius: 4 }}>
+                                    <span>{ql.productName} ({ql.quotedQuantity?.toLocaleString()} units)</span>
+                                    <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>₹{Number(ql.unitPrice).toFixed(2)}/unit · Total: ₹{Number(ql.calculatedTotal || ql.unitPrice * ql.quotedQuantity).toLocaleString('en-IN')}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div style={{ padding: '16px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 11.5, color: '#64748B', fontWeight: 500 }}>
-                Audit trail: Original seller prices preserved. All Admin price overrides are logged.
-              </div>
-              <button onClick={() => setSelectedRfqForView(null)} style={{ padding: '8px 20px', background: '#334155', color: '#FFFFFF', border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-                Close Reader
+            <div style={{ padding: '16px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setSelectedRfqForView(null)}
+                style={{ padding: '8px 18px', background: '#0F172A', color: '#FFFFFF', border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Close Desk
               </button>
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   );
 };
-

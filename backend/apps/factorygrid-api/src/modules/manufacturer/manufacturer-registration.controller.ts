@@ -70,6 +70,30 @@ export class ManufacturerRegistrationController {
   }
 
   @Public()
+  @Get('categories/:categoryId/subcategories')
+  @ApiOperation({ summary: 'List sub-categories for a category from PostgreSQL' })
+  @ApiParam({ name: 'categoryId', description: 'Category ID or category name' })
+  getSubCategories(@Param('categoryId') categoryId: string) {
+    return this.service.getSubCategoriesForCategory(categoryId);
+  }
+
+  @Public()
+  @Get('subcategories/:subCategoryId/capabilities')
+  @ApiOperation({ summary: 'List specific capabilities for a sub-category from PostgreSQL' })
+  @ApiParam({ name: 'subCategoryId', description: 'Sub-Category ID or sub-category name' })
+  getCapabilities(@Param('subCategoryId') subCategoryId: string) {
+    return this.service.getCapabilitiesForSubCategory(subCategoryId);
+  }
+
+  @Public()
+  @Get('capabilities/search')
+  @ApiOperation({ summary: 'Search manufacturing capabilities across hierarchy from PostgreSQL' })
+  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
+  searchCapabilities(@Query('q') q: string) {
+    return this.service.searchCapabilities(q);
+  }
+
+  @Public()
   @Post('registration/step-1')
   @ApiOperation({ summary: 'Step 1: Save Company & Plant Information' })
   @ApiQuery({ name: 'registrationCode', required: false, description: 'Optional code when updating an existing draft' })

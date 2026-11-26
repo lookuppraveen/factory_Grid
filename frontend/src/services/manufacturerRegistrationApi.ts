@@ -224,6 +224,27 @@ export const manufacturerRegistrationApi = {
     return request<CategoryHierarchyResponse>(`${BASE}/categories`, { method: 'GET' });
   },
 
+  listSubCategories(categoryId: string): Promise<{ categoryId: string; category: string; subCategories: Array<{ id: string; subCategory: string; category: string; capabilitiesCount: number }> }> {
+    return request<{ categoryId: string; category: string; subCategories: Array<{ id: string; subCategory: string; category: string; capabilitiesCount: number }> }>(
+      `${BASE}/categories/${encodeURIComponent(categoryId)}/subcategories`,
+      { method: 'GET' }
+    );
+  },
+
+  listCapabilities(subCategoryId: string): Promise<{ subCategoryId: string; category: string; subCategory: string; capabilities: Array<{ id: string; categoryId: string; categoryCode: string; name: string; subSubCategory: string; description: string | null; fullName: string }> }> {
+    return request<{ subCategoryId: string; category: string; subCategory: string; capabilities: Array<{ id: string; categoryId: string; categoryCode: string; name: string; subSubCategory: string; description: string | null; fullName: string }> }>(
+      `${BASE}/subcategories/${encodeURIComponent(subCategoryId)}/capabilities`,
+      { method: 'GET' }
+    );
+  },
+
+  searchCapabilities(query: string): Promise<CategoryHierarchyItem[]> {
+    return request<CategoryHierarchyItem[]>(
+      `${BASE}/capabilities/search?q=${encodeURIComponent(query)}`,
+      { method: 'GET' }
+    );
+  },
+
   saveStep1(payload: Record<string, unknown>, registrationCode?: string): Promise<ManufacturerStepResponse> {
     const qs = registrationCode ? `?registrationCode=${encodeURIComponent(registrationCode)}` : '';
     return request<ManufacturerStepResponse>(`${BASE}/registration/step-1${qs}`, json(payload));
@@ -300,12 +321,15 @@ export const manufacturerRegistrationApi = {
 
   saveStep4(
     items: Array<{
+      subCategory?: string;
+      category?: string;
       productId?: string;
       categoryId?: string;
       moq?: number;
       batchSize?: number;
       leadTimeDays?: number;
       deliveryScheduleDays?: number;
+      plantCapacity?: number;
     }>,
     registrationCode: string,
   ): Promise<ManufacturerStepResponse> {

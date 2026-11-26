@@ -8,6 +8,13 @@ import {
 import { ProductTax } from '../../types';
 import { PaginationControl } from '../common/PaginationControl';
 import { usePagination } from '../../hooks/usePagination';
+import {
+  MasterBreadcrumbs,
+  MasterPageHeader,
+  MasterStatsStrip,
+  MasterStatusBadge,
+  TableActionGroup
+} from '../common/MasterComponents';
 
 export const ProductTaxModule: React.FC = () => {
   const {
@@ -18,7 +25,8 @@ export const ProductTaxModule: React.FC = () => {
     removeProductTax,
     toggleProductTaxStatus,
     refreshProductTaxes,
-    currentRole
+    currentRole,
+    setActiveTab
   } = useApp();
 
   const isAdmin = currentRole === 'ADMIN' || (currentRole as any) === 'ROLE_ADMIN';
@@ -294,115 +302,36 @@ export const ProductTaxModule: React.FC = () => {
         </div>
       )}
 
-      {/* ── Page Header ───────────────────────────────────────────── */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        flexWrap: 'wrap',
-        gap: 16
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 44,
-            height: 44,
-            borderRadius: 10,
-            background: '#F0FDFA',
-            border: '1px solid #CCFBF1',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#0F766E'
-          }}>
-            <Receipt size={22} />
-          </div>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
-              Product Tax Management
-            </h1>
-            <p style={{ margin: '3px 0 0 0', fontSize: 13, color: '#64748B', fontWeight: 500 }}>
-              Central HSN codes, GST schedules, and statutory tax rates mapped to catalog products.
-            </p>
-          </div>
-        </div>
+      {/* ── Breadcrumbs ── */}
+      <MasterBreadcrumbs
+        pageTitle="Product Tax Management"
+        onBack={() => setActiveTab?.('settings')}
+      />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {canEdit && (
-            <button
-              onClick={handleOpenAddModal}
-              style={{
-                padding: '9px 16px',
-                borderRadius: 8,
-                background: '#0F766E',
-                color: '#FFFFFF',
-                border: 'none',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
-              }}
-            >
-              <Plus size={15} /> Add Tax Mapping
-            </button>
-          )}
-        </div>
-      </div>
+      {/* ── Page Header ── */}
+      <MasterPageHeader
+        icon={Receipt}
+        domainLabel="STATUTORY TAX & GST SCHEDULE"
+        title="Product Tax Management"
+        description="Central HSN codes, GST schedules, and statutory tax rates mapped to catalog products."
+        primaryAction={canEdit ? {
+          label: "Add Tax Mapping",
+          icon: Plus,
+          onClick: handleOpenAddModal
+        } : undefined}
+      />
 
-      {/* ── Compact Statistics Row ─────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
-            <Receipt size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Tax Mappings</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#0F172A' }}>{stats.total}</div>
-          </div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F0FDF4', border: '1px solid #DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#15803D' }}>
-            <CheckCircle2 size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Active Mappings</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#15803D' }}>{stats.active}</div>
-          </div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#FEF2F2', border: '1px solid #FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B91C1C' }}>
-            <AlertTriangle size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Inactive Mappings</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#B91C1C' }}>{stats.inactive}</div>
-          </div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F0FDFA', border: '1px solid #CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F766E' }}>
-            <Package size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Products Covered</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#0F766E' }}>{stats.uniqueProducts}</div>
-          </div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1D4ED8' }}>
-            <Percent size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Average GST</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#1D4ED8' }}>{stats.avgRate}%</div>
-          </div>
-        </div>
-      </div>
+      {/* ── Compact Statistics Strip ── */}
+      <MasterStatsStrip
+        stats={[
+          { label: 'TAX MAPPINGS', value: stats.total },
+          { label: 'ACTIVE MAPPINGS', value: stats.active, color: '#15803D' },
+          { label: 'INACTIVE MAPPINGS', value: stats.inactive, color: '#B91C1C' },
+          { label: 'PRODUCTS COVERED', value: stats.uniqueProducts, color: '#0F766E' },
+          { label: 'AVERAGE GST', value: `${stats.avgRate}%`, color: '#1D4ED8' }
+        ]}
+        modelTag="Canonical Data Model: PRODUCT_TAX"
+      />
 
       {/* ── Search & Filter Strip ──────────────────────────────────── */}
       <div style={{
@@ -532,16 +461,13 @@ export const ProductTaxModule: React.FC = () => {
                         <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 13 }}>
                           {prod?.name || prod?.product_name || tax.product_id}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace' }}>
-                            {prod?.product_code || prod?.code || (prod as any)?.productCode || tax.product_id}
-                          </span>
-                          {prod?.category && (
+                        {prod?.category && (
+                          <div style={{ marginTop: 2 }}>
                             <span style={{ fontSize: 10, color: '#64748B', background: '#F1F5F9', padding: '1px 5px', borderRadius: 3 }}>
                               {prod.category}
                             </span>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </td>
 
                       {/* HSN Code */}
@@ -572,177 +498,18 @@ export const ProductTaxModule: React.FC = () => {
 
                       {/* Status */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                        <span style={{
-                          fontSize: 10.5, fontWeight: 800, padding: '3px 7px', borderRadius: 4,
-                          background: isActive ? '#DCFCE7' : '#FEE2E2',
-                          color: isActive ? '#15803D' : '#B91C1C',
-                          border: isActive ? '1px solid #86EFAC' : '1px solid #FCA5A5'
-                        }}>
-                          {status}
-                        </span>
+                        <MasterStatusBadge status={isActive} />
                       </td>
 
                       {/* Actions */}
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        <div style={{ position: 'relative', display: 'inline-block' }} data-actions-menu={`tax_${taxId}`}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenActionMenuId(openActionMenuId === `tax_${taxId}` ? null : `tax_${taxId}`);
-                            }}
-                            style={{
-                              padding: '4px 8px',
-                              borderRadius: 6,
-                              background: openActionMenuId === `tax_${taxId}` ? '#F1F5F9' : '#FFFFFF',
-                              border: '1px solid #CBD5E1',
-                              color: '#334155',
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 3
-                            }}
-                            title="Actions"
-                          >
-                            <span>Actions</span>
-                            <MoreVertical size={13} style={{ color: '#64748B' }} />
-                          </button>
-
-                          {openActionMenuId === `tax_${taxId}` && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                right: 0,
-                                top: 'calc(100% + 4px)',
-                                zIndex: 1000,
-                                minWidth: 160,
-                                background: '#FFFFFF',
-                                border: '1px solid #E2E8F0',
-                                borderRadius: 8,
-                                boxShadow: '0 10px 25px -5px rgba(15,23,42,0.15)',
-                                padding: '4px 0',
-                                textAlign: 'left'
-                              }}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenActionMenuId(null);
-                                  setSelectedTaxForDetail(tax);
-                                }}
-                                style={{
-                                  width: '100%',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 8,
-                                  padding: '7px 14px',
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  color: '#334155',
-                                  background: 'transparent',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  textAlign: 'left'
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                              >
-                                <Eye size={13} style={{ color: '#0F766E' }} />
-                                <span>View Details</span>
-                              </button>
-
-                              {canEdit && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      handleOpenEditModal(tax);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 8,
-                                      padding: '7px 14px',
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      color: '#334155',
-                                      background: 'transparent',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      textAlign: 'left'
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                  >
-                                    <Edit3 size={13} style={{ color: '#0F766E' }} />
-                                    <span>Edit</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      handleToggleStatus(tax);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 8,
-                                      padding: '7px 14px',
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      color: '#334155',
-                                      background: 'transparent',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      textAlign: 'left'
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                  >
-                                    <Power size={13} style={{ color: isActive ? '#D97706' : '#16A34A' }} />
-                                    <span>{isActive ? 'Deactivate' : 'Activate'}</span>
-                                  </button>
-
-                                  <div style={{ height: 1, background: '#F1F5F9', margin: '4px 0' }} />
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      setDeleteTarget(tax);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 8,
-                                      padding: '7px 14px',
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      color: '#DC2626',
-                                      background: 'transparent',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      textAlign: 'left'
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                  >
-                                    <Trash2 size={13} style={{ color: '#DC2626' }} />
-                                    <span>Delete</span>
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                        <TableActionGroup
+                          onView={() => setSelectedTaxForDetail(tax)}
+                          onEdit={canEdit ? () => handleOpenEditModal(tax) : undefined}
+                          status={isActive}
+                          onToggleStatus={canEdit ? () => handleToggleStatus(tax) : undefined}
+                          onDelete={canEdit ? () => setDeleteTarget(tax) : undefined}
+                        />
                       </td>
                     </tr>
                   );
@@ -818,11 +585,10 @@ export const ProductTaxModule: React.FC = () => {
                   <option value="">Select a Product...</option>
                   {(products || []).map(p => {
                     const pid = p.id || p.product_id;
-                    const pcode = p.product_code || p.code || (p as any).productCode;
                     const pname = p.name || p.product_name;
                     return (
                       <option key={pid} value={pid}>
-                        {pcode} — {pname}
+                        {pname}
                       </option>
                     );
                   })}
@@ -975,9 +741,6 @@ export const ProductTaxModule: React.FC = () => {
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Target Product</div>
                       <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', marginTop: 2 }}>
                         {prod?.name || prod?.product_name || selectedTaxForDetail.product_id}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#0F766E', fontFamily: 'monospace', marginTop: 2, fontWeight: 700 }}>
-                        {prod?.product_code || prod?.code || selectedTaxForDetail.product_id}
                       </div>
                     </div>
 

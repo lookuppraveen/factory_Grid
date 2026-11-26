@@ -24,6 +24,7 @@ export const CategoryMasterModule: React.FC = () => {
     deleteUnifiedCategory,
     toggleUnifiedCategoryStatus,
     attributeMasters,
+    refreshAttributeMasters,
     productTypeAttributes,
     getProductTypeAttributes,
     getProductTypeConfiguredAttributes,
@@ -157,6 +158,7 @@ export const CategoryMasterModule: React.FC = () => {
   const [selectedAttributeIds, setSelectedAttributeIds] = useState<string[]>([]);
   const [selectedAttrDropdownValue, setSelectedAttrDropdownValue] = useState<string>('');
   const [isSavingPt, setIsSavingPt] = useState(false);
+  const [isAddingAttribute, setIsAddingAttribute] = useState(false);
 
   // Available active attributes for assignment selector (only active, and not already selected)
   const availableActiveAttributes = useMemo(() => {
@@ -647,6 +649,7 @@ export const CategoryMasterModule: React.FC = () => {
   // ── ACTION HANDLERS: PRODUCT TYPE ──
 
   const handleOpenAddPtModal = () => {
+    refreshAttributeMasters?.();
     setEditingPt(null);
     const nextOrder = (productTypes && productTypes.length > 0)
       ? Math.max(...productTypes.map(t => Number(t.display_order) || 0)) + 1
@@ -660,13 +663,16 @@ export const CategoryMasterModule: React.FC = () => {
     });
     setSelectedAttributeIds([]);
     setSelectedAttrDropdownValue('');
+    setIsAddingAttribute(false);
     setPtFormError(null);
     setIsPtModalOpen(true);
   };
 
   const handleOpenEditPtModal = async (pt: ProductType, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    refreshAttributeMasters?.();
     setEditingPt(pt);
+    setIsAddingAttribute(false);
     setPtFormData({
       name: pt.product_type_name || pt.name || '',
       code: pt.product_type_code || pt.code || '',
@@ -846,10 +852,10 @@ export const CategoryMasterModule: React.FC = () => {
       {/* ── Breadcrumbs Bar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#64748B', fontWeight: 600, padding: '4px 0' }}>
         <button
-          onClick={() => setActiveTab('products')}
+          onClick={() => setActiveTab('settings')}
           style={{ background: 'none', border: 'none', color: '#64748B', padding: 0, cursor: 'pointer', fontWeight: 600 }}
         >
-          Product Catalog
+          Master Data (Settings)
         </button>
         <span style={{ color: '#CBD5E1' }}>/</span>
         <button
@@ -1124,9 +1130,7 @@ export const CategoryMasterModule: React.FC = () => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                        <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>PRODUCT TYPE ID</th>
                         <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 180 }}>PRODUCT TYPE NAME</th>
-                        <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>PRODUCT TYPE CODE</th>
                         <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>DESCRIPTION</th>
                         <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 150, textAlign: 'center' }}>NUMBER OF CATEGORIES</th>
                         <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 150, textAlign: 'center' }}>NUMBER OF ATTRIBUTES</th>
@@ -1137,7 +1141,7 @@ export const CategoryMasterModule: React.FC = () => {
                     <tbody>
                       {filteredProductTypes.length === 0 ? (
                         <tr>
-                          <td colSpan={8} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                          <td colSpan={6} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
                             <Layers size={36} style={{ color: '#94A3B8', margin: '0 auto 10px', display: 'block' }} />
                             <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No Product Types found.</div>
                             <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 16 }}>Create a Product Type with integrated attributes to classify products.</div>
@@ -1166,21 +1170,11 @@ export const CategoryMasterModule: React.FC = () => {
                               onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                               onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
                             >
-                              <td style={{ padding: '14px 14px' }}>
-                                <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', background: '#F0FDFA', padding: '3px 8px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
-                                  {ptId}
-                                </span>
-                              </td>
                               <td style={{ padding: '14px 16px' }}>
                                 <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <Layers size={15} style={{ color: '#0F766E', flexShrink: 0 }} />
                                   <span>{ptName}</span>
                                 </div>
-                              </td>
-                              <td style={{ padding: '14px 14px' }}>
-                                <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontFamily: 'monospace' }}>
-                                  {ptCode}
-                                </span>
                               </td>
                               <td style={{ padding: '14px 16px', color: '#475569', fontSize: 12.5, maxWidth: 220 }}>
                                 <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={pt.description}>
@@ -1516,12 +1510,10 @@ export const CategoryMasterModule: React.FC = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95 }}>CATEGORY ID</th>
                       <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 140 }}>PRODUCT TYPE</th>
                       <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>CATEGORY</th>
                       <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>SUB-CATEGORY</th>
                       <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 180 }}>SUB-SUB-CATEGORY</th>
-                      <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 125 }}>CATEGORY CODE</th>
                       <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>DESCRIPTION</th>
                       <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95 }}>STATUS</th>
                       <th style={{ padding: '12px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 80, textAlign: 'center' }}>ORDER</th>
@@ -1533,7 +1525,7 @@ export const CategoryMasterModule: React.FC = () => {
                   <tbody>
                     {filteredCategoryList.length === 0 ? (
                       <tr>
-                        <td colSpan={12} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                        <td colSpan={10} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
                           <FolderTree size={36} style={{ color: '#94A3B8', margin: '0 auto 10px', display: 'block' }} />
                           <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No Category records found.</div>
                           <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 16 }}>
@@ -1564,21 +1556,11 @@ export const CategoryMasterModule: React.FC = () => {
                             onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                             onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
                           >
-                            {/* 1. Category ID (PK) */}
-                            <td style={{ padding: '12px 14px' }}>
-                              <span style={{ fontSize: 11.5, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', background: '#F0FDFA', padding: '2px 7px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
-                                {catId}
-                              </span>
-                            </td>
-
-                            {/* 2. Product Type */}
+                            {/* 1. Product Type */}
                             <td style={{ padding: '12px 14px' }}>
                               <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>
                                 {ptName}
                               </div>
-                              <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#64748B' }}>
-                                {pt?.product_type_code || pt?.code || cat.product_type_id}
-                              </span>
                             </td>
 
                             {/* 3. Category */}
@@ -1609,13 +1591,6 @@ export const CategoryMasterModule: React.FC = () => {
                             {/* 5. Sub-Sub-Category */}
                             <td style={{ padding: '12px 16px', color: cat.sub_sub_category ? '#0F172A' : '#94A3B8', fontWeight: cat.sub_sub_category ? 700 : 400 }}>
                               {cat.sub_sub_category || '—'}
-                            </td>
-
-                            {/* 6. Category Code (UNIQUE) */}
-                            <td style={{ padding: '12px 14px' }}>
-                              <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontFamily: 'monospace' }}>
-                                {catCode}
-                              </span>
                             </td>
 
                             {/* 7. Description */}
@@ -2459,7 +2434,7 @@ export const CategoryMasterModule: React.FC = () => {
                           >
                             {(productTypes || []).map(pt => (
                               <option key={pt.product_type_id || pt.id} value={pt.product_type_id || pt.id}>
-                                {pt.product_type_name || pt.name} ({pt.product_type_code || pt.code})
+                                {pt.product_type_name || pt.name}
                               </option>
                             ))}
                           </select>
@@ -2632,35 +2607,6 @@ export const CategoryMasterModule: React.FC = () => {
                             fontWeight: 600
                           }}
                         />
-                      </div>
-
-                      {/* Category Code (Non-editable, backend assigned) */}
-                      <div>
-                        <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
-                          Category Code
-                        </label>
-                        <input
-                          type="text"
-                          readOnly
-                          disabled
-                          value={editingCat ? (editingCat.category_code || editingCat.code || '') : 'Assigned automatically'}
-                          style={{
-                            width: '100%',
-                            padding: '9px 12px',
-                            border: '1px solid #CBD5E1',
-                            borderRadius: 6,
-                            fontSize: 13,
-                            fontFamily: editingCat ? 'monospace' : 'inherit',
-                            fontWeight: 600,
-                            background: '#F8FAFC',
-                            color: editingCat ? '#0F172A' : '#64748B',
-                            outline: 'none',
-                            cursor: 'not-allowed'
-                          }}
-                        />
-                        <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>
-                          Unique category code is assigned automatically upon saving.
-                        </div>
                       </div>
 
                       {/* Description */}
@@ -2978,12 +2924,6 @@ export const CategoryMasterModule: React.FC = () => {
                         {targetSubSubCategoryPreview || '— (null)'}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed #E2E8F0' }}>
-                      <span style={{ color: '#64748B' }}>category_code:</span>
-                      <span style={{ fontFamily: 'monospace', color: '#1D4ED8', fontWeight: 700 }}>
-                        {editingCat ? (editingCat.category_code || editingCat.code || '—') : 'Assigned automatically'}
-                      </span>
-                    </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
                       <span style={{ color: '#64748B' }}>lifecycle_status:</span>
                       <span style={{ fontWeight: 700, color: catFormData.lifecycle_status === 'ACTIVE' ? '#15803D' : '#B91C1C' }}>
@@ -2996,7 +2936,6 @@ export const CategoryMasterModule: React.FC = () => {
                 {/* System Info when editing */}
                 {editingCat && (
                   <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 14px', fontSize: 11, color: '#64748B', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div><strong>category_id:</strong> {editingCat.category_id}</div>
                     <div><strong>created_at:</strong> {formatMasterDate(editingCat.created_at)}</div>
                     <div><strong>updated_at:</strong> {formatMasterDate(editingCat.updated_at)}</div>
                   </div>
@@ -3152,16 +3091,8 @@ export const CategoryMasterModule: React.FC = () => {
                     </span>
                   </div>
                   <div>
-                    <span style={{ color: '#64748B', fontSize: 11, display: 'block' }}>Category Code:</span>
-                    <span style={{ fontFamily: 'monospace', color: '#1D4ED8', fontWeight: 700 }}>{viewCatCode}</span>
-                  </div>
-                  <div>
                     <span style={{ color: '#64748B', fontSize: 11, display: 'block' }}>Product Type:</span>
                     <strong style={{ color: '#0F172A' }}>{viewPt?.product_type_name || viewPt?.name || viewingCat.product_type_id}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: '#64748B', fontSize: 11, display: 'block' }}>Category ID:</span>
-                    <span style={{ fontFamily: 'monospace', color: '#0F766E', fontWeight: 600 }}>{viewCatId}</span>
                   </div>
                   <div>
                     <span style={{ color: '#64748B', fontSize: 11, display: 'block' }}>Lifecycle Status:</span>
@@ -3478,22 +3409,15 @@ export const CategoryMasterModule: React.FC = () => {
                         required
                         placeholder="e.g. Pharmaceutical, Cosmetics, Medical Devices"
                         value={ptFormData.name}
-                        onChange={e => setPtFormData({ ...ptFormData, name: e.target.value })}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setPtFormData({
+                            ...ptFormData,
+                            name: val,
+                            code: ptFormData.code || val.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase()
+                          });
+                        }}
                         style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', color: '#0F172A' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
-                        Product Type Code * (Unique)
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. PHARMA, NUTRA, COSM, MED_DEV"
-                        value={ptFormData.code}
-                        onChange={e => setPtFormData({ ...ptFormData, code: e.target.value.toUpperCase() })}
-                        style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', fontWeight: 700, outline: 'none', color: '#0F172A' }}
                       />
                     </div>
                   </div>
@@ -3535,101 +3459,205 @@ export const CategoryMasterModule: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Dropdown Selector */}
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                      Select Attributes
-                    </label>
-                    <select
-                      value={selectedAttrDropdownValue}
-                      onChange={e => {
-                        const attrId = e.target.value;
-                        if (!attrId) return;
-                        if (!selectedAttributeIds.includes(attrId)) {
-                          setSelectedAttributeIds(prev => [...prev, attrId]);
-                          const master = (attributeMasters || []).find(m => (m.attribute_id || m.id) === attrId);
-                          showToast(`Assigned attribute "${master?.attribute_name || master?.name || attrId}"`);
-                        }
-                        setSelectedAttrDropdownValue('');
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        borderRadius: 6,
-                        border: '1px solid #CBD5E1',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        background: '#F8FAFC',
-                        color: '#0F172A',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <option value="">-- Select Attributes --</option>
-                      {availableActiveAttributes.map(m => (
-                        <option key={m.attribute_id || m.id} value={m.attribute_id || m.id}>
-                          {m.attribute_name || m.name}
-                        </option>
-                      ))}
-                    </select>
+                  {/* + Add Attribute Control & Selector */}
+                  <div style={{ marginBottom: 12 }}>
+                    {!isAddingAttribute ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingAttribute(true)}
+                        disabled={availableActiveAttributes.length === 0}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '6px 12px',
+                          borderRadius: 6,
+                          background: availableActiveAttributes.length === 0 ? '#F1F5F9' : '#F0FDFA',
+                          border: availableActiveAttributes.length === 0 ? '1px solid #E2E8F0' : '1px solid #99F6E4',
+                          color: availableActiveAttributes.length === 0 ? '#94A3B8' : '#0F766E',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: availableActiveAttributes.length === 0 ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={e => {
+                          if (availableActiveAttributes.length > 0) {
+                            e.currentTarget.style.background = '#CCFBF1';
+                            e.currentTarget.style.borderColor = '#5EEAD4';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (availableActiveAttributes.length > 0) {
+                            e.currentTarget.style.background = '#F0FDFA';
+                            e.currentTarget.style.borderColor = '#99F6E4';
+                          }
+                        }}
+                        title={availableActiveAttributes.length === 0 ? "All active attributes are already assigned" : "Select an attribute"}
+                      >
+                        <Plus size={13} style={{ strokeWidth: 2.5 }} />
+                        <span>+ Select Attribute</span>
+                      </button>
+                    ) : (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        background: '#F0FDFA',
+                        border: '1px solid #CCFBF1',
+                        borderRadius: 8,
+                        padding: '8px 12px',
+                        maxWidth: 480
+                      }}>
+                        <select
+                          autoFocus
+                          value=""
+                          onChange={e => {
+                            const attrId = e.target.value;
+                            if (attrId) {
+                              if (!selectedAttributeIds.includes(attrId)) {
+                                setSelectedAttributeIds(prev => [...prev, attrId]);
+                                const master = (attributeMasters || []).find(m => (m.attribute_id || m.id) === attrId);
+                                showToast(`Assigned attribute "${master?.attribute_name || master?.name || attrId}"`);
+                              }
+                              setIsAddingAttribute(false);
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '6px 10px',
+                            borderRadius: 6,
+                            border: '1.5px solid #0F766E',
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            background: '#FFFFFF',
+                            color: '#0F172A',
+                            outline: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="">-- Select Attribute to Assign --</option>
+                          {availableActiveAttributes.length === 0 ? (
+                            <option value="" disabled>All active attributes are assigned</option>
+                          ) : (
+                            availableActiveAttributes.map(m => (
+                              <option key={m.attribute_id || m.id} value={m.attribute_id || m.id}>
+                                {m.attribute_name || m.name} {m.unit_of_measure ? `(${m.unit_of_measure})` : ''}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingAttribute(false)}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 6,
+                            background: '#FFFFFF',
+                            border: '1px solid #CBD5E1',
+                            color: '#64748B',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Clean List of Assigned Attributes */}
                   {selectedAttributeIds.length === 0 ? (
-                    <div style={{ padding: '28px 20px', textAlign: 'center', background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: 8, color: '#64748B' }}>
-                      <Sliders size={28} style={{ color: '#94A3B8', margin: '0 auto 8px', display: 'block' }} />
-                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>No attributes assigned yet</div>
-                      <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
-                        Select attributes from the dropdown above to assign them to this Product Type.
+                    <div style={{ padding: '24px 20px', textAlign: 'center', background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: 8, color: '#64748B' }}>
+                      <Sliders size={24} style={{ color: '#94A3B8', margin: '0 auto 6px', display: 'block' }} />
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>No attributes assigned yet</div>
+                      <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>
+                        Click <strong>+ Select Attribute</strong> above to select and assign attributes.
                       </div>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{
+                      border: '1px solid #E2E8F0',
+                      borderRadius: 8,
+                      background: '#FFFFFF',
+                      overflow: 'hidden',
+                      width: 'fit-content',
+                      minWidth: 260,
+                      maxWidth: '100%'
+                    }}>
                       {selectedAttributeIds.map((attrId, idx) => {
                         const master = (attributeMasters || []).find(m => (m.attribute_id || m.id) === attrId);
                         const attrName = master?.attribute_name || master?.name || attrId;
+                        const uom = master?.unit_of_measure || master?.unitOfMeasure;
+                        const isLast = idx === selectedAttributeIds.length - 1;
 
                         return (
                           <div
                             key={attrId}
                             style={{
-                              background: '#F8FAFC',
-                              border: '1px solid #E2E8F0',
-                              borderRadius: 6,
-                              padding: '10px 14px',
+                              padding: '7px 12px',
                               display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center'
+                              alignItems: 'center',
+                              justifyContent: 'flex-start',
+                              gap: 10,
+                              borderBottom: isLast ? 'none' : '1px solid #F1F5F9',
+                              background: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
+                              transition: 'background 0.1s ease'
                             }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                            onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: '#E2E8F0', color: '#475569', fontFamily: 'monospace' }}>
-                                #{idx + 1}
+                            <span style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              background: '#F1F5F9',
+                              color: '#64748B',
+                              fontFamily: 'monospace',
+                              flexShrink: 0
+                            }}>
+                              #{idx + 1}
+                            </span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>
+                              {attrName}
+                            </span>
+                            {uom && (
+                              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#0F766E', background: '#F0FDFA', padding: '1px 5px', borderRadius: 4, border: '1px solid #CCFBF1', flexShrink: 0 }}>
+                                {uom}
                               </span>
-                              <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
-                                {attrName}
-                              </span>
-                            </div>
-
+                            )}
                             <button
                               type="button"
                               onClick={() => handleRemoveSelectedAttribute(attrId)}
                               style={{
-                                padding: '4px 10px',
+                                width: 24,
+                                height: 24,
+                                padding: 0,
                                 borderRadius: 5,
-                                background: '#FFFFFF',
-                                color: '#DC2626',
-                                border: '1px solid #FCA5A5',
+                                background: 'transparent',
+                                color: '#94A3B8',
+                                border: 'none',
                                 cursor: 'pointer',
-                                fontSize: 11.5,
-                                fontWeight: 600,
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: 4
+                                justifyContent: 'center',
+                                transition: 'all 0.15s ease',
+                                flexShrink: 0,
+                                marginLeft: 2
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.background = '#FEE2E2';
+                                e.currentTarget.style.color = '#DC2626';
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.color = '#94A3B8';
                               }}
                               title="Remove attribute"
+                              aria-label={`Remove attribute ${attrName}`}
                             >
-                              <Trash2 size={12} />
-                              <span>Remove</span>
+                              <Trash2 size={13.5} />
                             </button>
                           </div>
                         );
@@ -3955,21 +3983,19 @@ export const CategoryMasterModule: React.FC = () => {
                             <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>CATEGORY (L1)</th>
                             <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>SUB-CATEGORY (L2)</th>
                             <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>SUB-SUB-CATEGORY (L3)</th>
-                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 120 }}>CODE</th>
                             <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 90, textAlign: 'center' }}>STATUS</th>
                           </tr>
                         </thead>
                         <tbody>
                           {cats.length === 0 ? (
                             <tr>
-                              <td colSpan={6} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
+                              <td colSpan={5} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
                                 <FolderTree size={28} style={{ color: '#94A3B8', margin: '0 auto 6px', display: 'block' }} />
                                 <div>No categories currently linked to this Product Type.</div>
                               </td>
                             </tr>
                           ) : (
                             cats.map((c: any, idx: number) => {
-                              const cCode = c.category_code || c.code || '—';
                               const cStatus = (c.lifecycle_status || c.status || 'ACTIVE').toUpperCase();
                               const isCatActive = cStatus === 'ACTIVE';
 
@@ -3986,11 +4012,6 @@ export const CategoryMasterModule: React.FC = () => {
                                   </td>
                                   <td style={{ padding: '10px 14px', color: '#475569' }}>
                                     {c.sub_sub_category || <span style={{ color: '#94A3B8' }}>—</span>}
-                                  </td>
-                                  <td style={{ padding: '10px 12px' }}>
-                                    <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: '#F0FDFA', color: '#0F766E', border: '1px solid #CCFBF1', fontFamily: 'monospace' }}>
-                                      {cCode}
-                                    </span>
                                   </td>
                                   <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                     <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: isCatActive ? '#DCFCE7' : '#FEE2E2', color: isCatActive ? '#15803D' : '#B91C1C' }}>

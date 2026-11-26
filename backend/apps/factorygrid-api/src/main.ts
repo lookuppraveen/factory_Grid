@@ -8,7 +8,11 @@ async function main(): Promise<void> {
   try {
     process.loadEnvFile('.env');
   } catch {
-    // no .env file: variables come from the environment
+    try {
+      process.loadEnvFile('backend/apps/factorygrid-api/.env');
+    } catch {
+      // no .env file: variables come from the environment
+    }
   }
 
   const app = await createApp();

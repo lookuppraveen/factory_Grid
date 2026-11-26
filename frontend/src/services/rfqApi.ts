@@ -244,4 +244,11 @@ export const rfqApi = {
       body: JSON.stringify({}),
     });
   },
+
+  /**
+   * Get manufacturer quotes submitted for this RFQ
+   */
+  async getQuotesForRfq(id: string): Promise<any[]> {
+    return request<any[]>(`${BASE}/${encodeURIComponent(id)}/quotes`);
+  },
 };

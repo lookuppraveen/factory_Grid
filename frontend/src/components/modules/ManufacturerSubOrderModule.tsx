@@ -1,13 +1,22 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   ShoppingBag, Package, CheckCircle2, Clock, X, Check, AlertCircle,
   Building2, ArrowRight, Eye, AlertTriangle, Send, FileText, ChevronRight, RefreshCw, XCircle, Search, Download, Receipt, Lock
 } from 'lucide-react';
 import { ProformaInvoiceSection } from '../common/ProformaInvoiceSection';
+import {
+  manufacturerOrderApi,
+  ManufacturerOrderItem,
+  ManufacturerOrderMetrics,
+  PurchaseOrderDetailResponse
+} from '../../services/manufacturerOrderApi';
 
 export const getEffectiveOrderStatusInfo = (so: any) => {
-  if (so.status === 'Rejected') {
+  const st = (so.status || '').toLowerCase();
+  const ps = (so.productionStatus || '').toUpperCase();
+
+  if (st === 'rejected' || ps === 'REJECTED') {
     return {
       statusKey: 'Rejected',
       label: 'Rejected',
@@ -17,7 +26,11 @@ export const getEffectiveOrderStatusInfo = (so: any) => {
     };
   }
 
-  if (so.status === 'Awaiting Acceptance' || so.status === 'AWAITING_ACCEPTANCE' || so.productionStatus === 'AWAITING_ACCEPTANCE') {
+  if (
+    st === 'awaiting acceptance' ||
+    st === 'awaiting_acceptance' ||
+    ps === 'AWAITING_ACCEPTANCE'
+  ) {
     return {
       statusKey: 'Awaiting Acceptance',
       label: 'Awaiting Acceptance',
@@ -27,8 +40,7 @@ export const getEffectiveOrderStatusInfo = (so: any) => {
     };
   }
 
-  const ps = so.productionStatus;
-  if (ps === 'PO_ACCEPTED') {
+  if (ps === 'PO_ACCEPTED' || st === 'accepted') {
     return {
       statusKey: 'Accepted',
       label: 'Accepted',
@@ -37,7 +49,7 @@ export const getEffectiveOrderStatusInfo = (so: any) => {
       badgeBorder: '#BFDBFE'
     };
   }
-  if (ps === 'ARTWORK') {
+  if (ps === 'ARTWORK' || ps === 'ARTWORK_PENDING') {
     return {
       statusKey: 'Artwork Pending',
       label: 'Artwork Pending',
@@ -46,7 +58,7 @@ export const getEffectiveOrderStatusInfo = (so: any) => {
       badgeBorder: '#FCD34D'
     };
   }
-  if (ps === 'SCHEDULED') {
+  if (ps === 'SCHEDULED' || st === 'scheduled') {
     return {
       statusKey: 'Scheduled',
       label: 'Scheduled',
@@ -64,7 +76,12 @@ export const getEffectiveOrderStatusInfo = (so: any) => {
       badgeBorder: '#7DD3FC'
     };
   }
-  if (ps === 'QUALITY_INSPECTION' || ps === 'PACKAGING' || ps === 'QUALITY_HOLD') {
+  if (
+    ps === 'QUALITY_INSPECTION' ||
+    ps === 'PACKAGING' ||
+    ps === 'QUALITY_PACKAGING' ||
+    ps === 'QUALITY_HOLD'
+  ) {
     return {
       statusKey: 'Quality & Packaging',
       label: 'Quality & Packaging',
@@ -82,23 +99,13 @@ export const getEffectiveOrderStatusInfo = (so: any) => {
       badgeBorder: '#A7F3D0'
     };
   }
-  if (ps === 'COMPLETED') {
+  if (ps === 'COMPLETED' || st === 'completed') {
     return {
       statusKey: 'Completed',
       label: 'Completed',
       badgeBg: '#DCFCE7',
       badgeColor: '#15803D',
       badgeBorder: '#86EFAC'
-    };
-  }
-
-  if (so.status === 'Scheduled') {
-    return {
-      statusKey: 'Accepted',
-      label: 'Accepted',
-      badgeBg: '#EFF6FF',
-      badgeColor: '#1D4ED8',
-      badgeBorder: '#BFDBFE'
     };
   }
 
@@ -112,51 +119,39 @@ export const getEffectiveOrderStatusInfo = (so: any) => {
 };
 
 export const ManufacturerSubOrderModule: React.FC = () => {
-  const { manufacturers, setActiveTab, addAuditLog } = useApp();
+  const { addAuditLog, authUser } = useApp();
 
-  const myMfg = manufacturers[0];
-  const myMfgId = myMfg?.id || 'm1';
-  const myMfgName = myMfg?.companyName || myMfg?.name || 'SunBio LifeSciences Ltd.';
-  const myMfgCode = myMfg?.code || 'MFG000401';
-
-  // Sub-Order State for Manufacturers (Keyed by subOrderCode)
-  const { orders } = useApp();
-  const [subOrdersState, setSubOrdersState] = useState<Record<string, {
-    subOrderNumber: string;
-    poNumber: string;
-    masterOrderNumber: string;
-    mfgId: string;
-    mfgName: string;
-    customerName: string;
-    orderDate: string;
-    deliveryDate: string;
-    shippingAddress: string;
-    billingAddress: string;
-    sourceQuoteRef: string;
-    productsCount: number;
-    totalQuantity: number;
-    orderValue: number;
-    leadTimeDays: number;
-    status: 'Awaiting Acceptance' | 'Scheduled' | 'Rejected';
-    rejectionReason?: string;
-    rejectionRemarks?: string;
-    acceptedAt?: string;
-    lines: {
-      productName: string;
-      dosageForm: string;
-      quantity: number;
-      unitPrice: number;
-      totalCost: number;
-      leadTime: string;
-    }[];
-  }>>({});
+  // Real Database Orders & Metrics States
+  const [orders, setOrders] = useState<ManufacturerOrderItem[]>([]);
+  const [metrics, setMetrics] = useState<ManufacturerOrderMetrics>({
+    open: 0,
+    awaiting: 0,
+    accepted: 0,
+    artwork: 0,
+    scheduled: 0,
+    inProd: 0,
+    qcPack: 0,
+    ready: 0,
+    completed: 0,
+    rejected: 0,
+    total: 0,
+  });
+  const [myMfgName, setMyMfgName] = useState<string>(authUser?.companyName || 'My Facility');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Modal Control States
   const [selectedSubOrderCode, setSelectedSubOrderCode] = useState<string | null>(null);
   const [viewDetailModal, setViewDetailModal] = useState<boolean>(false);
   const [showAcceptModal, setShowAcceptModal] = useState<boolean>(false);
   const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
-  const [targetActionSubOrderCode, setTargetActionSubOrderCode] = useState<string>('SO-1001-01');
+  const [targetActionSubOrderCode, setTargetActionSubOrderCode] = useState<string>('');
+  const [actionInProgress, setActionInProgress] = useState<boolean>(false);
+  const [acceptModalError, setAcceptModalError] = useState<string | null>(null);
+
+  // Real PO Detail State for View PO modal
+  const [activePurchaseOrder, setActivePurchaseOrder] = useState<PurchaseOrderDetailResponse | null>(null);
+  const [isLoadingPo, setIsLoadingPo] = useState<boolean>(false);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -170,250 +165,113 @@ export const ManufacturerSubOrderModule: React.FC = () => {
   // Success Banner Notification State
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
-  // Sync sub-orders with UNIFIED_STORAGE_KEY (localStorage) & AppContext active orders
+  // Fetch orders from real backend API (PostgreSQL single source of truth)
+  const fetchOrders = useCallback(async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const res = await manufacturerOrderApi.listOrders({
+        status: statusFilter,
+        search: searchQuery,
+      });
+
+      setOrders(res.orders || []);
+      if (res.metrics) {
+        setMetrics(res.metrics);
+      }
+      if (res.manufacturer?.companyName) {
+        setMyMfgName(res.manufacturer.companyName);
+      }
+    } catch (err: any) {
+      console.error('Failed to load manufacturer orders from PostgreSQL:', err);
+      setFetchError(err.message || 'Unable to connect to FactoryGrid API server. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [statusFilter, searchQuery]);
+
   useEffect(() => {
-    const loadUnifiedSubOrders = () => {
-      try {
-        const raw = localStorage.getItem('factorygrid_unified_suborders_v12');
-        const parsed = raw ? JSON.parse(raw) : {};
-        const loaded: Record<string, any> = {};
+    fetchOrders();
+  }, [fetchOrders]);
 
-        // 1. Sync from active orders created in AppContext via RFQ flow
-        if (Array.isArray(orders)) {
-          orders.forEach((mo: any) => {
-            if (Array.isArray(mo.subOrders)) {
-              mo.subOrders.forEach((so: any) => {
-                const subNum = so.subOrderNumber;
-                if (subNum) {
-                  const savedObj = parsed[subNum] || {};
-                  loaded[subNum] = {
-                    subOrderNumber: subNum,
-                    poNumber: so.poNumber || `PO-${subNum}`,
-                    masterOrderNumber: mo.orderNumber || 'MO-2026-1001',
-                    mfgId: so.manufacturerId || 'm1',
-                    mfgName: so.manufacturerName || myMfgName,
-                    customerName: mo.customerName || 'Apex Pharma PCD Franchise',
-                    orderDate: mo.createdDate || '25 Aug 2026',
-                    deliveryDate: mo.expectedDeliveryDate || '02 Sep 2026',
-                    shippingAddress: mo.shippingAddress || 'Industrial Zone, Plot 14, Phase I, New Delhi - 110020',
-                    billingAddress: 'Apex Corporate Office, Barakhamba Road, New Delhi - 110001',
-                    sourceQuoteRef: 'Q-2026-1001',
-                    productsCount: so.lines?.length || 1,
-                    totalQuantity: so.lines?.reduce((sum: number, l: any) => sum + l.quantity, 0) || 10000,
-                    orderValue: so.totalAmount || 150000,
-                    leadTimeDays: 14,
-                    status: savedObj.status || 'Awaiting Acceptance',
-                    productionStatus: savedObj.productionStatus || 'PO_ACCEPTED',
-                    lines: so.lines?.map((l: any) => ({
-                      productName: l.productName || 'Pharmaceutical Product',
-                      dosageForm: 'Tablet',
-                      quantity: l.quantity || 10000,
-                      unitPrice: l.unitPrice || 15.0,
-                      totalCost: l.totalPrice || (l.quantity * l.unitPrice) || 150000,
-                      leadTime: '14 Days'
-                    })) || [
-                      { productName: 'Paracetamol 500mg Tablets', dosageForm: 'Tablet', quantity: 10000, unitPrice: 15.0, totalCost: 150000, leadTime: '14 Days' }
-                    ]
-                  };
-                }
-              });
-            }
-          });
-        }
-
-        // 2. Merge all direct records from factorygrid_unified_suborders_v12
-        Object.keys(parsed).forEach(key => {
-          const uObj = parsed[key];
-          if (!loaded[key]) {
-            loaded[key] = {
-              subOrderNumber: uObj.subOrderNumber || key,
-              poNumber: uObj.poNumber || `PO-${key}`,
-              masterOrderNumber: uObj.masterOrderNumber || 'MO-2026-1001',
-              mfgId: 'm1',
-              mfgName: uObj.manufacturerName || myMfgName,
-              customerName: uObj.customerName || 'Apex Pharma PCD Franchise',
-              orderDate: '25 Aug 2026',
-              deliveryDate: uObj.requiredDeliveryDate || '02 Sep 2026',
-              shippingAddress: 'Industrial Zone, Plot 14, Phase I, New Delhi - 110020',
-              billingAddress: 'Apex Corporate Office, Barakhamba Road, New Delhi - 110001',
-              sourceQuoteRef: 'Q-2026-1001',
-              productsCount: 1,
-              totalQuantity: uObj.totalQuantity || 10000,
-              orderValue: uObj.orderValue || 150000,
-              leadTimeDays: uObj.leadTimeDays || 14,
-              status: uObj.status || 'Awaiting Acceptance',
-              productionStatus: uObj.productionStatus,
-              lines: uObj.lines || [
-                { productName: uObj.productName || 'Paracetamol 500mg Tablets', dosageForm: 'Tablet', quantity: uObj.totalQuantity || 10000, unitPrice: 15.0, totalCost: uObj.orderValue || 150000, leadTime: '14 Days' }
-              ]
-            };
-          } else {
-            loaded[key] = {
-              ...loaded[key],
-              productionStatus: uObj.productionStatus || loaded[key].productionStatus,
-              status: uObj.status || loaded[key].status
-            };
-          }
-        });
-
-        setSubOrdersState(loaded);
-      } catch (err) {
-        console.error('Error loading unified sub-orders:', err);
-      }
-    };
-
-    loadUnifiedSubOrders();
-    window.addEventListener('storage', loadUnifiedSubOrders);
-    return () => window.removeEventListener('storage', loadUnifiedSubOrders);
-  }, [orders, myMfgName]);
-
-  // STRICT MANUFACTURER FILTERING & EFFECTIVE STATUS MAPPING:
-  const allMyAssignedOrders = useMemo(() => {
-    return Object.values(subOrdersState).filter(so => {
-      return so.mfgId === myMfgId || so.mfgName.toLowerCase().includes('sunbio');
-    });
-  }, [subOrdersState, myMfgId]);
-
-  const myAssignedOrders = useMemo(() => {
-    return allMyAssignedOrders.filter(so => {
-      const info = getEffectiveOrderStatusInfo(so);
-
-      let matchesStatus = true;
-      if (statusFilter !== 'ALL') {
-        matchesStatus = info.statusKey === statusFilter;
-      }
-
-      const q = searchQuery.toLowerCase().trim();
-      let matchesSearch = true;
-      if (q) {
-        const matchSO = so.subOrderNumber.toLowerCase().includes(q);
-        const matchMO = so.masterOrderNumber.toLowerCase().includes(q);
-        const matchPO = so.poNumber.toLowerCase().includes(q);
-        const matchCust = so.customerName.toLowerCase().includes(q);
-        const matchProd = so.lines.some(l => l.productName.toLowerCase().includes(q));
-        const matchStat = info.label.toLowerCase().includes(q);
-        matchesSearch = matchSO || matchMO || matchPO || matchCust || matchProd || matchStat;
-      }
-
-      return matchesStatus && matchesSearch;
-    });
-  }, [allMyAssignedOrders, statusFilter, searchQuery]);
-
-  // Metric Summary Counts dynamically calculated for all 8 stages
-  const metrics = useMemo(() => {
-    const open = allMyAssignedOrders.filter(o => getEffectiveOrderStatusInfo(o).statusKey !== 'Rejected').length;
-    const awaiting = allMyAssignedOrders.filter(o => getEffectiveOrderStatusInfo(o).statusKey === 'Awaiting Acceptance').length;
-    const accepted = allMyAssignedOrders.filter(o => getEffectiveOrderStatusInfo(o).statusKey === 'Accepted').length;
-    const artwork = allMyAssignedOrders.filter(o => getEffectiveOrderStatusInfo(o).statusKey === 'Artwork Pending').length;
-    const scheduled = allMyAssignedOrders.filter(o => getEffectiveOrderStatusInfo(o).statusKey === 'Scheduled').length;
-    const inProd = allMyAssignedOrders.filter(o => getEffectiveOrderStatusInfo(o).statusKey === 'In Production').length;
-    const qcPack = allMyAssignedOrders.filter(o => getEffectiveOrderStatusInfo(o).statusKey === 'Quality & Packaging').length;
-    const ready = allMyAssignedOrders.filter(o => getEffectiveOrderStatusInfo(o).statusKey === 'Ready to Dispatch').length;
-    const completed = allMyAssignedOrders.filter(o => getEffectiveOrderStatusInfo(o).statusKey === 'Completed').length;
-
-    return { open, awaiting, accepted, artwork, scheduled, inProd, qcPack, ready, completed };
-  }, [allMyAssignedOrders]);
-
-  const getParentMasterOrder = (moNum?: string) => {
-    if (!moNum) return null;
-    return orders.find(o => o.orderNumber === moNum || o.id === moNum);
+  // Handle View PO Modal - loads authentic PO from backend
+  const handleOpenViewPo = async (so: ManufacturerOrderItem) => {
+    setSelectedSubOrderCode(so.subOrderNumber);
+    setViewDetailModal(true);
+    setIsLoadingPo(true);
+    setActivePurchaseOrder(null);
+    try {
+      const poData = await manufacturerOrderApi.getPurchaseOrder(so.poNumber || so.subOrderNumber);
+      setActivePurchaseOrder(poData);
+    } catch (err: any) {
+      console.error('Failed to load authentic PO document:', err);
+    } finally {
+      setIsLoadingPo(false);
+    }
   };
 
   // Handle Open Accept Modal
-  const handleOpenAcceptModal = (code: string) => {
-    const targetObj = subOrdersState[code];
-    const parentMO = getParentMasterOrder(targetObj?.masterOrderNumber);
-    if (parentMO?.advanceRequired && (parentMO.advanceOutstanding ?? 0) > 0) {
-      alert(`🔒 Manufacturer Execution Blocked:\n\nRequired Advance Payment (₹${parentMO.advanceOutstanding?.toLocaleString()}) is outstanding on Master Order ${parentMO.orderNumber}.\n\nManufacturer acceptance and execution is locked until full advance is recorded.`);
+  const handleOpenAcceptModal = (so: ManufacturerOrderItem) => {
+    if (so.advanceRequired && so.advanceOutstanding > 0) {
+      alert(`🔒 Manufacturer Execution Blocked:\n\nRequired Advance Payment (₹${so.advanceOutstanding.toLocaleString('en-IN')}) is outstanding on Master Order ${so.masterOrderNumber}.\n\nManufacturer acceptance and execution is locked until full advance is recorded.`);
       return;
     }
-    setTargetActionSubOrderCode(code);
+    setTargetActionSubOrderCode(so.subOrderNumber);
     setShowAcceptModal(true);
   };
 
-  // Confirm Accept Action
-  const handleConfirmAccept = () => {
-    const code = targetActionSubOrderCode;
-    const targetObj = subOrdersState[code];
-    const parentMO = getParentMasterOrder(targetObj?.masterOrderNumber);
-    if (parentMO?.advanceRequired && (parentMO.advanceOutstanding ?? 0) > 0) {
-      alert(`🔒 Manufacturer Execution Blocked:\n\nRequired Advance Payment (₹${parentMO.advanceOutstanding?.toLocaleString()}) is outstanding on Master Order ${parentMO.orderNumber}.\n\nPO acceptance and manufacturing release cannot proceed until advance payment is fully received.`);
+  // Confirm Accept Action against PostgreSQL
+  const handleConfirmAccept = async () => {
+    setActionInProgress(true);
+    try {
+      await manufacturerOrderApi.acceptOrder(targetActionSubOrderCode);
       setShowAcceptModal(false);
-      return;
+      setViewDetailModal(false);
+      setSuccessBanner(`Purchase Order for Sub-Order ${targetActionSubOrderCode} accepted successfully in PostgreSQL. Released to Artwork / Production Planning.`);
+      addAuditLog('Sub-Order Engine', `Manufacturer ${myMfgName} ACCEPTED Purchase Order for ${targetActionSubOrderCode}.`);
+      await fetchOrders();
+    } catch (err: any) {
+      alert(`Failed to accept order:\n\n${err.message || 'Unexpected server error'}`);
+    } finally {
+      setActionInProgress(false);
     }
-
-    const timeStr = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
-
-    setSubOrdersState(prev => {
-      const updatedObj = {
-        ...prev[code],
-        status: 'Scheduled' as const,
-        productionStatus: 'ARTWORK',
-        acceptedAt: timeStr
-      };
-      const next = { ...prev, [code]: updatedObj };
-
-      try {
-        const raw = localStorage.getItem('factorygrid_unified_suborders_v12');
-        const store = raw ? JSON.parse(raw) : {};
-        store[code] = {
-          ...(store[code] || {}),
-          subOrderNumber: code,
-          poNumber: updatedObj.poNumber,
-          masterOrderNumber: updatedObj.masterOrderNumber,
-          customerName: updatedObj.customerName,
-          manufacturerName: myMfgName,
-          totalQuantity: updatedObj.totalQuantity,
-          orderValue: updatedObj.orderValue,
-          status: 'Scheduled',
-          productionStatus: 'ARTWORK'
-        };
-        localStorage.setItem('factorygrid_unified_suborders_v12', JSON.stringify(store));
-      } catch (e) {
-        console.error(e);
-      }
-
-      return next;
-    });
-
-    setShowAcceptModal(false);
-    setSuccessBanner(`Purchase Order ${subOrdersState[code]?.poNumber || code} accepted successfully. Production Planning is now available.`);
-    addAuditLog('Sub-Order Engine', `Manufacturer ${myMfgName} ACCEPTED Purchase Order ${subOrdersState[code]?.poNumber}.`);
   };
 
   // Handle Open Reject Modal
-  const handleOpenRejectModal = (code: string) => {
-    setTargetActionSubOrderCode(code);
+  const handleOpenRejectModal = (so: ManufacturerOrderItem) => {
+    setTargetActionSubOrderCode(so.subOrderNumber);
     setRejectionReason('Capacity Constraints');
     setRejectionRemarks('');
     setRejectionFormError(null);
     setShowRejectModal(true);
   };
 
-  // Confirm Reject Action
-  const handleConfirmReject = (e: React.FormEvent) => {
+  // Confirm Reject Action against PostgreSQL
+  const handleConfirmReject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rejectionReason || !rejectionReason.trim()) {
       setRejectionFormError('Please select a rejection reason.');
       return;
     }
 
-    setSubOrdersState(prev => ({
-      ...prev,
-      [targetActionSubOrderCode]: {
-        ...prev[targetActionSubOrderCode],
-        status: 'Rejected',
-        rejectionReason,
-        rejectionRemarks
-      }
-    }));
-
-    setShowRejectModal(false);
-    setSuccessBanner(null);
-    addAuditLog('Sub-Order Engine', `Manufacturer ${myMfgName} REJECTED Purchase Order ${subOrdersState[targetActionSubOrderCode]?.poNumber}. Reason: ${rejectionReason}`);
+    setActionInProgress(true);
+    try {
+      await manufacturerOrderApi.rejectOrder(targetActionSubOrderCode, rejectionReason, rejectionRemarks);
+      setShowRejectModal(false);
+      setViewDetailModal(false);
+      setSuccessBanner(null);
+      addAuditLog('Sub-Order Engine', `Manufacturer ${myMfgName} REJECTED Purchase Order for ${targetActionSubOrderCode}. Reason: ${rejectionReason}`);
+      await fetchOrders();
+    } catch (err: any) {
+      setRejectionFormError(err.message || 'Failed to reject order on server');
+    } finally {
+      setActionInProgress(false);
+    }
   };
 
-  const activeDetailSubOrder = selectedSubOrderCode ? subOrdersState[selectedSubOrderCode] : null;
+  const activeDetailSubOrder = selectedSubOrderCode
+    ? orders.find(o => o.subOrderNumber === selectedSubOrderCode) || null
+    : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 60, background: '#F8FAFC' }}>
@@ -435,6 +293,27 @@ export const ManufacturerSubOrderModule: React.FC = () => {
             Manufacturer-specific purchase orders and assigned sub-orders for <strong style={{ color: '#0F766E' }}>{myMfgName}</strong>
           </p>
         </div>
+
+        <button
+          onClick={fetchOrders}
+          disabled={isLoading}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '8px 14px',
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 700,
+            background: '#F1F5F9',
+            border: '1px solid #CBD5E1',
+            color: '#334155',
+            cursor: isLoading ? 'not-allowed' : 'pointer'
+          }}
+        >
+          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          Refresh Orders
+        </button>
       </div>
 
       {/* ── Success Notification Banner ──────────────────────────── */}
@@ -444,12 +323,30 @@ export const ManufacturerSubOrderModule: React.FC = () => {
             <CheckCircle2 size={20} style={{ color: '#16A34A' }} />
             <div>
               <div style={{ fontSize: 14, fontWeight: 800, color: '#166534' }}>{successBanner}</div>
-              <div style={{ fontSize: 12, color: '#166534', marginTop: 1 }}>Facility confirmation recorded. Ready for production execution.</div>
+              <div style={{ fontSize: 12, color: '#166534', marginTop: 1 }}>Facility confirmation recorded in PostgreSQL. Production workflow synced.</div>
             </div>
           </div>
-
           <button onClick={() => setSuccessBanner(null)} style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer', padding: 4 }}>
             <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* ── Error Banner ─────────────────────────────────────────── */}
+      {fetchError && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertCircle size={20} style={{ color: '#DC2626' }} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#991B1B' }}>Unable to load orders from database</div>
+              <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 1 }}>{fetchError}</div>
+            </div>
+          </div>
+          <button
+            onClick={fetchOrders}
+            style={{ padding: '6px 12px', borderRadius: 6, background: '#DC2626', color: '#FFF', border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+          >
+            Retry
           </button>
         </div>
       )}
@@ -564,15 +461,20 @@ export const ManufacturerSubOrderModule: React.FC = () => {
       <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
         <div style={{ padding: '16px 20px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            ORDERS ASSIGNED TO ME ({myAssignedOrders.length} {myAssignedOrders.length === 1 ? 'Sub-Order' : 'Sub-Orders'})
+            ORDERS ASSIGNED TO ME ({orders.length} {orders.length === 1 ? 'Sub-Order' : 'Sub-Orders'})
           </div>
         </div>
 
-        {myAssignedOrders.length === 0 ? (
+        {isLoading ? (
+          <div style={{ padding: 60, textAlign: 'center', color: '#64748B' }}>
+            <RefreshCw size={28} className="animate-spin" style={{ color: '#0F766E', margin: '0 auto 10px' }} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Loading orders from PostgreSQL...</div>
+          </div>
+        ) : orders.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>
             <Clock size={32} style={{ color: '#94A3B8', marginBottom: 8 }} />
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>No assigned sub-orders found.</div>
-            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Sub-orders assigned to {myMfgName} will appear in this table.</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>No assigned sub-orders found in database.</div>
+            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Sub-orders assigned to {myMfgName} in PostgreSQL will appear in this table.</div>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -593,10 +495,8 @@ export const ManufacturerSubOrderModule: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {myAssignedOrders.map(so => {
+                {orders.map(so => {
                   const info = getEffectiveOrderStatusInfo(so);
-                  const isAwaiting = info.statusKey === 'Awaiting Acceptance';
-                  const isAccepted = info.statusKey !== 'Awaiting Acceptance' && info.statusKey !== 'Rejected';
 
                   return (
                     <tr key={so.subOrderNumber} style={{ borderBottom: '1px solid #F1F5F9' }}>
@@ -607,28 +507,28 @@ export const ManufacturerSubOrderModule: React.FC = () => {
                         {so.masterOrderNumber}
                       </td>
                       <td style={{ padding: '12px 14px', fontWeight: 700, color: '#1D4ED8', fontFamily: 'monospace' }}>
-                        {so.poNumber}
+                        {so.poNumber || so.purchaseOrderNumber}
                       </td>
                       <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0F172A' }}>
-                        {so.customerName}
+                        {so.customerName || so.customer?.name}
                       </td>
                       <td style={{ padding: '12px 14px', color: '#475569' }}>
-                        {so.orderDate || '14 Aug 2026'}
+                        {so.orderDate || '—'}
                       </td>
                       <td style={{ padding: '12px 14px', color: '#1D4ED8', fontWeight: 600 }}>
-                        {so.deliveryDate || `${so.leadTimeDays} Days`}
+                        {so.deliverySchedule || `${so.leadTimeDays || 14} Days`}
                       </td>
                       <td style={{ padding: '12px 14px', color: '#334155' }}>
                         <div style={{ fontWeight: 700, color: '#0F172A' }}>{so.lines.length} {so.lines.length === 1 ? 'Product' : 'Products'}</div>
                         <div style={{ fontSize: 11, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>
-                          {so.lines.map(l => l.productName).join(', ')}
+                          {so.lines.map(l => l.productName || l.name).join(', ')}
                         </div>
                       </td>
                       <td style={{ padding: '12px 14px', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace' }}>
                         {so.totalQuantity.toLocaleString()} Units
                       </td>
                       <td style={{ padding: '12px 14px', fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>
-                        ₹{so.orderValue.toLocaleString()}
+                        ₹{so.orderValue.toLocaleString('en-IN')}
                       </td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
@@ -647,8 +547,7 @@ export const ManufacturerSubOrderModule: React.FC = () => {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              setSelectedSubOrderCode(so.subOrderNumber);
-                              setViewDetailModal(true);
+                              handleOpenViewPo(so);
                             }}
                             style={{
                               padding: '5px 12px', borderRadius: 6,
@@ -673,7 +572,9 @@ export const ManufacturerSubOrderModule: React.FC = () => {
       </div>
 
       {/* ── 1. ACCEPT CONFIRMATION MODAL ─────────────────────────── */}
-      {showAcceptModal && (
+      {showAcceptModal && (() => {
+        const targetSubOrder = orders.find(o => o.subOrderNumber === targetActionSubOrderCode) || activeDetailSubOrder;
+        return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10010, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setShowAcceptModal(false)}>
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 14, padding: 24, boxShadow: '0 20px 48px rgba(15, 23, 42, 0.2)', display: 'flex', flexDirection: 'column', gap: 16 }}>
             
@@ -686,15 +587,23 @@ export const ManufacturerSubOrderModule: React.FC = () => {
               </button>
             </div>
 
+            {acceptModalError && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 6, padding: 10, fontSize: 12, color: '#B91C1C' }}>
+                {acceptModalError}
+              </div>
+            )}
+
             <p style={{ margin: 0, fontSize: 13.5, color: '#334155', lineHeight: 1.5 }}>
-              By accepting this order, you confirm that your facility will fulfill the assigned products and quantities according to the agreed quotation.
+              By accepting this order, you confirm that your facility will fulfill the assigned products and quantities according to the agreed quotation and terms stored in PostgreSQL.
             </p>
 
-            <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12.5, color: '#0F766E' }}>
-              <div>Purchase Order: <strong>{subOrdersState[targetActionSubOrderCode]?.poNumber}</strong></div>
-              <div>Sub-Order: <strong>{targetActionSubOrderCode}</strong></div>
-              <div>Total Quantity: <strong>{subOrdersState[targetActionSubOrderCode]?.totalQuantity.toLocaleString()} Units</strong> · Value: <strong>₹{subOrdersState[targetActionSubOrderCode]?.orderValue.toLocaleString()}</strong></div>
-            </div>
+            {targetSubOrder && (
+              <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12.5, color: '#0F766E' }}>
+                <div>Purchase Order: <strong>{targetSubOrder.poNumber || targetSubOrder.purchaseOrderNumber}</strong></div>
+                <div>Sub-Order: <strong>{targetSubOrder.subOrderNumber}</strong></div>
+                <div>Total Quantity: <strong>{targetSubOrder.totalQuantity.toLocaleString()} Units</strong> · Value: <strong>₹{targetSubOrder.orderValue.toLocaleString('en-IN')}</strong></div>
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 12, borderTop: '1px solid #E2E8F0' }}>
               <button onClick={() => setShowAcceptModal(false)} style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
@@ -702,15 +611,18 @@ export const ManufacturerSubOrderModule: React.FC = () => {
               </button>
               <button
                 onClick={handleConfirmAccept}
-                style={{ padding: '9px 20px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFF', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                disabled={actionInProgress}
+                style={{ padding: '9px 20px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFF', fontSize: 13, fontWeight: 800, cursor: actionInProgress ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
+                {actionInProgress ? <RefreshCw size={14} className="animate-spin" /> : null}
                 Accept Order
               </button>
             </div>
 
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ── 2. REJECT REASON MODAL ────────────────────────────────── */}
       {showRejectModal && (
@@ -763,7 +675,8 @@ export const ManufacturerSubOrderModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '9px 18px', borderRadius: 6, border: 'none', background: '#DC2626', color: '#FFF', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                  disabled={actionInProgress}
+                  style={{ padding: '9px 18px', borderRadius: 6, border: 'none', background: '#DC2626', color: '#FFF', fontSize: 13, fontWeight: 800, cursor: actionInProgress ? 'not-allowed' : 'pointer' }}
                 >
                   Reject Order
                 </button>
@@ -776,7 +689,12 @@ export const ManufacturerSubOrderModule: React.FC = () => {
 
       {/* ── 3. VIEW COMPLETE PURCHASE ORDER (PO) MODAL ───────────── */}
       {viewDetailModal && activeDetailSubOrder && (() => {
-        const subtotal = activeDetailSubOrder.lines.reduce((sum, l) => sum + (l.quantity * l.unitPrice), 0);
+        const poData = activePurchaseOrder;
+        const lines = poData?.lines || activeDetailSubOrder.lines || [];
+        const subtotal = poData?.subtotal || lines.reduce((sum, l) => sum + (l.quantity * l.unitPrice), 0);
+        const totalValue = poData?.orderValue || activeDetailSubOrder.orderValue;
+        const isAwaiting = activeDetailSubOrder.status === 'Awaiting Acceptance';
+        const isLocked = activeDetailSubOrder.advanceRequired && activeDetailSubOrder.advanceOutstanding > 0;
 
         return (
           <div style={{ position: 'fixed', inset: 0, zIndex: 10005, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setViewDetailModal(false)}>
@@ -797,11 +715,11 @@ export const ManufacturerSubOrderModule: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{
                     fontSize: 11.5, fontWeight: 800, padding: '4px 10px', borderRadius: 6,
-                    background: activeDetailSubOrder.status === 'Scheduled' ? '#DCFCE7' : '#FEF3C7',
-                    color: activeDetailSubOrder.status === 'Scheduled' ? '#15803D' : '#B45309',
-                    border: `1px solid ${activeDetailSubOrder.status === 'Scheduled' ? '#86EFAC' : '#FDE68A'}`
+                    background: !isAwaiting ? '#DCFCE7' : '#FEF3C7',
+                    color: !isAwaiting ? '#15803D' : '#B45309',
+                    border: `1px solid ${!isAwaiting ? '#86EFAC' : '#FDE68A'}`
                   }}>
-                    {activeDetailSubOrder.status === 'Scheduled' ? 'PO Accepted ✓' : 'Awaiting Acceptance'}
+                    {!isAwaiting ? 'PO Accepted ✓' : 'Awaiting Acceptance'}
                   </span>
                   <button onClick={() => setViewDetailModal(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}>
                     <X size={20} />
@@ -815,47 +733,39 @@ export const ManufacturerSubOrderModule: React.FC = () => {
                 <div><strong>Sub-Order Ref:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{activeDetailSubOrder.subOrderNumber}</span></div>
                 <div>
                   <strong>Parent Master Order:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{activeDetailSubOrder.masterOrderNumber}</span>
-                  {(() => {
-                    const parentMO = getParentMasterOrder(activeDetailSubOrder.masterOrderNumber);
-                    if (!parentMO) return null;
-                    const isLocked = parentMO.advanceRequired && (parentMO.advanceOutstanding ?? 0) > 0;
-                    return (
-                      <div style={{ fontSize: 11, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, color: isLocked ? '#DC2626' : '#15803D' }}>
-                        {isLocked ? (
-                          <>
-                            <Lock size={12} /> Advance Outstanding: ₹{parentMO.advanceOutstanding?.toLocaleString()} (Execution Blocked)
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 size={12} /> Advance Cleared / Not Required
-                          </>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  <div style={{ fontSize: 11, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, color: isLocked ? '#DC2626' : '#15803D' }}>
+                    {isLocked ? (
+                      <>
+                        <Lock size={12} /> Advance Outstanding: ₹{activeDetailSubOrder.advanceOutstanding.toLocaleString('en-IN')} (Execution Blocked)
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={12} /> Advance Cleared / Not Required
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div>
-                  <strong>Customer / Buyer:</strong> <strong style={{ color: '#0F172A' }}>{activeDetailSubOrder.customerName}</strong>
-                  <div style={{ fontSize: 11.5, color: '#0F766E', fontWeight: 700, fontFamily: 'monospace', marginTop: 1 }}>GST Number: {activeDetailSubOrder.buyerGst || '36APXPH0001A1Z5'}</div>
+                  <strong>Customer / Buyer:</strong> <strong style={{ color: '#0F172A' }}>{poData?.customerName || activeDetailSubOrder.customerName}</strong>
+                  <div style={{ fontSize: 11.5, color: '#0F766E', fontWeight: 700, fontFamily: 'monospace', marginTop: 1 }}>GST: {poData?.buyerGst || activeDetailSubOrder.buyerGst || '—'}</div>
                 </div>
                 <div>
-                  <strong>Supplier / Manufacturer:</strong> <strong style={{ color: '#0F766E' }}>{activeDetailSubOrder.mfgName}</strong>
-                  <div style={{ fontSize: 11.5, color: '#0F766E', fontWeight: 700, fontFamily: 'monospace', marginTop: 1 }}>GST Number: {activeDetailSubOrder.mfgGst || '02SUNBI0001A1Z8'}</div>
+                  <strong>Supplier / Manufacturer:</strong> <strong style={{ color: '#0F766E' }}>{poData?.mfgName || activeDetailSubOrder.mfgName}</strong>
+                  <div style={{ fontSize: 11.5, color: '#0F766E', fontWeight: 700, fontFamily: 'monospace', marginTop: 1 }}>GST: {poData?.mfgGst || activeDetailSubOrder.mfgGst || '—'}</div>
                 </div>
-                <div><strong>Source Quote Reference:</strong> {activeDetailSubOrder.sourceQuoteRef || 'Q-2026-1001'}</div>
-                <div><strong>Order Date:</strong> {activeDetailSubOrder.orderDate || '14 Aug 2026'}</div>
-                <div><strong>Delivery Schedule:</strong> <span style={{ color: '#1D4ED8', fontWeight: 700 }}>{activeDetailSubOrder.deliveryDate || `${activeDetailSubOrder.leadTimeDays} Days`}</span></div>
-                <div><strong>Shipping Address:</strong> {activeDetailSubOrder.shippingAddress || 'Industrial Zone, Plot 14, Phase I, New Delhi - 110020'}</div>
+                <div><strong>Source Quote Reference:</strong> {activeDetailSubOrder.sourceQuoteRef || '—'}</div>
+                <div><strong>Order Date:</strong> {activeDetailSubOrder.orderDate || '—'}</div>
+                <div><strong>Delivery Schedule:</strong> <span style={{ color: '#1D4ED8', fontWeight: 700 }}>{activeDetailSubOrder.deliverySchedule}</span></div>
+                <div><strong>Shipping Address:</strong> {poData?.shippingAddress || activeDetailSubOrder.shippingAddress || '—'}</div>
                 <div>
-                  <strong>Billing Address:</strong> {activeDetailSubOrder.billingAddress || 'Apex Corporate Office, Barakhamba Road, New Delhi - 110001'}
-                  <div style={{ fontSize: 11.5, color: '#0F766E', fontWeight: 700, fontFamily: 'monospace', marginTop: 1 }}>GST Number: {activeDetailSubOrder.buyerGst || '36APXPH0001A1Z5'}</div>
+                  <strong>Billing Address:</strong> {poData?.billingAddress || activeDetailSubOrder.billingAddress || '—'}
                 </div>
               </div>
 
               {/* Product Line Items Table */}
               <div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', marginBottom: 10 }}>
-                  Purchase Order Line Items ({activeDetailSubOrder.lines.length} Items)
+                  Purchase Order Line Items ({lines.length} {lines.length === 1 ? 'Item' : 'Items'})
                 </div>
                 <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, textAlign: 'left' }}>
@@ -868,12 +778,12 @@ export const ManufacturerSubOrderModule: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {activeDetailSubOrder.lines.map((line, lIdx) => (
+                      {lines.map((line, lIdx) => (
                         <tr key={lIdx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '10px 12px', fontWeight: 800, color: '#0F172A' }}>{line.productName} ({line.dosageForm})</td>
-                          <td style={{ padding: '10px 12px', fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>{line.quantity.toLocaleString()} Units</td>
-                          <td style={{ padding: '10px 12px', fontFamily: 'monospace' }}>₹{line.unitPrice.toFixed(2)}</td>
-                          <td style={{ padding: '10px 12px', fontWeight: 800, fontFamily: 'monospace', textAlign: 'right', color: '#0F172A' }}>₹{line.totalCost.toLocaleString()}</td>
+                          <td style={{ padding: '10px 12px', fontWeight: 800, color: '#0F172A' }}>{line.productName || (line as any).name} ({line.dosageForm})</td>
+                          <td style={{ padding: '10px 12px', fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>{line.quantity.toLocaleString()} {line.uom || 'Units'}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'monospace' }}>₹{Number(line.unitPrice).toFixed(2)}</td>
+                          <td style={{ padding: '10px 12px', fontWeight: 800, fontFamily: 'monospace', textAlign: 'right', color: '#0F172A' }}>₹{Number(line.lineTotal || line.quantity * line.unitPrice).toLocaleString('en-IN')}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -884,17 +794,17 @@ export const ManufacturerSubOrderModule: React.FC = () => {
               {/* Commercial Summary */}
               <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 10, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <div style={{ fontSize: 12.5, color: '#0F766E' }}>
-                  Total Quantity: <strong>{activeDetailSubOrder.totalQuantity.toLocaleString()} Units</strong> | Subtotal: <strong>₹{subtotal.toLocaleString()}</strong>
+                  Total Quantity: <strong>{activeDetailSubOrder.totalQuantity.toLocaleString()} Units</strong> | Subtotal: <strong>₹{subtotal.toLocaleString('en-IN')}</strong>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase' }}>Grand Total PO Value</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>
-                    ₹{activeDetailSubOrder.orderValue.toLocaleString()}
+                    ₹{totalValue.toLocaleString('en-IN')}
                   </div>
                 </div>
               </div>
 
-              {/* ── PROFORMA INVOICE UPLOAD & PREVIEW SECTION ── */}
+              {/* ── PROFORMA INVOICE SECTION ── */}
               <ProformaInvoiceSection
                 poNumber={activeDetailSubOrder.poNumber}
                 subOrderCode={activeDetailSubOrder.subOrderNumber}
@@ -904,49 +814,44 @@ export const ManufacturerSubOrderModule: React.FC = () => {
               {/* Action Buttons inside Modal */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid #E2E8F0' }}>
                 <button
-                  onClick={() => alert(`Downloading Purchase Order PDF for ${activeDetailSubOrder.poNumber}...`)}
+                  onClick={() => alert(`Official Purchase Order for ${activeDetailSubOrder.poNumber} is verified in PostgreSQL database.`)}
                   style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#0F766E', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                 >
-                  <Download size={15} /> Download Official PO PDF
+                  <Download size={15} /> Verified PO Document
                 </button>
 
                 <div style={{ display: 'flex', gap: 10 }}>
-                  {activeDetailSubOrder.status === 'Awaiting Acceptance' && (() => {
-                    const parentMO = getParentMasterOrder(activeDetailSubOrder.masterOrderNumber);
-                    const isLocked = parentMO?.advanceRequired && (parentMO.advanceOutstanding ?? 0) > 0;
-
-                    return (
-                      <>
+                  {isAwaiting && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setViewDetailModal(false);
+                          handleOpenRejectModal(activeDetailSubOrder);
+                        }}
+                        style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#B91C1C', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Reject Order
+                      </button>
+                      {isLocked ? (
+                        <div
+                          title={`Advance Outstanding: ₹${activeDetailSubOrder.advanceOutstanding.toLocaleString('en-IN')}`}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 6, background: '#FEF3C7', border: '1px solid #FCD34D', color: '#92400E', fontSize: 12, fontWeight: 700 }}
+                        >
+                          <Lock size={14} /> Execution Locked (Advance Pending)
+                        </div>
+                      ) : (
                         <button
                           onClick={() => {
                             setViewDetailModal(false);
-                            handleOpenRejectModal(activeDetailSubOrder.subOrderNumber);
+                            handleOpenAcceptModal(activeDetailSubOrder);
                           }}
-                          style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#B91C1C', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                          style={{ padding: '9px 20px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFF', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}
                         >
-                          Reject Order
+                          Accept Purchase Order
                         </button>
-                        {isLocked ? (
-                          <div
-                            title={`Advance Outstanding: ₹${parentMO?.advanceOutstanding?.toLocaleString()}`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 6, background: '#FEF3C7', border: '1px solid #FCD34D', color: '#92400E', fontSize: 12, fontWeight: 700 }}
-                          >
-                            <Lock size={14} /> Execution Locked (Advance Pending)
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setViewDetailModal(false);
-                              handleOpenAcceptModal(activeDetailSubOrder.subOrderNumber);
-                            }}
-                            style={{ padding: '9px 20px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFF', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}
-                          >
-                            Accept Purchase Order
-                          </button>
-                        )}
-                      </>
-                    );
-                  })()}
+                      )}
+                    </>
+                  )}
                   <button onClick={() => setViewDetailModal(false)} style={{ padding: '9px 18px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#475569', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
                     Close
                   </button>

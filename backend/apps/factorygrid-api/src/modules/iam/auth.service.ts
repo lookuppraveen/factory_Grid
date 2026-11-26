@@ -42,9 +42,13 @@ const PORTAL_ROLE_KEYWORDS: Record<string, string[]> = {
   SUPPLIER: ['SUPPLIER', 'MANUFACTURER', 'ADMIN'],
   MANUFACTURER: ['SUPPLIER', 'MANUFACTURER', 'ADMIN'],
   MANUFACTURER_COMPANY: ['SUPPLIER', 'MANUFACTURER', 'ADMIN'],
-  FG_STAFF: ['ADMIN', 'COMPLIANCE', 'SALES', 'ACCOUNTS'],
-  STAFF: ['ADMIN', 'COMPLIANCE', 'SALES', 'ACCOUNTS'],
-  ADMIN: ['ADMIN', 'COMPLIANCE', 'SALES', 'ACCOUNTS'],
+  FG_STAFF: ['ADMIN', 'COMPLIANCE', 'SALES', 'ACCOUNTS', 'FACTORY_BUDDY'],
+  STAFF: ['ADMIN', 'COMPLIANCE', 'SALES', 'ACCOUNTS', 'FACTORY_BUDDY'],
+  ADMIN: ['ADMIN'],
+  COMPLIANCE_OFFICER: ['COMPLIANCE', 'ADMIN'],
+  SALES_MANAGER: ['SALES', 'ADMIN'],
+  ACCOUNTS_MANAGER: ['ACCOUNTS', 'ADMIN'],
+  FACTORY_BUDDY: ['FACTORY_BUDDY', 'ADMIN'],
 };
 
 @Injectable()
@@ -77,35 +81,69 @@ export class AuthService {
   async login(dto: LoginDto): Promise<AuthResponseDto> {
     const identifier = dto.usernameOrEmail.trim();
     const user = await this.prisma.user.findFirst({
-      where: { OR: [{ username: identifier }, { email: identifier.toLowerCase() }] },
+      where: {
+        OR: [
+          { username: { equals: identifier, mode: 'insensitive' } },
+          { email: { equals: identifier, mode: 'insensitive' } },
+        ],
+      },
       include: withRoles,
     });
     if (!user) {
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
-    if (!isActive(user)) {
-      const isRegisteredBuyer =
-        roleNames(user).includes('ROLE_BUYER') &&
-        (await this.prisma.buyerRegistration.count({ where: { userId: user.id } })) > 0;
-      const isRegisteredMfg =
-        (roleNames(user).includes('ROLE_MANUFACTURER') || roleNames(user).includes('ROLE_SUPPLIER')) &&
-        (await this.prisma.manufacturerRegistration.count({ where: { userId: user.id } })) > 0;
-      const isPermittedState =
-        (isRegisteredBuyer || isRegisteredMfg) &&
-        !['SUSPENDED', 'BANNED', 'DELETED'].includes(user.accountStatus.toUpperCase());
-      if (!isPermittedState) {
-        throw new ForbiddenException(`Account is ${user.accountStatus}. Please contact administrator.`);
-      }
-    }
+
     if (isLocked(user)) {
       throw new LockedException('Account is temporarily locked due to multiple failed attempts. Try again later.');
     }
+
     if (!(await bcrypt.compare(dto.password, user.passwordHash))) {
       await this.recordFailedLogin(user);
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
+
     if (dto.portalType?.trim() && !this.canUsePortal(user, dto.portalType)) {
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
+      const portal = dto.portalType.trim().toUpperCase();
+      if (['SUPPLIER', 'MANUFACTURER', 'MANUFACTURER_COMPANY'].includes(portal)) {
+        throw new ForbiddenException(
+          'Access denied: this account does not have manufacturer permissions. Please switch to the Buyer portal or register as a manufacturer.',
+        );
+      }
+      if (['BUYER', 'BUYER_COMPANY'].includes(portal)) {
+        throw new ForbiddenException(
+          'Access denied: this account does not have buyer permissions. Please switch to the Manufacturer portal or register as a buyer.',
+        );
+      }
+      throw new ForbiddenException(
+        `Access denied: this account does not have permissions for the ${dto.portalType} portal.`,
+      );
+    }
+
+    if (!isActive(user)) {
+      let isPermittedState = false;
+      try {
+        const isRegisteredBuyer =
+          roleNames(user).includes('ROLE_BUYER') &&
+          (await this.prisma.buyerRegistration.count({ where: { userId: user.id } })) > 0;
+        const isRegisteredMfg =
+          (roleNames(user).includes('ROLE_MANUFACTURER') || roleNames(user).includes('ROLE_SUPPLIER')) &&
+          (await this.prisma.manufacturerRegistration.count({ where: { userId: user.id } })) > 0;
+        isPermittedState =
+          (isRegisteredBuyer || isRegisteredMfg) &&
+          !['SUSPENDED', 'BANNED', 'DELETED'].includes(user.accountStatus.toUpperCase());
+      } catch (err) {
+        this.logger.warn(`Failed checking registration state for user ${user.username}: ${err}`);
+      }
+
+      if (!isPermittedState) {
+        const status = user.accountStatus.toUpperCase();
+        if (['INACTIVE', 'PENDING_APPROVAL', 'PENDING_REVIEW'].includes(status)) {
+          throw new ForbiddenException(
+            'Account is pending compliance verification. Please complete onboarding registration or contact administrator.',
+          );
+        }
+        throw new ForbiddenException(`Account is ${user.accountStatus}. Please contact administrator.`);
+      }
     }
 
     const signedIn = await this.prisma.user.update({
@@ -141,7 +179,16 @@ export class AuthService {
   }
 
   async getProfile(username: string): Promise<UserProfileDto> {
-    const user = await this.prisma.user.findUnique({ where: { username }, include: withRoles });
+    const identifier = username.trim();
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { username: { equals: identifier, mode: 'insensitive' } },
+          { email: { equals: identifier, mode: 'insensitive' } },
+        ],
+      },
+      include: withRoles,
+    });
     if (!user) {
       throw new NotFoundException(`User not found: ${username}`);
     }

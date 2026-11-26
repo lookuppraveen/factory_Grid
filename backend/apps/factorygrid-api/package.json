@@ -11,6 +11,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed-admin": "node dist/scripts/bootstrap-admin.js",
+    "db:seed-iam": "node dist/scripts/seed-iam-users.js",
     "openapi:export": "node dist/scripts/export-openapi.js"
   },
   "dependencies": {

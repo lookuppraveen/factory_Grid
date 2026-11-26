@@ -46,6 +46,8 @@ model User {
   brandDocuments       BuyerBrandDocument[]
   trademarkDocuments   BuyerTrademarkDocument[]
   rfqs                 Rfq[]
+  masterOrders         MasterOrder[]
+  orderArtworks        OrderArtwork[]
 
   @@index([username], map: "idx_users_username")
   @@index([email], map: "idx_users_email")
@@ -113,6 +115,7 @@ model BuyerRegistration {
   brandDocuments       BuyerBrandDocument[]
   trademarkDocuments   BuyerTrademarkDocument[]
   rfqs                 Rfq[]
+  masterOrders         MasterOrder[]
 
   @@index([email], map: "idx_buyer_reg_email")
   @@index([gstNumber], map: "idx_buyer_reg_gst")
@@ -203,6 +206,7 @@ model CatalogProduct {
   shortName            String?               @map("short_name") @db.VarChar(150)
   genericName          String                @default("") @map("generic_name") @db.VarChar(250)
   dosageForm           String                @default("") @map("dosage_form") @db.VarChar(100)
+  pharmaReference      String?               @map("pharma_reference") @db.VarChar(255)
   productTypeId        String?               @default("pt_med") @map("product_type_id") @db.VarChar(50)
   categoryId           String?               @map("category_id") @db.VarChar(50)
   category             String                @db.VarChar(150)
@@ -220,6 +224,26 @@ model CatalogProduct {
   replacementProductId String?               @map("replacement_product_id") @db.VarChar(50)
   isSellable           Boolean               @default(true) @map("is_sellable")
   attributes           Json?                 @map("attributes")
+  attribute1           String?               @map("attribute_1") @db.VarChar(255)
+  attribute2           String?               @map("attribute_2") @db.VarChar(255)
+  attribute3           String?               @map("attribute_3") @db.VarChar(255)
+  attribute4           String?               @map("attribute_4") @db.VarChar(255)
+  attribute5           String?               @map("attribute_5") @db.VarChar(255)
+  attribute6           String?               @map("attribute_6") @db.VarChar(255)
+  attribute7           String?               @map("attribute_7") @db.VarChar(255)
+  attribute8           String?               @map("attribute_8") @db.VarChar(255)
+  attribute9           String?               @map("attribute_9") @db.VarChar(255)
+  attribute10          String?               @map("attribute_10") @db.VarChar(255)
+  attribute11          String?               @map("attribute_11") @db.VarChar(255)
+  attribute12          String?               @map("attribute_12") @db.VarChar(255)
+  attribute13          String?               @map("attribute_13") @db.VarChar(255)
+  attribute14          String?               @map("attribute_14") @db.VarChar(255)
+  attribute15          String?               @map("attribute_15") @db.VarChar(255)
+  attribute16          String?               @map("attribute_16") @db.VarChar(255)
+  attribute17          String?               @map("attribute_17") @db.VarChar(255)
+  attribute18          String?               @map("attribute_18") @db.VarChar(255)
+  attribute19          String?               @map("attribute_19") @db.VarChar(255)
+  attribute20          String?               @map("attribute_20") @db.VarChar(255)
   active               Boolean               @default(true)
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -290,8 +314,13 @@ model ManufacturerRegistration {
   user             User?                  @relation(fields: [userId], references: [id])
   documents        ManufacturerDocument[]
   products         ManufacturerProduct[]
+  subCategorySupplies ManufacturerSubCategorySupply[]
   galleryEntries   FactoryGalleryEntry[]
   achievements     ManufacturerAchievement[]
+  rfqAssignments   RfqManufacturerAssignment[]
+  quotes           Quote[]
+  subOrders        SubOrder[]
+  purchaseOrders   PurchaseOrder[]
 
   @@index([userId], map: "idx_mfg_reg_user_id")
   @@index([email], map: "idx_mfg_reg_email")
@@ -350,6 +379,24 @@ model ManufacturerProduct {
 
   @@unique([registrationId, productId], map: "uq_mfg_product_registration_product")
   @@map("manufacturer_products")
+}
+
+model ManufacturerSubCategorySupply {
+  id                   BigInt                   @id @default(autoincrement())
+  registrationId       BigInt                   @map("registration_id")
+  category             String                   @db.VarChar(150)
+  subCategory          String                   @map("sub_category") @db.VarChar(150)
+  batchSize            Int                      @map("batch_size")
+  deliveryScheduleDays Int                      @map("delivery_schedule_days")
+  plantCapacity        BigInt                   @default(0) @map("plant_capacity")
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  registration         ManufacturerRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@unique([registrationId, subCategory], map: "uq_mfg_sub_cat_supply")
+  @@index([registrationId], map: "idx_mfg_sub_cat_reg_id")
+  @@index([subCategory], map: "idx_mfg_sub_cat_name")
+  @@map("manufacturer_sub_category_supplies")
 }
 
 model FactoryGalleryEntry {
@@ -503,6 +550,9 @@ model Rfq {
   user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   buyerRegistration      BuyerRegistration? @relation(fields: [buyerRegistrationId], references: [id], onDelete: SetNull)
   lines                  RfqLine[]
+  assignments            RfqManufacturerAssignment[]
+  quotes                 Quote[]
+  masterOrders           MasterOrder[]
 
   @@index([userId], map: "idx_rfqs_user_id")
   @@index([buyerRegistrationId], map: "idx_rfqs_buyer_reg_id")
@@ -535,11 +585,95 @@ model RfqLine {
   updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   rfq            Rfq             @relation(fields: [rfqId], references: [id], onDelete: Cascade)
   product        CatalogProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  quoteLines     QuoteLine[]
 
   @@index([rfqId], map: "idx_rfq_lines_rfq_id")
   @@index([productId], map: "idx_rfq_lines_product_id")
   @@map("rfq_lines")
 }
+
+model RfqManufacturerAssignment {
+  id              BigInt                   @id @default(autoincrement())
+  rfqId           BigInt                   @map("rfq_id")
+  manufacturerId  BigInt                   @map("manufacturer_id")
+  status          String                   @default("ASSIGNED") @db.VarChar(50)
+  sentAt          DateTime                 @default(now()) @map("sent_at") @db.Timestamptz(6)
+  viewedAt        DateTime?                @map("viewed_at") @db.Timestamptz(6)
+  declinedAt      DateTime?                @map("declined_at") @db.Timestamptz(6)
+  declineReason   String?                  @map("decline_reason") @db.VarChar(255)
+  declineRemarks  String?                  @map("decline_remarks") @db.VarChar(1000)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rfq             Rfq                      @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  manufacturer    ManufacturerRegistration @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  quotes          Quote[]
+
+  @@unique([rfqId, manufacturerId], map: "uq_rfq_mfr_assignment")
+  @@index([rfqId], map: "idx_rfq_mfr_rfq_id")
+  @@index([manufacturerId], map: "idx_rfq_mfr_mfr_id")
+  @@index([status], map: "idx_rfq_mfr_status")
+  @@map("rfq_manufacturer_assignments")
+}
+
+model Quote {
+  id              BigInt                     @id @default(autoincrement())
+  quoteNumber     String                     @unique @map("quote_number") @db.VarChar(50)
+  rfqId           BigInt                     @map("rfq_id")
+  manufacturerId  BigInt                     @map("manufacturer_id")
+  assignmentId    BigInt?                    @map("assignment_id")
+  status          String                     @default("SUBMITTED") @db.VarChar(50)
+  totalAmount     Decimal                    @default(0) @map("total_amount") @db.Decimal(14, 2)
+  validUntil      DateTime?                  @map("valid_until") @db.Date
+  deliveryTerms   String?                    @map("delivery_terms") @db.VarChar(255)
+  paymentTerms    String?                    @map("payment_terms") @db.VarChar(255)
+  remarks         String?                    @db.VarChar(1000)
+  submittedAt     DateTime?                  @map("submitted_at") @db.Timestamptz(6)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rfq             Rfq                        @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  manufacturer    ManufacturerRegistration   @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  assignment      RfqManufacturerAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  lines           QuoteLine[]
+  masterOrders    MasterOrder[]
+  subOrders       SubOrder[]
+
+  @@index([rfqId], map: "idx_quotes_rfq_id")
+  @@index([manufacturerId], map: "idx_quotes_mfr_id")
+  @@index([status], map: "idx_quotes_status")
+  @@map("quotes")
+}
+
+model QuoteLine {
+  id                  BigInt          @id @default(autoincrement())
+  quoteId             BigInt          @map("quote_id")
+  rfqLineId           BigInt?         @map("rfq_line_id")
+  productId           String?         @map("product_id") @db.VarChar(50)
+  productName         String          @map("product_name") @db.VarChar(250)
+  responseType        String          @default("QUOTE") @map("response_type") @db.VarChar(50)
+  quotedQuantity      Int             @map("quoted_quantity")
+  unitPrice           Decimal         @default(0) @map("unit_price") @db.Decimal(12, 2)
+  moq                 Int             @default(1) @map("moq")
+  leadTimeDays        Int             @default(14) @map("lead_time_days")
+  taxPercent          Decimal         @default(0) @map("tax_percent") @db.Decimal(5, 2)
+  discountPercent     Decimal         @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  calculatedTotal     Decimal         @default(0) @map("calculated_total") @db.Decimal(14, 2)
+  deliveryTerms       String?         @map("delivery_terms") @db.VarChar(255)
+  cannotSupplyReason  String?         @map("cannot_supply_reason") @db.VarChar(255)
+  cannotSupplyRemarks String?         @map("cannot_supply_remarks") @db.VarChar(1000)
+  remarks             String?         @db.VarChar(500)
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  quote               Quote           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  rfqLine             RfqLine?        @relation(fields: [rfqLineId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId], map: "idx_quote_lines_quote_id")
+  @@index([rfqLineId], map: "idx_quote_lines_rfq_line_id")
+  @@map("quote_lines")
+}
+
 
 model AttributeMaster {
   id                 String              @id @db.VarChar(50)
@@ -799,4 +933,239 @@ model PlatformFeeConfig {
   updatedBy     String?   @default("Admin") @map("updated_by") @db.VarChar(100)
 
   @@map("platform_fee_configs")
+}
+
+model FlywaySchemaHistory {
+  installedRank Int      @id @map("installed_rank")
+  version       String?  @db.VarChar(50)
+  description   String   @db.VarChar(200)
+  type          String   @db.VarChar(20)
+  script        String   @db.VarChar(1000)
+  checksum      Int?
+  installedBy   String   @map("installed_by") @db.VarChar(100)
+  installedOn   DateTime @default(now()) @map("installed_on") @db.Timestamptz(6)
+  executionTime Int      @map("execution_time")
+  success       Boolean
+
+  @@map("flyway_schema_history")
+}
+
+model MasterOrder {
+  id                     BigInt             @id @default(autoincrement())
+  orderNumber            String             @unique @map("order_number") @db.VarChar(50)
+  rfqId                  BigInt?            @map("rfq_id")
+  quoteId                BigInt?            @map("quote_id")
+  buyerId                BigInt?            @map("buyer_id")
+  buyerRegistrationId    BigInt?            @map("buyer_registration_id")
+  customerName           String             @map("customer_name") @db.VarChar(250)
+  customerCode           String?            @map("customer_code") @db.VarChar(50)
+  customerClassification String?            @default("REGULAR") @map("customer_classification") @db.VarChar(50)
+  totalAmount            Decimal            @default(0) @map("total_amount") @db.Decimal(14, 2)
+  totalQuantity          Int                @default(0) @map("total_quantity")
+  status                 String             @default("PENDING_ADMIN_APPROVAL") @db.VarChar(50)
+  adminApprovalStatus    String?            @default("PENDING") @map("admin_approval_status") @db.VarChar(50)
+  advanceRequired        Boolean            @default(false) @map("advance_required")
+  advanceStatus          String?            @default("NOT_REQUIRED") @map("advance_status") @db.VarChar(50)
+  advanceMethod          String?            @default("PERCENTAGE") @map("advance_method") @db.VarChar(50)
+  advancePercentage      Decimal?           @map("advance_percentage") @db.Decimal(5, 2)
+  advanceAmount          Decimal?           @default(0) @map("advance_amount") @db.Decimal(14, 2)
+  advanceReceived        Decimal?           @default(0) @map("advance_received") @db.Decimal(14, 2)
+  advanceOutstanding     Decimal            @default(0) @map("advance_outstanding") @db.Decimal(14, 2)
+  advanceDueDate         DateTime?          @map("advance_due_date") @db.Date
+  advanceNotes           String?            @map("advance_notes") @db.Text
+  isOnHold               Boolean            @default(false) @map("is_on_hold")
+  holdReason             String?            @map("hold_reason") @db.Text
+  holdCount              Int                @default(0) @map("hold_count")
+  holdPlacedAt           DateTime?          @map("hold_placed_at") @db.Timestamptz(6)
+  holdPlacedBy           String?            @map("hold_placed_by") @db.VarChar(100)
+  adminApprovedAt        DateTime?          @map("admin_approved_at") @db.Timestamptz(6)
+  adminApprovedBy        String?            @map("admin_approved_by") @db.VarChar(100)
+  adminRejectionReason   String?            @map("admin_rejection_reason") @db.Text
+  paymentTerms           String?            @map("payment_terms") @db.VarChar(255)
+  orderDate              DateTime           @default(now()) @map("order_date") @db.Date
+  expectedDeliveryDate   DateTime?          @map("expected_delivery_date") @db.Date
+  shippingAddress        String?            @map("shipping_address") @db.Text
+  billingAddress         String?            @map("billing_address") @db.Text
+  buyerGst               String?            @map("buyer_gst") @db.VarChar(50)
+  remarks                String?            @db.Text
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rfq                    Rfq?               @relation(fields: [rfqId], references: [id], onDelete: SetNull)
+  quote                  Quote?             @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  buyer                  User?              @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  buyerRegistration      BuyerRegistration? @relation(fields: [buyerRegistrationId], references: [id], onDelete: SetNull)
+  subOrders              SubOrder[]
+  purchaseOrders         PurchaseOrder[]
+  statusHistory          OrderStatusHistory[]
+  artworks               OrderArtwork[]
+
+  @@index([rfqId], map: "idx_master_orders_rfq_id")
+  @@index([buyerId], map: "idx_master_orders_buyer_id")
+  @@index([status], map: "idx_master_orders_status")
+  @@map("master_orders")
+}
+
+model SubOrder {
+  id                 BigInt                   @id @default(autoincrement())
+  subOrderNumber     String                   @unique @map("sub_order_number") @db.VarChar(50)
+  masterOrderId      BigInt                   @map("master_order_id")
+  manufacturerId     BigInt                   @map("manufacturer_id")
+  quoteId            BigInt?                  @map("quote_id")
+  status             String                   @default("AWAITING_ACCEPTANCE") @db.VarChar(50)
+  productionStatus   String?                  @default("AWAITING_ACCEPTANCE") @map("production_status") @db.VarChar(50)
+  totalAmount        Decimal                  @default(0) @map("total_amount") @db.Decimal(14, 2)
+  totalQuantity      Int                      @default(0) @map("total_quantity")
+  leadTimeDays       Int                      @default(14) @map("lead_time_days")
+  deliveryDate       DateTime?                @map("delivery_date") @db.Date
+  shippingAddress    String?                  @map("shipping_address") @db.Text
+  billingAddress     String?                  @map("billing_address") @db.Text
+  rejectionReason    String?                  @map("rejection_reason") @db.VarChar(255)
+  rejectionRemarks   String?                  @map("rejection_remarks") @db.Text
+  acceptedAt         DateTime?                @map("accepted_at") @db.Timestamptz(6)
+  sourceQuoteRef     String?                  @map("source_quote_ref") @db.VarChar(50)
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  masterOrder        MasterOrder              @relation(fields: [masterOrderId], references: [id], onDelete: Cascade)
+  manufacturer       ManufacturerRegistration @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  quote              Quote?                   @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  lines              SubOrderLine[]
+  purchaseOrder      PurchaseOrder?
+  statusHistory      OrderStatusHistory[]
+  artworks           OrderArtwork[]
+
+  @@index([masterOrderId], map: "idx_sub_orders_master_order_id")
+  @@index([manufacturerId], map: "idx_sub_orders_manufacturer_id")
+  @@index([status], map: "idx_sub_orders_status")
+  @@index([productionStatus], map: "idx_sub_orders_production_status")
+  @@map("sub_orders")
+}
+
+model SubOrderLine {
+  id             BigInt    @id @default(autoincrement())
+  subOrderId     BigInt    @map("sub_order_id")
+  productId      String?   @map("product_id") @db.VarChar(50)
+  productName    String    @map("product_name") @db.VarChar(250)
+  dosageForm     String?   @map("dosage_form") @db.VarChar(100)
+  packSize       String?   @map("pack_size") @db.VarChar(100)
+  quantity       Int
+  uom            String?   @default("Units") @db.VarChar(50)
+  unitPrice      Decimal   @default(0) @map("unit_price") @db.Decimal(12, 2)
+  lineTotal      Decimal   @default(0) @map("line_total") @db.Decimal(14, 2)
+  leadTimeDays   Int?      @default(14) @map("lead_time_days")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  subOrder       SubOrder  @relation(fields: [subOrderId], references: [id], onDelete: Cascade)
+
+  @@index([subOrderId], map: "idx_sub_order_lines_sub_order_id")
+  @@map("sub_order_lines")
+}
+
+model PurchaseOrder {
+  id             BigInt                   @id @default(autoincrement())
+  poNumber       String                   @unique @map("po_number") @db.VarChar(50)
+  subOrderId     BigInt                   @unique @map("sub_order_id")
+  masterOrderId  BigInt                   @map("master_order_id")
+  manufacturerId BigInt                   @map("manufacturer_id")
+  status         String                   @default("ISSUED") @db.VarChar(50)
+  orderDate      DateTime                 @default(now()) @map("order_date") @db.Date
+  deliveryDate   DateTime?                @map("delivery_date") @db.Date
+  shippingAddress String?                 @map("shipping_address") @db.Text
+  billingAddress String?                  @map("billing_address") @db.Text
+  buyerName      String?                  @map("buyer_name") @db.VarChar(250)
+  buyerGst       String?                  @map("buyer_gst") @db.VarChar(50)
+  mfgName        String?                  @map("mfg_name") @db.VarChar(250)
+  mfgGst         String?                  @map("mfg_gst") @db.VarChar(50)
+  totalAmount    Decimal                  @default(0) @map("total_amount") @db.Decimal(14, 2)
+  totalQuantity  Int                      @default(0) @map("total_quantity")
+  adminApprovalStatus String?                  @default("PENDING") @map("admin_approval_status") @db.VarChar(50)
+  isOnHold            Boolean                  @default(false) @map("is_on_hold")
+  holdReason          String?                  @map("hold_reason") @db.Text
+  paymentTerms   String?                  @map("payment_terms") @db.VarChar(255)
+  deliveryTerms  String?                  @map("delivery_terms") @db.VarChar(255)
+  sourceQuoteRef String?                  @map("source_quote_ref") @db.VarChar(50)
+  pdfUrl         String?                  @map("pdf_url") @db.VarChar(500)
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  subOrder       SubOrder                 @relation(fields: [subOrderId], references: [id], onDelete: Cascade)
+  masterOrder    MasterOrder              @relation(fields: [masterOrderId], references: [id], onDelete: Cascade)
+  manufacturer   ManufacturerRegistration @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  lines          PurchaseOrderLine[]
+
+  @@index([subOrderId], map: "idx_purchase_orders_sub_order_id")
+  @@index([manufacturerId], map: "idx_purchase_orders_mfr_id")
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              BigInt        @id @default(autoincrement())
+  purchaseOrderId BigInt        @map("purchase_order_id")
+  productId       String?       @map("product_id") @db.VarChar(50)
+  productName     String        @map("product_name") @db.VarChar(250)
+  dosageForm      String?       @map("dosage_form") @db.VarChar(100)
+  quantity        Int
+  uom             String?       @default("Units") @db.VarChar(50)
+  unitPrice       Decimal       @default(0) @map("unit_price") @db.Decimal(12, 2)
+  lineTotal       Decimal       @default(0) @map("line_total") @db.Decimal(14, 2)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId], map: "idx_po_lines_po_id")
+  @@map("purchase_order_lines")
+}
+
+model OrderStatusHistory {
+  id             BigInt       @id @default(autoincrement())
+  subOrderId     BigInt?      @map("sub_order_id")
+  masterOrderId  BigInt?      @map("master_order_id")
+  previousStatus String       @map("previous_status") @db.VarChar(50)
+  newStatus      String       @map("new_status") @db.VarChar(50)
+  changedBy      String       @map("changed_by") @db.VarChar(100)
+  changedAt      DateTime     @default(now()) @map("changed_at") @db.Timestamptz(6)
+  remarks        String?      @db.Text
+
+  subOrder       SubOrder?    @relation(fields: [subOrderId], references: [id], onDelete: Cascade)
+  masterOrder    MasterOrder? @relation(fields: [masterOrderId], references: [id], onDelete: Cascade)
+
+  @@index([subOrderId], map: "idx_order_status_history_sub_order_id")
+  @@map("order_status_history")
+}
+
+model OrderArtwork {
+  id              BigInt       @id @default(autoincrement())
+  masterOrderId   BigInt       @map("master_order_id")
+  subOrderId      BigInt?      @map("sub_order_id")
+  productId       String       @map("product_id") @db.VarChar(100)
+  productName     String?      @map("product_name") @db.VarChar(250)
+  submissionType  String       @default("UPLOAD") @map("submission_type") @db.VarChar(50)
+  fileName        String?      @map("file_name") @db.VarChar(255)
+  fileType        String?      @map("file_type") @db.VarChar(100)
+  fileSize        String?      @map("file_size") @db.VarChar(50)
+  fileUrl         String?      @map("file_url") @db.VarChar(1000)
+  storageKey      String?      @map("storage_key") @db.VarChar(500)
+  externalUrl     String?      @map("external_url") @db.VarChar(1000)
+  instructions    String?      @db.Text
+  status          String       @default("SUBMITTED") @db.VarChar(50)
+  reviewNotes     String?      @map("review_notes") @db.Text
+  reviewedBy      String?      @map("reviewed_by") @db.VarChar(100)
+  reviewedAt      DateTime?    @map("reviewed_at") @db.Timestamptz(6)
+  uploadedById    BigInt?      @map("uploaded_by_id")
+  uploadedByName  String?      @map("uploaded_by_name") @db.VarChar(150)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  masterOrder     MasterOrder  @relation(fields: [masterOrderId], references: [id], onDelete: Cascade)
+  subOrder        SubOrder?    @relation(fields: [subOrderId], references: [id], onDelete: SetNull)
+  uploadedBy      User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([masterOrderId], map: "idx_order_artwork_master_order_id")
+  @@index([subOrderId], map: "idx_order_artwork_sub_order_id")
+  @@index([productId], map: "idx_order_artwork_product_id")
+  @@index([status], map: "idx_order_artwork_status")
+  @@map("order_artwork")
 }

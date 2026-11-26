@@ -99,4 +99,17 @@ export class RfqController {
   ) {
     return this.service.matchManufacturers(Number(id), Number(user.id), user);
   }
+
+  @Get(':id/quotes')
+  @ApiOperation({
+    summary: 'List manufacturer quotes submitted for an RFQ',
+    description: 'Returns all manufacturer quotes submitted for this buyer RFQ from PostgreSQL.',
+  })
+  @ApiParam({ name: 'id', description: 'RFQ numeric ID' })
+  getQuotesForRfq(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.getQuotesForRfq(Number(id), Number(user.id), user);
+  }
 }

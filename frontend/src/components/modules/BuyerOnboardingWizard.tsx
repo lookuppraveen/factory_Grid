@@ -1174,15 +1174,17 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
                     {companyInfo.businessType === 'PCD Franchise' ? 'Address Information' : 'Business & Address Details'}
                   </h2>
                   <div style={{ fontSize: 12.5, color: isPublicPage ? '#94A3B8' : '#64748B', marginTop: 2 }}>
-                    {companyInfo.businessType === 'PCD Franchise' ? 'Provide registered billing and shipping delivery addresses' : 'Provide business locations & customer-type parameters'}
+                    {companyInfo.businessType === 'PCD Franchise' || companyInfo.businessType === 'Distributor'
+                      ? 'Provide registered billing and shipping delivery addresses'
+                      : 'Provide business locations & customer-type parameters'}
                   </div>
                 </div>
 
                 {/* Address Section */}
                 <div style={{
-                  marginBottom: companyInfo.businessType === 'PCD Franchise' ? 0 : 24,
-                  paddingBottom: companyInfo.businessType === 'PCD Franchise' ? 0 : 20,
-                  borderBottom: companyInfo.businessType === 'PCD Franchise' ? 'none' : (isPublicPage ? '1px solid #1E293B' : '1px solid #F1F5F9')
+                  marginBottom: (companyInfo.businessType === 'PCD Franchise' || companyInfo.businessType === 'Distributor') ? 0 : 24,
+                  paddingBottom: (companyInfo.businessType === 'PCD Franchise' || companyInfo.businessType === 'Distributor') ? 0 : 20,
+                  borderBottom: (companyInfo.businessType === 'PCD Franchise' || companyInfo.businessType === 'Distributor') ? 'none' : (isPublicPage ? '1px solid #1E293B' : '1px solid #F1F5F9')
                 }}>
                   {companyInfo.businessType !== 'PCD Franchise' && (
                     <div style={{ fontSize: 13, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A', marginBottom: 12 }}>Address Information</div>
@@ -1216,7 +1218,7 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
                 </div>
 
                 {/* Customer Type Specific Fields */}
-                {companyInfo.businessType !== 'PCD Franchise' && (
+                {companyInfo.businessType !== 'PCD Franchise' && companyInfo.businessType !== 'Distributor' && (
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: isPublicPage ? '#FFF' : '#0F172A', marginBottom: 12 }}>
                       Customer Type Parameters ({companyInfo.businessType})
@@ -1226,13 +1228,6 @@ export const BuyerOnboardingWizard: React.FC<BuyerOnboardingWizardProps> = ({
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, background: isPublicPage ? '#1E293B' : '#F8FAFC', padding: 16, borderRadius: 10, border: '1px solid #CBD5E1' }}>
                         <div><label style={{ fontSize: 11.5, fontWeight: 700 }}>Brand Name</label><input type="text" value={tpmDetails.brandName} onChange={e => setTpmDetails({ ...tpmDetails, brandName: e.target.value })} style={{ width: '100%', height: 34, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5 }} /></div>
                         <div><label style={{ fontSize: 11.5, fontWeight: 700 }}>Packaging Requirements</label><input type="text" value={tpmDetails.packagingRequirements} onChange={e => setTpmDetails({ ...tpmDetails, packagingRequirements: e.target.value })} style={{ width: '100%', height: 34, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5 }} /></div>
-                      </div>
-                    )}
-
-                    {companyInfo.businessType === 'Distributor' && (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, background: isPublicPage ? '#1E293B' : '#F8FAFC', padding: 16, borderRadius: 10, border: '1px solid #CBD5E1' }}>
-                        <div><label style={{ fontSize: 11.5, fontWeight: 700 }}>Distribution Territory</label><input type="text" value={distributorDetails.distributionTerritory} onChange={e => setDistributorDetails({ ...distributorDetails, distributionTerritory: e.target.value })} style={{ width: '100%', height: 34, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5 }} /></div>
-                        <div><label style={{ fontSize: 11.5, fontWeight: 700 }}>Sales Channel</label><input type="text" value={distributorDetails.salesChannel} onChange={e => setDistributorDetails({ ...distributorDetails, salesChannel: e.target.value })} style={{ width: '100%', height: 34, padding: '0 10px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5 }} /></div>
                       </div>
                     )}
 

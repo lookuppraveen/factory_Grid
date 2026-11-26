@@ -8,6 +8,13 @@ import {
 import { ProductUom } from '../../types';
 import { PaginationControl } from '../common/PaginationControl';
 import { usePagination } from '../../hooks/usePagination';
+import {
+  MasterBreadcrumbs,
+  MasterPageHeader,
+  MasterStatsStrip,
+  MasterStatusBadge,
+  TableActionGroup
+} from '../common/MasterComponents';
 
 export const ProductUomModule: React.FC = () => {
   const {
@@ -18,7 +25,8 @@ export const ProductUomModule: React.FC = () => {
     removeProductUom,
     toggleProductUomStatus,
     refreshProductUoms,
-    currentRole
+    currentRole,
+    setActiveTab
   } = useApp();
 
   const isAdmin = currentRole === 'ADMIN' || (currentRole as any) === 'ROLE_ADMIN';
@@ -296,115 +304,36 @@ export const ProductUomModule: React.FC = () => {
         </div>
       )}
 
-      {/* ── Page Header ───────────────────────────────────────────── */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        flexWrap: 'wrap',
-        gap: 16
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 44,
-            height: 44,
-            borderRadius: 10,
-            background: '#F0FDFA',
-            border: '1px solid #CCFBF1',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#0F766E'
-          }}>
-            <Layers size={22} />
-          </div>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
-              Product UOM Management
-            </h1>
-            <p style={{ margin: '3px 0 0 0', fontSize: 13, color: '#64748B', fontWeight: 500 }}>
-              Base inventory units, commercial packaging multipliers, and procurement order unit definitions.
-            </p>
-          </div>
-        </div>
+      {/* ── Breadcrumbs ── */}
+      <MasterBreadcrumbs
+        pageTitle="Product UOM Management"
+        onBack={() => setActiveTab?.('settings')}
+      />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {canEdit && (
-            <button
-              onClick={handleOpenAddModal}
-              style={{
-                padding: '9px 16px',
-                borderRadius: 8,
-                background: '#0F766E',
-                color: '#FFFFFF',
-                border: 'none',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
-              }}
-            >
-              <Plus size={15} /> Add UOM Mapping
-            </button>
-          )}
-        </div>
-      </div>
+      {/* ── Page Header ── */}
+      <MasterPageHeader
+        icon={Layers}
+        domainLabel="PACKAGING & UNIT CONVERSIONS"
+        title="Product UOM Management"
+        description="Base inventory units, commercial packaging multipliers, and procurement order unit definitions."
+        primaryAction={canEdit ? {
+          label: "Add UOM Mapping",
+          icon: Plus,
+          onClick: handleOpenAddModal
+        } : undefined}
+      />
 
-      {/* ── Compact Statistics Row ─────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
-            <Layers size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>UOM Mappings</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#0F172A' }}>{stats.total}</div>
-          </div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F0FDF4', border: '1px solid #DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#15803D' }}>
-            <CheckCircle2 size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Active Units</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#15803D' }}>{stats.active}</div>
-          </div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1D4ED8' }}>
-            <Check size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Base Units</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#1D4ED8' }}>{stats.baseUnits}</div>
-          </div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F0FDFA', border: '1px solid #CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F766E' }}>
-            <Package size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Orderable Units</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#0F766E' }}>{stats.orderUnits}</div>
-          </div>
-        </div>
-
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
-            <Hash size={17} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Products Covered</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#0F172A' }}>{stats.uniqueProducts}</div>
-          </div>
-        </div>
-      </div>
+      {/* ── Compact Statistics Strip ── */}
+      <MasterStatsStrip
+        stats={[
+          { label: 'UOM MAPPINGS', value: stats.total },
+          { label: 'ACTIVE UNITS', value: stats.active, color: '#15803D' },
+          { label: 'BASE UNITS', value: stats.baseUnits, color: '#1D4ED8' },
+          { label: 'ORDERABLE UNITS', value: stats.orderUnits, color: '#0F766E' },
+          { label: 'PRODUCTS COVERED', value: stats.uniqueProducts }
+        ]}
+        modelTag="Canonical Data Model: PRODUCT_UOM"
+      />
 
       {/* ── Search & Filter Strip ──────────────────────────────────── */}
       <div style={{
@@ -535,16 +464,13 @@ export const ProductUomModule: React.FC = () => {
                         <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 13 }}>
                           {prod?.name || prod?.product_name || uom.product_id}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace' }}>
-                            {prod?.product_code || prod?.code || (prod as any)?.productCode || uom.product_id}
-                          </span>
-                          {prod?.category && (
+                        {prod?.category && (
+                          <div style={{ marginTop: 2 }}>
                             <span style={{ fontSize: 10, color: '#64748B', background: '#F1F5F9', padding: '1px 5px', borderRadius: 3 }}>
                               {prod.category}
                             </span>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </td>
 
                       {/* UOM Name */}
@@ -585,177 +511,18 @@ export const ProductUomModule: React.FC = () => {
 
                       {/* Status */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                        <span style={{
-                          fontSize: 10.5, fontWeight: 800, padding: '3px 7px', borderRadius: 4,
-                          background: isActive ? '#DCFCE7' : '#FEE2E2',
-                          color: isActive ? '#15803D' : '#B91C1C',
-                          border: isActive ? '1px solid #86EFAC' : '1px solid #FCA5A5'
-                        }}>
-                          {isActive ? 'ACTIVE' : 'INACTIVE'}
-                        </span>
+                        <MasterStatusBadge status={isActive} />
                       </td>
 
                       {/* Actions */}
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        <div style={{ position: 'relative', display: 'inline-block' }} data-actions-menu={`uom_${uomId}`}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenActionMenuId(openActionMenuId === `uom_${uomId}` ? null : `uom_${uomId}`);
-                            }}
-                            style={{
-                              padding: '4px 8px',
-                              borderRadius: 6,
-                              background: openActionMenuId === `uom_${uomId}` ? '#F1F5F9' : '#FFFFFF',
-                              border: '1px solid #CBD5E1',
-                              color: '#334155',
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 3
-                            }}
-                            title="Actions"
-                          >
-                            <span>Actions</span>
-                            <MoreVertical size={13} style={{ color: '#64748B' }} />
-                          </button>
-
-                          {openActionMenuId === `uom_${uomId}` && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                right: 0,
-                                top: 'calc(100% + 4px)',
-                                zIndex: 1000,
-                                minWidth: 160,
-                                background: '#FFFFFF',
-                                border: '1px solid #E2E8F0',
-                                borderRadius: 8,
-                                boxShadow: '0 10px 25px -5px rgba(15,23,42,0.15)',
-                                padding: '4px 0',
-                                textAlign: 'left'
-                              }}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenActionMenuId(null);
-                                  setSelectedUomForDetail(uom);
-                                }}
-                                style={{
-                                  width: '100%',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 8,
-                                  padding: '7px 14px',
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  color: '#334155',
-                                  background: 'transparent',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  textAlign: 'left'
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                              >
-                                <Eye size={13} style={{ color: '#0F766E' }} />
-                                <span>View Details</span>
-                              </button>
-
-                              {canEdit && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      handleOpenEditModal(uom);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 8,
-                                      padding: '7px 14px',
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      color: '#334155',
-                                      background: 'transparent',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      textAlign: 'left'
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                  >
-                                    <Edit3 size={13} style={{ color: '#0F766E' }} />
-                                    <span>Edit</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      handleToggleStatus(uom);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 8,
-                                      padding: '7px 14px',
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      color: '#334155',
-                                      background: 'transparent',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      textAlign: 'left'
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                  >
-                                    <Power size={13} style={{ color: isActive ? '#D97706' : '#16A34A' }} />
-                                    <span>{isActive ? 'Deactivate' : 'Activate'}</span>
-                                  </button>
-
-                                  <div style={{ height: 1, background: '#F1F5F9', margin: '4px 0' }} />
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenActionMenuId(null);
-                                      setDeleteTarget(uom);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 8,
-                                      padding: '7px 14px',
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      color: '#DC2626',
-                                      background: 'transparent',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      textAlign: 'left'
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                  >
-                                    <Trash2 size={13} style={{ color: '#DC2626' }} />
-                                    <span>Delete</span>
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                        <TableActionGroup
+                          onView={() => setSelectedUomForDetail(uom)}
+                          onEdit={canEdit ? () => handleOpenEditModal(uom) : undefined}
+                          status={isActive}
+                          onToggleStatus={canEdit ? () => handleToggleStatus(uom) : undefined}
+                          onDelete={canEdit ? () => setDeleteTarget(uom) : undefined}
+                        />
                       </td>
                     </tr>
                   );
@@ -831,11 +598,10 @@ export const ProductUomModule: React.FC = () => {
                   <option value="">Select a Product...</option>
                   {(products || []).map(p => {
                     const pid = p.id || p.product_id;
-                    const pcode = p.product_code || p.code || (p as any).productCode;
                     const pname = p.name || p.product_name;
                     return (
                       <option key={pid} value={pid}>
-                        {pcode} — {pname}
+                        {pname}
                       </option>
                     );
                   })}
@@ -980,9 +746,6 @@ export const ProductUomModule: React.FC = () => {
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Target Product</div>
                       <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', marginTop: 2 }}>
                         {prod?.name || prod?.product_name || selectedUomForDetail.product_id}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#0F766E', fontFamily: 'monospace', marginTop: 2, fontWeight: 700 }}>
-                        {prod?.product_code || prod?.code || selectedUomForDetail.product_id}
                       </div>
                     </div>
 

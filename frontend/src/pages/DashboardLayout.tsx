@@ -1399,36 +1399,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
             {/* Enterprise Role Switcher */}
             <RoleSwitcherDropdown />
 
-            {/* One-Click Demo Reset State Button */}
-            <button
-              id="reset-demo-state-btn"
-              onClick={() => {
-                if (window.confirm('Reset demo state to clean baseline?\n\nThis will restore fresh customer classifications and clear demo-created RFQs/Quotes so you can re-run the presentation cleanly.')) {
-                  resetDemoState();
-                }
-              }}
-              title="Reset Demo State: Clear temporary demo RFQs/orders and restore baseline customers for repeat presentation"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: isMobile ? '6px' : '5px 10px',
-                borderRadius: 8,
-                fontSize: 11.5,
-                fontWeight: 600,
-                background: 'rgba(239, 68, 68, 0.08)',
-                border: '1px solid rgba(239, 68, 68, 0.25)',
-                color: '#DC2626',
-                cursor: 'pointer',
-                transition: 'all 120ms ease',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
-            >
-              <RotateCcw size={12} />
-              {!isMobile && <span>Reset Demo</span>}
-            </button>
-
             {/* Notification Bell */}
             <button
               onClick={() => handleTabClick('notifications')}

@@ -20,7 +20,7 @@ import {
   mockBuyerOnboardings, mockManufacturerOnboardings, mockShipments,
   mockCRMLeads, mockPaymentTransactions, mockAuditLogs,
   mockCustomerVerifications,
-  mockCategories, mockSubCategories, mockSubSubCategories, mockCategoryMargins, mockMarginRules,
+  mockSubCategories, mockSubSubCategories, mockMarginRules,
   mockInternalPriceList,
   mockProductTypes, mockBrands, mockUnifiedCategories,
   mockAttributeMasters, mockProductAttributes, mockCategoryAttributes, mockCustomerSegments,
@@ -1455,7 +1455,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (liveProds && Array.isArray(liveProds) && liveProds.length > 0) {
           setProducts(liveProds);
         }
-        if (liveCats?.categories && Array.isArray(liveCats.categories) && liveCats.categories.length > 0) {
+        if (liveCats?.categories && Array.isArray(liveCats.categories)) {
           setUnifiedCategories(liveCats.categories);
         }
         if (livePrices && Array.isArray(livePrices) && livePrices.length > 0) {
@@ -1481,7 +1481,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // Hydrate Margin Engine from PostgreSQL database
-        if (liveCatMargins && Array.isArray(liveCatMargins) && liveCatMargins.length > 0) {
+        if (liveCatMargins && Array.isArray(liveCatMargins)) {
           const mappedCats: CategoryMargin[] = liveCatMargins.map(c => ({
             categoryId: c.categoryId,
             categoryName: c.categoryName,
@@ -1613,20 +1613,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ── CATEGORY MASTER & MARGIN ENGINE STATE ─────────────────────────────
+  // Backed by real PostgreSQL data. No mock/static categories or margins.
   const [categories, setCategories] = useState<CategoryMaster[]>(() => {
     try {
       const saved = localStorage.getItem('factorygrid_categories');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Version guard: if cached categories don't include the new main categories, reset to fresh data
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some((c: any) => c.id === 'cat_drugs')) {
-          return parsed;
+        if (Array.isArray(parsed) && parsed.some((c: any) => c.id === 'cat_drugs')) {
+          localStorage.removeItem('factorygrid_categories');
+          return [];
         }
-        // Clear stale cache so new mockCategories are persisted
-        localStorage.removeItem('factorygrid_categories');
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
-    return mockCategories;
+    return [];
   });
 
   const [categoryMargins, setCategoryMargins] = useState<CategoryMargin[]>(() => {
@@ -1634,14 +1634,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('factorygrid_margins');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Version guard: reset if stale (missing new category IDs)
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some((m: any) => m.categoryId === 'cat_drugs')) {
-          return parsed;
+        if (Array.isArray(parsed) && parsed.some((m: any) => m.categoryId === 'cat_drugs')) {
+          localStorage.removeItem('factorygrid_margins');
+          return [];
         }
-        localStorage.removeItem('factorygrid_margins');
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
-    return mockCategoryMargins;
+    return [];
   });
 
   // ── MARGIN ENGINE STATE (MULTI-TIER RULES & PRIORITY RESOLUTION) ────────────
@@ -2071,10 +2071,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateCategoryMargin = (categoryIdOrName: string, marginValue: number, marginType: MarginType = 'PERCENTAGE') => {
     const target = categoryIdOrName.toLowerCase().trim();
-    const matchedCat = categories.find(c => c.id.toLowerCase() === target || c.name.toLowerCase() === target);
-    const catId = matchedCat?.id || `cat_${target.replace(/\s+/g, '_')}`;
-    const catName = matchedCat?.name || categoryIdOrName;
-    const catCode = matchedCat?.code || `CAT-${target.substring(0, 3).toUpperCase()}`;
+    const sourceList = (unifiedCategories && unifiedCategories.length > 0) ? unifiedCategories : categories;
+    const matchedCat = sourceList.find(
+      c => (c.category_id && c.category_id.toLowerCase() === target) ||
+           (c.id && c.id.toLowerCase() === target) ||
+           (c.category && c.category.toLowerCase() === target) ||
+           (c.name && c.name.toLowerCase() === target)
+    );
+    const catId = matchedCat?.category_id || matchedCat?.id || target;
+    const catName = matchedCat?.category || matchedCat?.name || categoryIdOrName;
+    const catCode = matchedCat?.category_code || matchedCat?.code || `CAT-${target.substring(0, 3).toUpperCase()}`;
+
+    // Persist directly to PostgreSQL via backend API
+    marginApi.saveCategoryMargin(catId, marginValue, marginType, 'ACTIVE', catName).catch(err => {
+      console.warn('Could not persist category margin to backend:', err);
+    });
 
     setCategoryMargins(prev => {
       const exists = prev.some(m => m.categoryId.toLowerCase() === target || m.categoryName.toLowerCase() === target);
@@ -2508,37 +2519,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('fg_rfqs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const mockMap = new Map(mockRFQs.map(r => [r.id, r]));
-          const mockNumMap = new Map(mockRFQs.map(r => [r.rfqNumber, r]));
-
-          const sanitized = parsed.map((r: any) => {
-            const mock = mockMap.get(r.id) || mockNumMap.get(r.rfqNumber);
-            if (mock) {
-              return {
-                ...r,
-                id: mock.id,
-                rfqNumber: mock.rfqNumber,
-                deadlineDate: mock.deadlineDate,
-                quoteStatus: mock.quoteStatus,
-                lines: mock.lines
-              };
-            }
-            return r;
-          });
-
-          const validList = sanitized.filter((r: any) => {
-            const mock = mockMap.get(r.id);
-            return mock || new Date(r.deadlineDate) > new Date();
-          });
-
-          const savedIds = new Set(validList.map((r: any) => r.id || r.rfqNumber));
-          const missingMocks = mockRFQs.filter(r => !savedIds.has(r.id) && !savedIds.has(r.rfqNumber));
-          return [...validList, ...missingMocks];
+        if (Array.isArray(parsed)) {
+          return parsed;
         }
       }
     } catch (e) { }
-    return mockRFQs;
+    return [];
   });
 
   const [quotes, setQuotes] = useState<ManufacturerQuote[]>(() => {
@@ -2546,17 +2532,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('fg_quotes');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const mockQuoteIds = new Set(mockQuotes.map(q => q.id));
-          const filtered = parsed.filter((q: any) => !mockQuoteIds.has(q.id));
-          return [...mockQuotes, ...filtered].map(q => ({
+        if (Array.isArray(parsed)) {
+          return parsed.map((q: any) => ({
             ...q,
             quoteLines: Array.isArray(q?.quoteLines) ? q.quoteLines : []
           }));
         }
       }
     } catch (e) { }
-    return mockQuotes;
+    return [];
   });
 
   // Declined RFQs state
@@ -2698,13 +2682,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const savedIds = new Set(parsed.map((o: any) => o.id || o.orderNumber));
-          const missingMocks = mockMasterOrders.filter(mo => !savedIds.has(mo.id) && !savedIds.has(mo.orderNumber));
-          return [...parsed.map(normalizeOrderAdvance), ...missingMocks.map(normalizeOrderAdvance)];
+          const nonMock = parsed.filter((o: any) => !String(o.id || '').startsWith('mo-') && !String(o.orderNumber || '').includes('6101') && !String(o.orderNumber || '').includes('5899') && !String(o.orderNumber || '').includes('ORD-2024'));
+          return nonMock.map(normalizeOrderAdvance);
         }
       }
     } catch (e) { }
-    return mockMasterOrders.map(normalizeOrderAdvance);
+    return [];
   });
 
   useEffect(() => {
@@ -6081,10 +6064,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(res => { if (Array.isArray(res)) setCustomerVerifications(res); })
       .catch(() => {});
 
-    // 2. Reset RFQs, Orders, and Quotes to pristine initial mockData
-    setRfqs(mockRFQs);
-    setOrders(mockMasterOrders);
-    setQuotes(mockQuotes);
+    // 2. Clear in-memory RFQs, Quotes and Orders (Real DB flow is source of truth)
+    setRfqs([]);
+    setOrders([]);
+    setQuotes([]);
 
     // 3. Reset Active Buyer Persona to Normal
     setActiveBuyerAccountState('NORMAL');
@@ -6124,9 +6107,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.removeItem('fg_quotes');
         localStorage.removeItem('fg_custom_verifications');
         localStorage.removeItem('fg_invoices');
-        localStorage.setItem('fg_rfqs', JSON.stringify(mockRFQs));
-        localStorage.setItem('fg_orders', JSON.stringify(mockMasterOrders));
-        localStorage.setItem('fg_quotes', JSON.stringify(mockQuotes));
+        localStorage.removeItem('fg_orders');
       } catch (e) {}
     }
 

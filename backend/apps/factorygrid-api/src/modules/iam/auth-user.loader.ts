@@ -8,9 +8,15 @@ import { isActive, isLocked, roleNames, withRoles } from './user-profile';
 export class PrismaAuthUserLoader implements AuthUserLoader {
   constructor(private readonly prisma: PrismaService) {}
 
-  async load(username: string): Promise<AuthUser | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { username },
+  async load(username: string | number): Promise<AuthUser | null> {
+    const identifier = String(username ?? '').trim();
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { username: { equals: identifier, mode: 'insensitive' } },
+          { email: { equals: identifier, mode: 'insensitive' } },
+        ],
+      },
       include: {
         ...withRoles,
         buyerRegistrations: { select: { id: true } },
@@ -22,11 +28,11 @@ export class PrismaAuthUserLoader implements AuthUserLoader {
     }
     const isRegisteredBuyer =
       roleNames(user).includes('ROLE_BUYER') &&
-      user.buyerRegistrations.length > 0 &&
+      (user.buyerRegistrations?.length ?? 0) > 0 &&
       !['SUSPENDED', 'BANNED', 'DELETED'].includes(user.accountStatus.toUpperCase());
     const isRegisteredMfg =
       (roleNames(user).includes('ROLE_MANUFACTURER') || roleNames(user).includes('ROLE_SUPPLIER')) &&
-      user.manufacturerRegistrations.length > 0 &&
+      (user.manufacturerRegistrations?.length ?? 0) > 0 &&
       !['SUSPENDED', 'BANNED', 'DELETED'].includes(user.accountStatus.toUpperCase());
 
     if (!isActive(user) && !isRegisteredBuyer && !isRegisteredMfg) {

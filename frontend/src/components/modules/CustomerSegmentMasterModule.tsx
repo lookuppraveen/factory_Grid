@@ -7,6 +7,13 @@ import {
 import { CustomerSegment, LifecycleStatus } from '../../types';
 import { PaginationControl } from '../common/PaginationControl';
 import { usePagination } from '../../hooks/usePagination';
+import {
+  MasterBreadcrumbs,
+  MasterPageHeader,
+  MasterStatsStrip,
+  MasterStatusBadge,
+  TableActionGroup
+} from '../common/MasterComponents';
 
 export const CustomerSegmentMasterModule: React.FC = () => {
   const {
@@ -15,7 +22,8 @@ export const CustomerSegmentMasterModule: React.FC = () => {
     updateCustomerSegment,
     removeCustomerSegment,
     addAuditLog,
-    currentRole
+    currentRole,
+    setActiveTab
   } = useApp();
 
   const canEdit = currentRole === 'ADMIN';
@@ -163,64 +171,48 @@ export const CustomerSegmentMasterModule: React.FC = () => {
     }
   };
 
+  const handleToggleStatus = (seg: CustomerSegment) => {
+    const id = seg.customer_segment_id || seg.id || '';
+    const current = seg.lifecycle_status || (seg.is_active ? 'ACTIVE' : 'INACTIVE');
+    const nextStatus = current === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    updateCustomerSegment(id, {
+      lifecycle_status: nextStatus as LifecycleStatus,
+      is_active: nextStatus === 'ACTIVE',
+      updated_at: new Date().toISOString()
+    });
+    addAuditLog('TOGGLE_CUSTOMER_SEGMENT_STATUS', `Toggled customer segment ${seg.segment_code} to ${nextStatus}`);
+  };
+
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1400, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: '#F0FDFA', border: '1px solid #99F6E4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={22} style={{ color: '#0F766E' }} />
-            </div>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em' }}>
-                Customer Segment Master
-              </h1>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748B' }}>
-                Client Entity: <code>CUSTOMER_SEGMENT</code> · Manage commercial customer segments for contract and tiered pricing
-              </p>
-            </div>
-          </div>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 40 }}>
+      {/* ── Breadcrumbs Bar ── */}
+      <MasterBreadcrumbs
+        pageTitle="Customer Segment Master"
+        onBack={() => setActiveTab?.('settings')}
+      />
 
-        {canEdit && (
-          <button
-            onClick={handleOpenAddModal}
-            style={{
-              padding: '10px 18px',
-              borderRadius: 8,
-              background: '#0F766E',
-              color: '#FFFFFF',
-              border: 'none',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              boxShadow: '0 2px 4px rgba(15,118,110,0.2)'
-            }}
-          >
-            <Plus size={16} /> Add Customer Segment
-          </button>
-        )}
-      </div>
+      {/* ── Enterprise Page Header ── */}
+      <MasterPageHeader
+        icon={Users}
+        domainLabel="COMMERCIAL PRICING & SEGMENTS"
+        title="Customer Segment Master"
+        description="Manage commercial customer segments for contract, tiered, and institutional pricing."
+        primaryAction={canEdit ? {
+          label: "Add Customer Segment",
+          icon: Plus,
+          onClick: handleOpenAddModal
+        } : undefined}
+      />
 
-      {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>TOTAL SEGMENTS</span>
-          <div style={{ fontSize: 24, fontWeight: 900, color: '#0F172A', marginTop: 4 }}>{totalCount}</div>
-        </div>
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase' }}>ACTIVE SEGMENTS</span>
-          <div style={{ fontSize: 24, fontWeight: 900, color: '#0F766E', marginTop: 4 }}>{activeCount}</div>
-        </div>
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 18, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' }}>INACTIVE SEGMENTS</span>
-          <div style={{ fontSize: 24, fontWeight: 900, color: '#475569', marginTop: 4 }}>{inactiveCount}</div>
-        </div>
-      </div>
+      {/* ── Compact Statistics Strip ── */}
+      <MasterStatsStrip
+        stats={[
+          { label: 'TOTAL SEGMENTS', value: totalCount },
+          { label: 'ACTIVE', value: activeCount, color: '#15803D' },
+          { label: 'INACTIVE', value: inactiveCount, color: '#DC2626' }
+        ]}
+        modelTag="Canonical Data Model: CUSTOMER_SEGMENT"
+      />
 
       {/* Filter Bar */}
       <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, marginBottom: 16, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -292,17 +284,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
                         {seg.description || '—'}
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        <span style={{
-                          fontSize: 10.5,
-                          fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: 4,
-                          background: isActive ? '#DCFCE7' : '#F1F5F9',
-                          color: isActive ? '#15803D' : '#64748B',
-                          border: `1px solid ${isActive ? '#86EFAC' : '#CBD5E1'}`
-                        }}>
-                          {status}
-                        </span>
+                        <MasterStatusBadge status={isActive} />
                       </td>
                       <td style={{ padding: '12px 14px', fontSize: 12, color: '#64748B' }}>
                         {seg.created_at || '—'}
@@ -312,22 +294,12 @@ export const CustomerSegmentMasterModule: React.FC = () => {
                       </td>
                       {canEdit && (
                         <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: 6 }}>
-                            <button
-                              onClick={() => handleOpenEditModal(seg)}
-                              title="Edit Segment"
-                              style={{ padding: '5px 8px', borderRadius: 4, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', cursor: 'pointer' }}
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(seg)}
-                              title="Delete Segment"
-                              style={{ padding: '5px 8px', borderRadius: 4, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer' }}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
+                          <TableActionGroup
+                            onEdit={() => handleOpenEditModal(seg)}
+                            status={isActive}
+                            onToggleStatus={() => handleToggleStatus(seg)}
+                            onDelete={() => handleDelete(seg)}
+                          />
                         </td>
                       )}
                     </tr>

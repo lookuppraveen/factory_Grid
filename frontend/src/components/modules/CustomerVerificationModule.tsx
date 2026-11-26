@@ -106,6 +106,17 @@ const AIComplianceResultCard: React.FC<{ finding: AIComplianceFinding; onClose?:
   );
 };
 
+const formatDisplayDate = (val?: string | null): string => {
+  if (!val) return '—';
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val;
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return val;
+  }
+};
+
 export const CustomerVerificationModule: React.FC = () => {
   const { addAuditLog } = useApp();
 
@@ -139,11 +150,7 @@ export const CustomerVerificationModule: React.FC = () => {
       const data = await adminVerificationApi.listCustomerVerifications();
       const list = Array.isArray(data) ? data : [];
       setRecords(list);
-      if (list.length > 0) {
-        setSelectedRecordId(prev => prev && list.some(r => r.id === prev || r.requestCode === prev) ? prev : (list[0].requestCode || list[0].id));
-      } else {
-        setSelectedRecordId(null);
-      }
+      setSelectedRecordId(prev => (prev && list.some(r => r.id === prev || r.requestCode === prev)) ? prev : null);
     } catch (err: any) {
       setApiError(err.message || 'Failed to fetch verification records from database.');
       setRecords([]);
@@ -262,7 +269,6 @@ export const CustomerVerificationModule: React.FC = () => {
 
   // Decision Dialog States
   const [decisionModalType, setDecisionModalType] = useState<'APPROVE' | 'REJECT' | 'NEED_MORE_DOCS' | null>(null);
-  const [approvalClassification, setApprovalClassification] = useState<'REGULAR' | 'SPECIAL_PARTY'>('REGULAR');
   const [approvalRemarks, setApprovalRemarks] = useState<string>('');
   const [classificationRemarksInput, setClassificationRemarksInput] = useState<string>('');
   const [rejectionReasonInput, setRejectionReasonInput] = useState<string>('');
@@ -287,12 +293,27 @@ export const CustomerVerificationModule: React.FC = () => {
     return cat.includes(targetKey) || dt.includes(targetKey) || cat.includes(targetName.split(' ')[0]) || dt.includes(targetName.split(' ')[0]);
   };
   const uploadedDocs = selectedRecord?.documents || [];
+  const isDocVerifiedCheck = (d: any) => {
+    const s = (d.status || '').toString().toUpperCase();
+    const rs = (d.rawStatus || '').toString().toUpperCase();
+    const vs = (d.verificationStatus || '').toString().toUpperCase();
+    const rd = (d.reviewDecision || '').toString().toUpperCase();
+    return s === 'VALID' || s === 'APPROVED' || s === 'VERIFIED' || rs === 'VALID' || rs === 'APPROVED' || rs === 'VERIFIED' || vs === 'VALID' || vs === 'APPROVED' || vs === 'VERIFIED' || rd === 'APPROVED' || rd === 'VALID';
+  };
+  const isDocRejectedCheck = (d: any) => {
+    if (isDocVerifiedCheck(d)) return false;
+    const s = (d.status || '').toString().toUpperCase();
+    const rs = (d.rawStatus || '').toString().toUpperCase();
+    const vs = (d.verificationStatus || '').toString().toUpperCase();
+    const rd = (d.reviewDecision || '').toString().toUpperCase();
+    return s === 'INVALID' || s === 'REJECTED' || rs === 'REJECTED' || rs === 'INVALID' || vs === 'REJECTED' || rd === 'REJECTED';
+  };
   const hasGstUploaded = uploadedDocs.some(d => isDocMatching(d, 'GST', 'GST Certificate'));
   const hasPanUploaded = uploadedDocs.some(d => isDocMatching(d, 'PAN', 'PAN Card'));
-  const hasGstVerified = uploadedDocs.some(d => isDocMatching(d, 'GST', 'GST Certificate') && (d.status === 'Valid' || d.rawStatus === 'VALID' || d.reviewDecision === 'APPROVED'));
-  const hasPanVerified = uploadedDocs.some(d => isDocMatching(d, 'PAN', 'PAN Card') && (d.status === 'Valid' || d.rawStatus === 'VALID' || d.reviewDecision === 'APPROVED'));
-  const hasPendingDocs = uploadedDocs.some(d => d.status === 'Pending' || d.rawStatus === 'PENDING');
-  const hasRejectedDocs = uploadedDocs.some(d => d.status === 'Invalid' || d.status === 'Need Replacement' || d.rawStatus === 'REJECTED' || d.rawStatus === 'NEEDS_REPLACEMENT');
+  const hasGstVerified = uploadedDocs.some(d => isDocMatching(d, 'GST', 'GST Certificate') && isDocVerifiedCheck(d));
+  const hasPanVerified = uploadedDocs.some(d => isDocMatching(d, 'PAN', 'PAN Card') && isDocVerifiedCheck(d));
+  const hasPendingDocs = uploadedDocs.some(d => !isDocVerifiedCheck(d) && !isDocRejectedCheck(d));
+  const hasRejectedDocs = uploadedDocs.some(d => isDocRejectedCheck(d));
   const isCaseApprovable = selectedRecord ? (hasGstVerified && hasPanVerified && !hasPendingDocs && !hasRejectedDocs && (selectedRecord.verificationStatus !== 'Approved' && selectedRecord.verificationStatus !== 'Active')) : false;
 
   // Counts for KPI Strip
@@ -364,15 +385,22 @@ export const CustomerVerificationModule: React.FC = () => {
     setIsActionLoading(true);
     try {
       const targetCode = selectedRecord.requestCode || selectedRecord.id;
+      const currentClassification = selectedRecord.customerClassification === 'SPECIAL_PARTY' ? 'SPECIAL_PARTY' : 'REGULAR';
       const updated = await adminVerificationApi.approveCustomerVerification(targetCode, {
-        customerClassification: approvalClassification,
+        customerClassification: currentClassification,
         remarks: approvalRemarks.trim() || undefined,
       });
-      setToastMessage(`✓ Successfully approved ${selectedRecord.companyName} as ${approvalClassification === 'SPECIAL_PARTY' ? 'Special Buyer' : 'Normal Buyer'}. Customer Code: ${updated.customerCode || 'Issued'}`);
-      addAuditLog('Customer Verification', `Approved ${selectedRecord.companyName} as ${approvalClassification} (${targetCode})`);
+      setToastMessage(`✓ Successfully approved ${selectedRecord.companyName} as ${currentClassification === 'SPECIAL_PARTY' ? 'Special Buyer' : 'Normal Buyer'}. Customer Code: ${updated.customerCode || 'Issued'}`);
+      addAuditLog('Customer Verification', `Approved ${selectedRecord.companyName} as ${currentClassification} (${targetCode})`);
       setDecisionModalType(null);
       setApprovalRemarks('');
       await loadVerifications();
+      if (selectedRecordId) {
+        const refreshed = await adminVerificationApi.getCustomerVerification(selectedRecordId);
+        if (refreshed) {
+          setRecords(prev => prev.map(r => (r.id === refreshed.id || r.requestCode === refreshed.requestCode) ? refreshed : r));
+        }
+      }
     } catch (err: any) {
       alert(`Approval failed: ${err.message}`);
     } finally {
@@ -513,11 +541,42 @@ export const CustomerVerificationModule: React.FC = () => {
       const targetCode = selectedRecord.requestCode || selectedRecord.id;
       await adminVerificationApi.reviewCustomerDocument(targetCode, docId, decision, reason);
       setToastMessage(`Document ${docName} marked as ${decision === 'APPROVED' ? 'Verified' : decision === 'REJECTED' ? 'Rejected' : 'Needs Replacement'}`);
+
+      const newStatus = decision === 'APPROVED' ? 'Valid' : decision === 'REJECTED' ? 'Invalid' : 'Need Replacement';
+      const newRawStatus = decision === 'APPROVED' ? 'VALID' : decision === 'REJECTED' ? 'REJECTED' : 'NEEDS_REPLACEMENT';
+
       setViewingDoc(prev => (prev && prev.id === docId) ? {
         ...prev,
-        status: decision === 'APPROVED' ? 'Valid' : decision === 'REJECTED' ? 'Invalid' : 'Pending',
-        rejectionReason: reason || null,
+        status: newStatus,
+        rawStatus: newRawStatus,
+        reviewDecision: decision,
+        rejectionReason: decision === 'APPROVED' ? null : reason || null,
       } : prev);
+
+      // Instant optimistic state update
+      setRecords(prev => prev.map(rec => {
+        if (rec.id === targetCode || rec.requestCode === targetCode) {
+          const updatedDocs = (rec.documents || []).map(d => {
+            if (d.id === docId) {
+              return {
+                ...d,
+                status: newStatus,
+                rawStatus: newRawStatus,
+                reviewDecision: decision,
+                rejectionReason: decision === 'APPROVED' ? null : reason || null,
+              };
+            }
+            return d;
+          });
+          return {
+            ...rec,
+            documents: updatedDocs,
+            verificationStatus: decision === 'REJECTED' ? 'Rejected' : decision === 'NEEDS_REPLACEMENT' ? 'Need More Docs' : rec.verificationStatus,
+          };
+        }
+        return rec;
+      }));
+
       await loadVerifications();
       if (selectedRecordId) {
         const refreshed = await adminVerificationApi.getCustomerVerification(selectedRecordId);
@@ -577,117 +636,128 @@ export const CustomerVerificationModule: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 48, background: '#F8FAFC', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 48, background: '#F8FAFC', minHeight: '100vh' }}>
 
-      {/* ── TOP HEADER BAR ────────────────────────────────────── */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 14, padding: '20px 24px', boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
-            <ShieldCheck size={24} />
+      {/* ── Breadcrumbs Bar (Matching Product Type & Category Master) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#64748B', fontWeight: 600, padding: '4px 0' }}>
+        <span>Compliance &amp; Verification</span>
+        <span style={{ color: '#CBD5E1' }}>/</span>
+        <span style={{ color: '#0F766E', fontWeight: 700 }}>Customer Onboarding Verification</span>
+      </div>
+
+      {/* ── Main Page Header Bar ── */}
+      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.03)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: '#F0FDFA', border: '1px solid #CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F766E' }}>
+            <ShieldCheck size={18} />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748B', fontWeight: 500 }}>
-              <span>Compliance Workflow</span>
-              <ChevronRight size={12} />
-              <span style={{ color: '#2563EB', fontWeight: 600 }}>Customer Verification</span>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#0F766E' }}>
+              COMPLIANCE &amp; VERIFICATION
             </div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0F172A', margin: '2px 0 0', letterSpacing: '-0.02em' }}>
+            <h1 style={{ margin: '2px 0 0 0', fontSize: 20, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
               Customer Onboarding Verification
             </h1>
-            <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
               Customer registration → Document submission → Business verification → Regulatory verification → Financial verification → Approval
             </div>
           </div>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={loadVerifications}
-            disabled={isLoading}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 14px',
-              borderRadius: 8,
-              border: '1px solid #CBD5E1',
-              background: '#FFFFFF',
-              color: '#0F172A',
-              fontSize: 12.5,
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-            {isLoading ? 'Syncing...' : '↻ Refresh from Database'}
-          </button>
-        </div>
       </div>
 
-      {/* ── KPI STRIP ─────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
-        <div onClick={() => setActiveStatusTab('ALL')} style={{ background: '#FFFFFF', border: activeStatusTab === 'ALL' ? '2px solid #2563EB' : '1px solid #E2E8F0', borderRadius: 12, padding: '16px 18px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Total Requests</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#0F172A', marginTop: 6 }}>{counts.total}</div>
-          <div style={{ fontSize: 11, color: '#64748B', marginTop: 4 }}>All customer registrations</div>
+      {/* ── Database Error Alert ── */}
+      {apiError && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '12px 16px', color: '#991B1B', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AlertCircle size={16} style={{ color: '#DC2626', flexShrink: 0 }} />
+          <span>{apiError}</span>
         </div>
+      )}
 
-        <div onClick={() => setActiveStatusTab('UNDER_REVIEW')} style={{ background: '#FFFFFF', border: activeStatusTab === 'UNDER_REVIEW' ? '2px solid #D97706' : '1px solid #E2E8F0', borderRadius: 12, padding: '16px 18px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#D97706', textTransform: 'uppercase' }}>Under Review</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#D97706', marginTop: 6 }}>{counts.underReview}</div>
-          <div style={{ fontSize: 11, color: '#D97706', marginTop: 4 }}>Assigned to Compliance Officer</div>
-        </div>
-
-        <div onClick={() => setActiveStatusTab('NEED_MORE_DOCS')} style={{ background: '#FFFFFF', border: activeStatusTab === 'NEED_MORE_DOCS' ? '2px solid #DB2777' : '1px solid #E2E8F0', borderRadius: 12, padding: '16px 18px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#DB2777', textTransform: 'uppercase' }}>Need More Docs</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#DB2777', marginTop: 6 }}>{counts.needMoreDocs}</div>
-          <div style={{ fontSize: 11, color: '#DB2777', marginTop: 4 }}>Workflow loop back</div>
-        </div>
-
-        <div onClick={() => setActiveStatusTab('APPROVED')} style={{ background: '#FFFFFF', border: activeStatusTab === 'APPROVED' ? '2px solid #16A34A' : '1px solid #E2E8F0', borderRadius: 12, padding: '16px 18px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#16A34A', textTransform: 'uppercase' }}>Approved / Active</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#16A34A', marginTop: 6 }}>{counts.approved}</div>
-          <div style={{ fontSize: 11, color: '#16A34A', marginTop: 4 }}>Customer Code & Login Issued</div>
-        </div>
-
-        <div onClick={() => setActiveStatusTab('REJECTED')} style={{ background: '#FFFFFF', border: activeStatusTab === 'REJECTED' ? '2px solid #DC2626' : '1px solid #E2E8F0', borderRadius: 12, padding: '16px 18px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: '#DC2626', textTransform: 'uppercase' }}>Rejected</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#DC2626', marginTop: 6 }}>{counts.rejected}</div>
-          <div style={{ fontSize: 11, color: '#DC2626', marginTop: 4 }}>Notification sent & ended</div>
-        </div>
-      </div>
-
-      {/* ── SEARCH & FILTERS BAR ─────────────────────────────── */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 14, padding: '14px 20px', boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      {/* ── Professional Horizontal Navigation Tabs (Matching Product Type & Category Master) ── */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        borderBottom: '1px solid #E2E8F0',
+        paddingBottom: 0,
+        gap: 16,
+        flexWrap: 'wrap'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {[
-            { id: 'ALL', label: `All (${counts.total})` },
-            { id: 'UNDER_REVIEW', label: `Under Review (${counts.underReview})` },
-            { id: 'NEED_MORE_DOCS', label: `Need More Docs (${counts.needMoreDocs})` },
-            { id: 'APPROVED', label: `Approved / Active (${counts.approved})` },
-            { id: 'REJECTED', label: `Rejected (${counts.rejected})` },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveStatusTab(tab.id)}
-              style={{
-                height: 34, padding: '0 14px', borderRadius: 8, fontSize: 12.5, fontWeight: activeStatusTab === tab.id ? 700 : 500,
-                background: activeStatusTab === tab.id ? '#2563EB' : 'transparent', color: activeStatusTab === tab.id ? '#FFFFFF' : '#475569',
-                border: activeStatusTab === tab.id ? 'none' : '1px solid #E2E8F0', cursor: 'pointer', transition: 'all 150ms ease'
-              }}
-            >
-              {tab.label}
+            { id: 'ALL', label: 'All Requests', count: counts.total },
+            { id: 'UNDER_REVIEW', label: 'Under Review', count: counts.underReview },
+            { id: 'NEED_MORE_DOCS', label: 'Need More Docs', count: counts.needMoreDocs },
+            { id: 'APPROVED', label: 'Approved / Active', count: counts.approved },
+            { id: 'REJECTED', label: 'Rejected', count: counts.rejected },
+          ].map(tab => {
+            const isActive = activeStatusTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveStatusTab(tab.id)}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: 13,
+                  fontWeight: isActive ? 700 : 500,
+                  color: isActive ? '#0F766E' : '#64748B',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: isActive ? '2px solid #0F766E' : '2px solid transparent',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  transition: 'all 0.15s ease',
+                  marginBottom: -1
+                }}
+              >
+                <span>{tab.label}</span>
+                <span style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: '1px 7px',
+                  borderRadius: 10,
+                  background: isActive ? '#CCFBF1' : '#F1F5F9',
+                  color: isActive ? '#0F766E' : '#64748B'
+                }}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 12, color: '#64748B', paddingBottom: 8 }}>
+          Showing {filteredRecords.length} of {records.length} records
+        </div>
+      </div>
+
+      {/* ── Search & Filter Toolbar (Matching Category Master Toolbar Style) ── */}
+      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, padding: '8px 12px', minWidth: 280, flex: '1 1 280px' }}>
+          <Search size={15} style={{ color: '#64748B' }} />
+          <input
+            type="text"
+            placeholder="Search company, customer, GST..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            style={{ border: 'none', background: 'transparent', width: '100%', fontSize: 13, outline: 'none', color: '#0F172A' }}
+          />
+          {searchTerm && (
+            <button onClick={() => setSearchTerm('')} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 0 }}>
+              <X size={14} />
             </button>
-          ))}
+          )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>Customer Type:</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Customer Type:</span>
             <select
               value={customerTypeFilter}
               onChange={e => setCustomerTypeFilter(e.target.value)}
-              style={{ height: 36, padding: '0 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 12.5, color: '#0F172A', outline: 'none', background: '#FFFFFF' }}
+              style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, fontWeight: 600, background: '#FFF', color: '#0F172A', cursor: 'pointer' }}
             >
               <option value="ALL">All Types</option>
               <option value="PCD">PCD</option>
@@ -700,133 +770,215 @@ export const CustomerVerificationModule: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>Classification:</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Classification:</span>
             <select
               value={classificationFilter}
               onChange={e => setClassificationFilter(e.target.value as any)}
-              style={{ height: 36, padding: '0 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 12.5, color: '#0F172A', outline: 'none', background: '#FFFFFF', fontWeight: 600 }}
+              style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, fontWeight: 600, background: '#FFF', color: '#0F172A', cursor: 'pointer' }}
             >
               <option value="ALL">All Classifications</option>
               <option value="REGULAR">Regular Customer</option>
-              <option value="SPECIAL_PARTY">Special Party</option>
+              <option value="SPECIAL_PARTY">Special Party / Special Buyer</option>
             </select>
           </div>
 
-          <div style={{ position: 'relative' }}>
-            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-            <input
-              type="text"
-              placeholder="Search company, name, GST..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              style={{ width: 240, height: 36, paddingLeft: 34, paddingRight: 12, borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 12.5, outline: 'none', background: '#FFFFFF', color: '#0F172A' }}
-            />
-          </div>
+          {(searchTerm || customerTypeFilter !== 'ALL' || classificationFilter !== 'ALL' || activeStatusTab !== 'ALL') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setCustomerTypeFilter('ALL');
+                setClassificationFilter('ALL');
+                setActiveStatusTab('ALL');
+              }}
+              style={{
+                padding: '7px 12px',
+                borderRadius: 6,
+                border: '1px dashed #CBD5E1',
+                background: 'transparent',
+                color: '#64748B',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Reset Filters
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── CUSTOMER VERIFICATION LIST TABLE ──────────────────── */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <th style={{ padding: '14px 18px' }}>Customer Name</th>
-              <th style={{ padding: '14px 18px' }}>Company Name</th>
-              <th style={{ padding: '14px 18px' }}>Customer Type</th>
-              <th style={{ padding: '14px 18px' }}>Registration Date</th>
-              <th style={{ padding: '14px 18px' }}>Verification Status</th>
-              <th style={{ padding: '14px 18px' }}>Classification</th>
-              <th style={{ padding: '14px 18px' }}>Assigned Compliance Officer</th>
-              <th style={{ padding: '14px 18px', textAlign: 'right' }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRecords.length === 0 ? (
-              <tr>
-                <td colSpan={8} style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B', fontSize: 13 }}>
-                  No customer verification records found matching your filters.
-                </td>
+      {/* ── Customer Verification Master Table (Matching Product Type & Category Master) ── */}
+      <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+        <div style={{ padding: '14px 20px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>Registered Customers (CUSTOMER_VERIFICATION)</div>
+            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Review statutory compliance documents and authorize onboarding accounts</div>
+          </div>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0F766E', background: '#F0FDFA', padding: '4px 10px', borderRadius: 6, border: '1px solid #CCFBF1' }}>
+            {filteredRecords.length} Available
+          </span>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>CUSTOMER NAME</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>COMPANY NAME</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 120 }}>CUSTOMER TYPE</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>REGISTRATION DATE</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>STATUS</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>CLASSIFICATION</th>
+                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 180 }}>ASSIGNED OFFICER</th>
+                <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', textAlign: 'right', width: 110 }}>ACTIONS</th>
               </tr>
-            ) : (
-              paginatedRecords.map(record => (
-                <tr key={record.id} style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 120ms ease' }} className="hover:bg-slate-50">
-                  <td style={{ padding: '16px 18px', fontSize: 13, fontWeight: 600, color: '#0F172A' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12 }}>
-                        {(record.contactPerson || record.customerName).charAt(0)}
-                      </div>
-                      <div>
-                        <div>{record.contactPerson || record.customerName}</div>
-                        <div style={{ fontSize: 11, color: '#64748B', fontWeight: 400 }}>{record.email}</div>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td style={{ padding: '16px 18px', fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
-                    <div>{record.companyName}</div>
-                    <div style={{ fontSize: 11, color: '#64748B', fontWeight: 400, fontFamily: 'monospace' }}>
-                      GST: {record.gstNumber}
-                    </div>
-                  </td>
-
-                  <td style={{ padding: '16px 18px' }}>
-                    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1' }}>
-                      {record.customerType}
-                    </span>
-                  </td>
-
-                  <td style={{ padding: '16px 18px', fontSize: 12.5, color: '#475569' }}>
-                    {record.registrationDate}
-                  </td>
-
-                  <td style={{ padding: '16px 18px' }}>
-                    {renderStatusBadge(record.verificationStatus)}
-                  </td>
-
-                  <td style={{ padding: '16px 18px' }}>
-                    {record.customerClassification === 'SPECIAL_PARTY' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
-                        <Star size={11} fill="#0E7490" /> SPECIAL PARTY
-                      </span>
-                    ) : (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0' }}>
-                        Regular
-                      </span>
-                    )}
-                  </td>
-
-                  <td style={{ padding: '16px 18px', fontSize: 12.5, color: '#334155', fontWeight: 500 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <User size={13} style={{ color: '#64748B' }} />
-                      <span>{record.assignedComplianceOfficer}</span>
-                    </div>
-                  </td>
-
-                  <td style={{ padding: '16px 18px', textAlign: 'right' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button
-                        onClick={() => setSelectedRecordId(record.id)}
-                        style={{
-                          height: 32, padding: '0 16px', borderRadius: 6, background: '#1D4ED8', color: '#FFFFFF',
-                          border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-                          boxShadow: '0 1px 2px rgba(29, 78, 216, 0.2)'
-                        }}
-                      >
-                        <FileCheck size={14} /> Review
-                      </button>
+            </thead>
+            <tbody>
+              {isLoading && records.length === 0 ? (
+                [...Array(5)].map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 140, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 150, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 60, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 80, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 90, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 80, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 14px' }}><div style={{ width: 130, height: 16, background: '#F1F5F9', borderRadius: 4 }} /></td>
+                    <td style={{ padding: '14px 16px', textAlign: 'right' }}><div style={{ width: 70, height: 28, background: '#F1F5F9', borderRadius: 4, marginLeft: 'auto' }} /></td>
+                  </tr>
+                ))
+              ) : filteredRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                    <UserCheck size={36} style={{ color: '#94A3B8', margin: '0 auto 10px', display: 'block' }} />
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No customer verification records found.</div>
+                    <div style={{ fontSize: 13, color: '#64748B', marginTop: 4 }}>
+                      {searchTerm || customerTypeFilter !== 'ALL' || classificationFilter !== 'ALL' || activeStatusTab !== 'ALL'
+                        ? 'Try resetting your search query or filter criteria.'
+                        : 'No customer verification requests are currently available in the database.'}
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                paginatedRecords.map(record => {
+                  const isSelected = selectedRecordId === record.id || selectedRecordId === record.requestCode;
+                  const officerFull = record.assignedComplianceOfficer || 'Unassigned';
+                  const hasParen = officerFull.includes('(');
+                  const officerName = hasParen ? officerFull.split('(')[0].trim() : officerFull;
+                  const officerDesk = hasParen ? officerFull.split('(')[1].replace(')', '').trim() : null;
+
+                  return (
+                    <tr
+                      key={record.id}
+                      style={{
+                        borderBottom: '1px solid #F1F5F9',
+                        background: isSelected ? '#F0FDFA' : '#FFFFFF',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#F8FAFC'; }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = '#FFFFFF'; }}
+                    >
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#F0FDFA', color: '#0F766E', border: '1px solid #CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
+                            {(record.contactPerson || record.customerName || 'C').charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, color: '#0F172A', fontSize: 13 }}>
+                              {record.contactPerson || record.customerName}
+                            </div>
+                            <div style={{ fontSize: 11.5, color: '#64748B', fontWeight: 400 }}>
+                              {record.email}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 700, color: '#1E293B', fontSize: 13 }}>{record.companyName}</div>
+                        <div style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace', marginTop: 2 }}>
+                          GST: {record.gstNumber || 'Not provided'}
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '12px 14px' }}>
+                        <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, background: '#F1F5F9', color: '#334155', border: '1px solid #E2E8F0' }}>
+                          {record.customerType}
+                        </span>
+                      </td>
+
+                      <td style={{ padding: '12px 14px', fontSize: 12.5, color: '#475569', whiteSpace: 'nowrap' }}>
+                        {formatDisplayDate(record.registrationDate)}
+                      </td>
+
+                      <td style={{ padding: '12px 14px' }}>
+                        {renderStatusBadge(record.verificationStatus)}
+                      </td>
+
+                      <td style={{ padding: '12px 14px' }}>
+                        {record.customerClassification === 'SPECIAL_PARTY' ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
+                            <Star size={11} fill="#0E7490" /> Special Buyer
+                          </span>
+                        ) : (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: '#F8FAFC', color: '#475569', border: '1px solid #E2E8F0' }}>
+                            Regular
+                          </span>
+                        )}
+                      </td>
+
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                          <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+                            <User size={12} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1E293B' }}>{officerName}</div>
+                            {officerDesk && (
+                              <div style={{ fontSize: 11, color: '#64748B' }}>{officerDesk}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <button
+                          onClick={() => setSelectedRecordId(record.id)}
+                          style={{
+                            padding: '6px 14px',
+                            borderRadius: 6,
+                            background: '#0F766E',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            boxShadow: '0 1px 2px rgba(15,118,110,0.15)'
+                          }}
+                        >
+                          <FileCheck size={13} /> Review
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
       <PaginationControl {...pagination.paginationProps} itemName="verification requests" />
 
       {/* ── CUSTOMER VERIFICATION DETAIL DRAWER (13 SECTIONS EXACTLY) ───────── */}
       {selectedRecord && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end', background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(3px)' }}>
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end', background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(3px)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setSelectedRecordId(null); }}
+        >
           <div style={{ width: '100%', maxWidth: 780, background: '#FFFFFF', height: '100vh', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
 
             {/* Drawer Header */}
@@ -1168,10 +1320,32 @@ export const CustomerVerificationModule: React.FC = () => {
                         ) : (
                           uploadedDocs.map((docItem: any) => {
                             const docType = docItem.documentType || docItem.categoryDisplayName || docItem.category || 'Regulatory Document';
-                            const currentStatus = docItem.verificationStatus || (docItem.status === 'Valid' ? 'APPROVED' : docItem.status === 'Invalid' ? 'REJECTED' : docItem.status === 'Need Replacement' ? 'NEEDS_REPLACEMENT' : 'PENDING');
-                            const isVerified = currentStatus === 'APPROVED' || currentStatus === 'Verified' || docItem.status === 'Valid' || docItem.rawStatus === 'VALID';
-                            const isRejected = currentStatus === 'REJECTED' || currentStatus === 'Rejected' || docItem.status === 'Invalid' || docItem.rawStatus === 'REJECTED';
-                            const isReplacement = currentStatus === 'NEEDS_REPLACEMENT' || currentStatus === 'Need Replacement' || docItem.rawStatus === 'NEEDS_REPLACEMENT';
+                            const rawStatusUpper = (docItem.rawStatus || '').toString().trim().toUpperCase();
+                            const statusUpper = (docItem.status || '').toString().trim().toUpperCase();
+                            const vStatusUpper = (docItem.verificationStatus || '').toString().trim().toUpperCase();
+                            const decisionUpper = (docItem.reviewDecision || '').toString().trim().toUpperCase();
+
+                            const isVerified =
+                              statusUpper === 'VALID' || statusUpper === 'APPROVED' || statusUpper === 'VERIFIED' ||
+                              rawStatusUpper === 'VALID' || rawStatusUpper === 'APPROVED' || rawStatusUpper === 'VERIFIED' ||
+                              vStatusUpper === 'VALID' || vStatusUpper === 'APPROVED' || vStatusUpper === 'VERIFIED' ||
+                              decisionUpper === 'APPROVED' || decisionUpper === 'VALID';
+
+                            const isRejected = !isVerified && (
+                              statusUpper === 'INVALID' || statusUpper === 'REJECTED' ||
+                              rawStatusUpper === 'REJECTED' || rawStatusUpper === 'INVALID' ||
+                              vStatusUpper === 'REJECTED' || vStatusUpper === 'INVALID' ||
+                              decisionUpper === 'REJECTED'
+                            );
+
+                            const isReplacement = !isVerified && !isRejected && (
+                              statusUpper === 'NEED REPLACEMENT' || statusUpper === 'NEEDS_REPLACEMENT' || statusUpper === 'REPLACEMENT REQUESTED' ||
+                              rawStatusUpper === 'NEEDS_REPLACEMENT' || rawStatusUpper === 'NEED_REPLACEMENT' ||
+                              vStatusUpper === 'NEEDS_REPLACEMENT' || vStatusUpper === 'NEED_REPLACEMENT' ||
+                              decisionUpper === 'NEEDS_REPLACEMENT'
+                            );
+
+                            const isPending = !isVerified && !isRejected && !isReplacement;
                             const isGstOrPan = docType.toUpperCase().includes('GST') || docType.toUpperCase().includes('PAN');
 
                             // Status badge and text
@@ -1180,7 +1354,7 @@ export const CustomerVerificationModule: React.FC = () => {
                             let statusBg = '#FFFBEB';
                             let statusBorder = '#FDE68A';
                             let statusNote = isGstOrPan
-                              ? 'Real Govt API pending • Eligible for UI demo auto-check'
+                              ? 'Statutory document • Awaiting compliance verification'
                               : 'Awaiting Admin Review';
 
                             if (isVerified) {
@@ -1204,10 +1378,10 @@ export const CustomerVerificationModule: React.FC = () => {
                             }
 
                             return (
-                              <div key={docItem.id} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              <div key={docItem.id} style={{ padding: '14px 16px', background: '#F8FAFC', borderRadius: 10, border: `1px solid ${isVerified ? '#BBF7D0' : isRejected ? '#FECACA' : '#E2E8F0'}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                    <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(29, 78, 216, 0.08)', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <div style={{ width: 36, height: 36, borderRadius: 8, background: isVerified ? 'rgba(22, 163, 74, 0.1)' : 'rgba(29, 78, 216, 0.08)', color: isVerified ? '#16A34A' : '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                       <FileText size={18} />
                                     </div>
                                     <div>
@@ -1256,34 +1430,47 @@ export const CustomerVerificationModule: React.FC = () => {
                                 </div>
 
                                 {/* Inline Document Review Action Buttons */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 6, borderTop: '1px solid #F1F5F9' }}>
-                                  {!isVerified && (
-                                    <button
-                                      onClick={() => handleReviewDocument(docItem.id, docType, 'APPROVED')}
-                                      style={{ height: 28, padding: '0 12px', borderRadius: 5, background: '#16A34A', color: '#FFFFFF', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                                    >
-                                      ✓ Verify
-                                    </button>
-                                  )}
-                                  
-                                  {!isRejected && (
-                                    <button
-                                      onClick={() => handleReviewDocument(docItem.id, docType, 'REJECTED', true)}
-                                      style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                                    >
-                                      ✕ Reject
-                                    </button>
-                                  )}
+                                {!isVerified && (
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 6, borderTop: '1px solid #F1F5F9' }}>
+                                    {isPending && (
+                                      <>
+                                        <button
+                                          onClick={() => handleReviewDocument(docItem.id, docType, 'APPROVED')}
+                                          style={{ height: 28, padding: '0 12px', borderRadius: 5, background: '#16A34A', color: '#FFFFFF', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                        >
+                                          ✓ Verify
+                                        </button>
+                                        <button
+                                          onClick={() => handleReviewDocument(docItem.id, docType, 'REJECTED', true)}
+                                          style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                        >
+                                          ✕ Reject
+                                        </button>
+                                        <button
+                                          onClick={() => handleReviewDocument(docItem.id, docType, 'NEEDS_REPLACEMENT', true)}
+                                          style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                        >
+                                          Request Replacement
+                                        </button>
+                                      </>
+                                    )}
 
-                                  {!isReplacement && (
-                                    <button
-                                      onClick={() => handleReviewDocument(docItem.id, docType, 'NEEDS_REPLACEMENT', true)}
-                                      style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                                    >
-                                      Request Replacement
-                                    </button>
-                                  )}
-                                </div>
+                                    {isRejected && (
+                                      <button
+                                        onClick={() => handleReviewDocument(docItem.id, docType, 'NEEDS_REPLACEMENT', true)}
+                                        style={{ height: 28, padding: '0 10px', borderRadius: 5, background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                                      >
+                                        Request Replacement
+                                      </button>
+                                    )}
+
+                                    {isReplacement && (
+                                      <span style={{ fontSize: 11, color: '#9D174D', fontStyle: 'italic' }}>
+                                        Replacement requested • Awaiting document re-upload
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             );
                           })
@@ -1657,115 +1844,76 @@ export const CustomerVerificationModule: React.FC = () => {
       )}
 
       {/* ── DECISION MODAL DIALOGS ────────────────────────────── */}
-      {decisionModalType === 'APPROVE' && selectedRecord && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(3px)' }}>
-          <div style={{ width: '100%', maxWidth: 540, background: '#FFFFFF', borderRadius: 14, padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#16A34A', fontWeight: 800, fontSize: 16 }}>
-              <CheckCircle2 size={20} /> Approve Customer Verification
-            </div>
-            <div style={{ fontSize: 13, color: '#334155', marginTop: 10, lineHeight: 1.5 }}>
-              Select buyer classification and confirm statutory approval for <strong>{selectedRecord.companyName}</strong>:
-            </div>
+      {decisionModalType === 'APPROVE' && selectedRecord && (() => {
+        const isSpecialBuyer = selectedRecord.customerClassification === 'SPECIAL_PARTY';
+        const classificationLabel = isSpecialBuyer ? 'Special Buyer (Pre-Agreed Pricing Permitted)' : 'Standard Normal Buyer';
 
-            {/* Buyer Classification Selection */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-              <label
-                onClick={() => setApprovalClassification('REGULAR')}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 8,
-                  border: approvalClassification === 'REGULAR' ? '2px solid #2563EB' : '1px solid #CBD5E1',
-                  background: approvalClassification === 'REGULAR' ? '#EFF6FF' : '#FFFFFF',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 10
-                }}
-              >
-                <input
-                  type="radio"
-                  name="approvalClass"
-                  checked={approvalClassification === 'REGULAR'}
-                  onChange={() => setApprovalClassification('REGULAR')}
-                  style={{ marginTop: 3 }}
-                />
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(3px)' }}>
+            <div style={{ width: '100%', maxWidth: 520, background: '#FFFFFF', borderRadius: 14, padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#16A34A', fontWeight: 800, fontSize: 16 }}>
+                <CheckCircle2 size={20} /> Approve Customer Verification
+              </div>
+              <div style={{ fontSize: 13, color: '#334155', marginTop: 10, lineHeight: 1.5 }}>
+                Confirm statutory compliance approval and account activation for <strong>{selectedRecord.companyName}</strong>:
+              </div>
+
+              {/* Read-Only Classification Context */}
+              <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 8, background: isSpecialBuyer ? '#ECFEFF' : '#F8FAFC', border: `1px solid ${isSpecialBuyer ? '#A5F3FC' : '#E2E8F0'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#1E293B' }}>
-                    Standard Normal Buyer
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Assigned Customer Classification
                   </div>
-                  <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
-                    Standard procurement flow, competitive manufacturer bidding, standard quotation cycle.
+                  <div style={{ fontSize: 13, fontWeight: 800, color: isSpecialBuyer ? '#0E7490' : '#0F172A', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {isSpecialBuyer && <Star size={13} fill="#0E7490" />}
+                    <span>{classificationLabel}</span>
                   </div>
                 </div>
-              </label>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: isSpecialBuyer ? '#CFFAFE' : '#F1F5F9', color: isSpecialBuyer ? '#0E7490' : '#475569', border: `1px solid ${isSpecialBuyer ? '#A5F3FC' : '#CBD5E1'}` }}>
+                  {isSpecialBuyer ? 'SPECIAL PARTY' : 'REGULAR'}
+                </span>
+              </div>
 
-              <label
-                onClick={() => setApprovalClassification('SPECIAL_PARTY')}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 8,
-                  border: approvalClassification === 'SPECIAL_PARTY' ? '2px solid #0E7490' : '1px solid #CBD5E1',
-                  background: approvalClassification === 'SPECIAL_PARTY' ? '#ECFEFF' : '#FFFFFF',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 10
-                }}
-              >
-                <input
-                  type="radio"
-                  name="approvalClass"
-                  checked={approvalClassification === 'SPECIAL_PARTY'}
-                  onChange={() => setApprovalClassification('SPECIAL_PARTY')}
-                  style={{ marginTop: 3 }}
+              {/* Compliance remarks */}
+              <div style={{ marginTop: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                  Reviewer Remarks / Approval Notes (persisted in audit trail)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="e.g. Verified statutory PAN, GSTIN & compliance documents. Case approved."
+                  value={approvalRemarks}
+                  onChange={e => setApprovalRemarks(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 12.5, outline: 'none' }}
                 />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#0E7490', display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <Star size={13} fill="#0E7490" /> Special Buyer (Special Party Pre-Agreed Pricing)
-                  </div>
-                  <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
-                    Explicitly reviewed buyer eligible for pre-agreed unit pricing workflow, skipping competitive bidding.
-                  </div>
-                </div>
-              </label>
-            </div>
+              </div>
 
-            {/* Compliance remarks */}
-            <div style={{ marginTop: 14 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-                Reviewer Remarks / Approval Notes (persisted in audit trail)
-              </label>
-              <textarea
-                rows={2}
-                placeholder="e.g. Verified statutory PAN, GSTIN & Drug License. Compliance desk approval granted."
-                value={approvalRemarks}
-                onChange={e => setApprovalRemarks(e.target.value)}
-                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #CBD5E1', fontSize: 12.5, outline: 'none' }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
-              <button
-                onClick={() => setDecisionModalType(null)}
-                style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleExecuteApprove}
-                style={{
-                  padding: '8px 20px', borderRadius: 6, border: 'none',
-                  background: approvalClassification === 'SPECIAL_PARTY' ? '#0E7490' : '#16A34A',
-                  color: '#FFF', fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 6
-                }}
-              >
-                Confirm & Approve as {approvalClassification === 'SPECIAL_PARTY' ? 'Special Buyer' : 'Normal Buyer'} →
-              </button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+                <button
+                  onClick={() => setDecisionModalType(null)}
+                  disabled={isActionLoading}
+                  style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleExecuteApprove}
+                  disabled={isActionLoading}
+                  style={{
+                    padding: '8px 20px', borderRadius: 6, border: 'none',
+                    background: isSpecialBuyer ? '#0E7490' : '#16A34A',
+                    color: '#FFF', fontSize: 12.5, fontWeight: 800,
+                    cursor: isActionLoading ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6
+                  }}
+                >
+                  <CheckCircle2 size={15} /> Confirm &amp; Approve Case →
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {decisionModalType === 'REJECT' && selectedRecord && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(3px)' }}>
@@ -1840,14 +1988,22 @@ export const CustomerVerificationModule: React.FC = () => {
               <div>
                 <div style={{ fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span>{viewingDoc.documentType}</span>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700,
-                    color: viewingDoc.status === 'Valid' ? '#10B981' : viewingDoc.status === 'Invalid' ? '#EF4444' : '#F59E0B',
-                    background: viewingDoc.status === 'Valid' ? 'rgba(16, 185, 129, 0.2)' : viewingDoc.status === 'Invalid' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                    padding: '1px 8px', borderRadius: 4
-                  }}>
-                    {viewingDoc.status === 'Valid' ? '✓ Verified' : viewingDoc.status === 'Invalid' ? '✗ Rejected' : '⏳ Pending Review'}
-                  </span>
+                  {(() => {
+                    const vs = (viewingDoc.rawStatus || viewingDoc.status || viewingDoc.verificationStatus || viewingDoc.reviewDecision || '').toString().toUpperCase();
+                    const isV = vs === 'VALID' || vs === 'APPROVED' || vs === 'VERIFIED';
+                    const isR = !isV && (vs === 'INVALID' || vs === 'REJECTED');
+                    const isRep = !isV && !isR && vs.includes('REPLACEMENT');
+                    return (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700,
+                        color: isV ? '#10B981' : isR ? '#EF4444' : isRep ? '#F472B6' : '#F59E0B',
+                        background: isV ? 'rgba(16, 185, 129, 0.2)' : isR ? 'rgba(239, 68, 68, 0.2)' : isRep ? 'rgba(244, 114, 182, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                        padding: '1px 8px', borderRadius: 4
+                      }}>
+                        {isV ? '✓ Verified' : isR ? '✗ Rejected' : isRep ? '⚠ Replacement Requested' : '⏳ Pending Review'}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div style={{ fontSize: 11.5, color: '#94A3B8', marginTop: 2 }}>
                   File: <strong style={{ color: '#E2E8F0' }}>{viewingDoc.fileName}</strong> • Uploaded: {viewingDoc.uploadedAt} • Size: {viewingDoc.fileSize || '1.2 MB'}
@@ -1927,56 +2083,97 @@ export const CustomerVerificationModule: React.FC = () => {
             )}
 
             {/* Compliance Reviewer Action Controls Bar */}
-            <div style={{ padding: '12px 20px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
-                Compliance Officer Audit Action:
-              </div>
+            {(() => {
+              const vs = (viewingDoc.rawStatus || viewingDoc.status || viewingDoc.verificationStatus || viewingDoc.reviewDecision || '').toString().toUpperCase();
+              const isV = vs === 'VALID' || vs === 'APPROVED' || vs === 'VERIFIED';
+              const isR = !isV && (vs === 'INVALID' || vs === 'REJECTED');
+              const isRep = !isV && !isR && vs.includes('REPLACEMENT');
+              const isP = !isV && !isR && !isRep;
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'APPROVED')}
-                  disabled={viewingDoc.status === 'Valid'}
-                  style={{
-                    padding: '7px 16px', background: viewingDoc.status === 'Valid' ? '#94A3B8' : '#16A34A',
-                    color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
-                    cursor: viewingDoc.status === 'Valid' ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5
-                  }}
-                >
-                  <CheckCircle2 size={13} /> {viewingDoc.status === 'Valid' ? 'Verified' : 'Verify Document'}
-                </button>
+              return (
+                <div style={{ padding: '12px 20px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                  <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
+                    Compliance Officer Audit Action:
+                  </div>
 
-                <button
-                  onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'REJECTED', true)}
-                  disabled={viewingDoc.status === 'Invalid'}
-                  style={{
-                    padding: '7px 14px', background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA',
-                    borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5
-                  }}
-                >
-                  <XCircle size={13} /> Reject
-                </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {isV && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: '#DCFCE7', color: '#15803D', border: '1px solid #BBF7D0' }}>
+                        <CheckCircle2 size={14} /> Document Verified
+                      </span>
+                    )}
 
-                <button
-                  onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'NEEDS_REPLACEMENT', true)}
-                  style={{
-                    padding: '7px 14px', background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8',
-                    borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'
-                  }}
-                >
-                  Request Replacement
-                </button>
+                    {isP && (
+                      <>
+                        <button
+                          onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'APPROVED')}
+                          style={{
+                            padding: '7px 16px', background: '#16A34A',
+                            color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5
+                          }}
+                        >
+                          <CheckCircle2 size={13} /> Verify Document
+                        </button>
 
-                <button
-                  onClick={() => setViewingDoc(null)}
-                  style={{
-                    padding: '7px 16px', background: '#FFFFFF', color: '#334155', border: '1px solid #CBD5E1',
-                    borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'
-                  }}
-                >
-                  Close Viewer
-                </button>
-              </div>
-            </div>
+                        <button
+                          onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'REJECTED', true)}
+                          style={{
+                            padding: '7px 14px', background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA',
+                            borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5
+                          }}
+                        >
+                          <XCircle size={13} /> Reject
+                        </button>
+
+                        <button
+                          onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'NEEDS_REPLACEMENT', true)}
+                          style={{
+                            padding: '7px 14px', background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8',
+                            borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                          }}
+                        >
+                          Request Replacement
+                        </button>
+                      </>
+                    )}
+
+                    {isR && (
+                      <>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: '#FEE2E2', color: '#DC2626', border: '1px solid #FECACA' }}>
+                          <XCircle size={14} /> Rejected
+                        </span>
+                        <button
+                          onClick={() => handleReviewDocument(viewingDoc.id, viewingDoc.documentType, 'NEEDS_REPLACEMENT', true)}
+                          style={{
+                            padding: '7px 14px', background: '#FDF2F8', color: '#9D174D', border: '1px solid #FBCFE8',
+                            borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                          }}
+                        >
+                          Request Replacement
+                        </button>
+                      </>
+                    )}
+
+                    {isRep && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: '#FCE7F3', color: '#9D174D', border: '1px solid #FBCFE8' }}>
+                        Replacement Requested
+                      </span>
+                    )}
+
+                    <button
+                      onClick={() => setViewingDoc(null)}
+                      style={{
+                        padding: '7px 16px', background: '#FFFFFF', color: '#334155', border: '1px solid #CBD5E1',
+                        borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                      }}
+                    >
+                      Close Viewer
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
