@@ -29,9 +29,9 @@ if [ ! -f /swapfile ]; then
   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 fi
 
-# Nginx site
+# Nginx site (skipped if already installed, so certbot changes survive a re-run)
 sudo mkdir -p /var/www/factorygrid
-sudo cp "$(dirname "$0")/nginx-factorygrid.conf" /etc/nginx/sites-available/factorygrid
+[ -f /etc/nginx/sites-available/factorygrid ] || sudo cp "$(dirname "$0")/nginx-factorygrid.conf" /etc/nginx/sites-available/factorygrid
 sudo ln -sf /etc/nginx/sites-available/factorygrid /etc/nginx/sites-enabled/factorygrid
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
@@ -41,4 +41,5 @@ mkdir -p "$HOME/backups"
 echo
 echo "Setup done. Log out and back in (for docker group), then:"
 echo "  cp deploy/env.prod.example deploy/.env.prod && nano deploy/.env.prod"
+echo "  sudo certbot --nginx -d factorygrid.dualapptech.com --redirect --agree-tos -m <your-email>"
 echo "  bash deploy/deploy.sh"
