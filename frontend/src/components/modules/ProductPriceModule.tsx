@@ -115,10 +115,14 @@ export const ProductPriceModule: React.FC = () => {
     const strId = String(pmId);
     const map = (mappings || []).find(m => String(m.id) === strId || String(m.product_manufacturer_id) === strId);
     if (map) {
-      const mfg = (manufacturers || []).find(m => m.id === map.manufacturer_id || m.id === (map as any).registrationId);
-      return mfg?.companyName || mfg?.name || map.manufacturer_name || `Mapping #${strId}`;
+      const mfg = (manufacturers || []).find(m => m.id === map.manufacturer_id || m.id === (map as any).registrationId || (map.manufacturer_id && m.id === String(map.manufacturer_id)));
+      return mfg?.companyName || mfg?.name || (map as any).manufacturer_name || (map as any).manufacturerName || 'Selected Manufacturer';
     }
-    return `Mapping #${strId}`;
+    const directMfg = (manufacturers || []).find(m => String(m.id) === strId);
+    if (directMfg) {
+      return directMfg.companyName || directMfg.name || 'Selected Manufacturer';
+    }
+    return 'Assigned Manufacturer';
   };
 
   const formatMasterDate = (dateStr?: string | null): string => {
@@ -491,7 +495,6 @@ export const ProductPriceModule: React.FC = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', width: 90 }}>ID</th>
                 <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Product</th>
                 <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Customer Segment</th>
                 <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Manufacturer</th>
@@ -506,7 +509,7 @@ export const ProductPriceModule: React.FC = () => {
             <tbody>
               {filteredPrices.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
                     <Tag size={32} style={{ color: '#94A3B8', display: 'block', margin: '0 auto 8px' }} />
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>No product price records found.</div>
                     <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
@@ -533,13 +536,6 @@ export const ProductPriceModule: React.FC = () => {
                       onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                       onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
                     >
-                      {/* ID */}
-                      <td style={{ padding: '12px 14px' }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', background: '#F0FDFA', padding: '2px 6px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
-                          #{priceId}
-                        </span>
-                      </td>
-
                       {/* Product */}
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 13 }}>
@@ -731,7 +727,7 @@ export const ProductPriceModule: React.FC = () => {
                         const sid = s.customer_segment_id || s.id;
                         return (
                           <option key={sid} value={sid}>
-                            {s.segment_code} — {s.segment_name || s.name}
+                            {s.segment_name || s.name}
                           </option>
                         );
                       })}
@@ -913,7 +909,7 @@ export const ProductPriceModule: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Eye size={18} style={{ color: '#0F766E' }} />
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
-                  Price Rule Details #{selectedPriceForDetail.product_price_id || selectedPriceForDetail.id}
+                  Price Rule Details
                 </h3>
               </div>
               <button
@@ -1055,7 +1051,7 @@ export const ProductPriceModule: React.FC = () => {
               <Trash2 size={22} />
             </div>
             <h3 style={{ margin: '0 0 6px 0', fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
-              Delete Price Rule #{deleteTarget.product_price_id || deleteTarget.id}?
+              Delete Price Rule?
             </h3>
             <p style={{ margin: '0 0 16px 0', fontSize: 12.5, color: '#64748B' }}>
               This will permanently delete this price rule from the PostgreSQL database. This action cannot be undone.

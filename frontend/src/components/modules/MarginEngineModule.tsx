@@ -1050,7 +1050,6 @@ BioCure Pharmaceuticals Ltd,BIO-MET-500,MET-500,Metformin SR 500mg Tablets,Perce
                 <thead>
                   <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>CATEGORY</th>
-                    <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>CODE</th>
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>PRODUCTS</th>
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>MARGIN CONFIGURATION</th>
                     <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', textAlign: 'right', paddingRight: 16 }}>ACTIONS</th>
@@ -1102,12 +1101,6 @@ BioCure Pharmaceuticals Ltd,BIO-MET-500,MET-500,Metformin SR 500mg Tablets,Perce
                               )}
                             </div>
                           </div>
-                        </td>
-
-                        <td style={{ padding: '14px 14px' }}>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 11.5, background: '#F1F5F9', color: '#0F766E', padding: '3px 8px', borderRadius: 4, border: '1px solid #E2E8F0' }}>
-                            {catCode}
-                          </span>
                         </td>
 
                         <td style={{ padding: '14px 14px' }}>
@@ -1369,9 +1362,6 @@ BioCure Pharmaceuticals Ltd,BIO-MET-500,MET-500,Metformin SR 500mg Tablets,Perce
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ fontSize: 15, fontWeight: 800, color: '#0F172A' }}>
                             {mfg.brandName || mfg.companyName || mfg.name}
-                          </span>
-                          <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, padding: '2px 6px', background: '#F1F5F9', color: '#0F766E', borderRadius: 4 }}>
-                            {mfg.code}
                           </span>
                           <span style={{ fontSize: 11, color: '#64748B' }}>
                             {isFgDirect ? '● Direct Platform Generic Supplier' : '● Contract Manufacturer'}
@@ -1640,9 +1630,6 @@ BioCure Pharmaceuticals Ltd,BIO-MET-500,MET-500,Metformin SR 500mg Tablets,Perce
                     <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#0F172A' }}>
                       {currentSelectedMfg.brandName || currentSelectedMfg.companyName || currentSelectedMfg.name}
                     </h3>
-                    <span style={{ fontSize: 10.5, fontFamily: 'monospace', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#F1F5F9', color: '#0F766E' }}>
-                      {currentSelectedMfg.code}
-                    </span>
                   </div>
                   <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
                     Each product mapped to {currentSelectedMfg.brandName || currentSelectedMfg.name} is configured with an independent margin (Percentage or Fixed Rate).

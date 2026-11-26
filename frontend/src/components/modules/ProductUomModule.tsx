@@ -416,7 +416,6 @@ export const ProductUomModule: React.FC = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', width: 90 }}>ID</th>
                 <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Product</th>
                 <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>UOM Name</th>
                 <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center' }}>Conversion Factor</th>
@@ -428,7 +427,7 @@ export const ProductUomModule: React.FC = () => {
             <tbody>
               {filteredUoms.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
                     <Layers size={32} style={{ color: '#94A3B8', display: 'block', margin: '0 auto 8px' }} />
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>No UOM mappings found.</div>
                     <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
@@ -452,13 +451,6 @@ export const ProductUomModule: React.FC = () => {
                       onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                       onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
                     >
-                      {/* ID */}
-                      <td style={{ padding: '12px 14px' }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', background: '#F0FDFA', padding: '2px 6px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
-                          #{uomId}
-                        </span>
-                      </td>
-
                       {/* Product */}
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 13 }}>
@@ -720,7 +712,7 @@ export const ProductUomModule: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Eye size={18} style={{ color: '#0F766E' }} />
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
-                  UOM Details #{selectedUomForDetail.product_uom_id || selectedUomForDetail.id}
+                  UOM Details
                 </h3>
               </div>
               <button
@@ -830,7 +822,7 @@ export const ProductUomModule: React.FC = () => {
               <Trash2 size={22} />
             </div>
             <h3 style={{ margin: '0 0 6px 0', fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
-              Delete UOM #{deleteTarget.product_uom_id || deleteTarget.id}?
+              Delete UOM?
             </h3>
             <p style={{ margin: '0 0 16px 0', fontSize: 12.5, color: '#64748B' }}>
               This will remove this unit mapping from the PostgreSQL database. This action cannot be undone.

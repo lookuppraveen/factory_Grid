@@ -292,7 +292,7 @@ export const AttributeMasterModule: React.FC = () => {
     });
 
     if (isDuplicate) {
-      setFormError(`Attribute Code "${cleanCode}" already exists. Attribute codes must be unique.`);
+      setFormError(`An attribute with the name "${cleanName}" already exists. Attribute names must be unique.`);
       return;
     }
 
@@ -441,7 +441,7 @@ export const AttributeMasterModule: React.FC = () => {
           <Search size={15} style={{ color: '#64748B', flexShrink: 0 }} />
           <input
             type="text"
-            placeholder="Search by attribute code or name..."
+            placeholder="Search attributes by name..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             style={{
@@ -546,11 +546,11 @@ export const AttributeMasterModule: React.FC = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 170 }}>
-                Attribute Code
-              </th>
-              <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 180 }}>
+              <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>
                 Attribute Name
+              </th>
+              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>
+                Data Type
               </th>
               <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>
                 Unit of Measure
@@ -608,19 +608,21 @@ export const AttributeMasterModule: React.FC = () => {
                     onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
                     onMouseLeave={e => (e.currentTarget.style.background = '#FFFFFF')}
                   >
-                    {/* 1. Attribute Code */}
-                    <td style={{ padding: '12px 14px', fontSize: 12, fontWeight: 700, color: '#0F766E', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {code}
-                    </td>
-
-                    {/* 2. Attribute Name */}
+                    {/* 1. Attribute Name */}
                     <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{name}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{name}</div>
                       {attr.remark && (
                         <div style={{ fontSize: 11, color: '#64748B', marginTop: 2, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {attr.remark}
                         </div>
                       )}
+                    </td>
+
+                    {/* 2. Data Type */}
+                    <td style={{ padding: '12px 14px', fontSize: 12, color: '#475569' }}>
+                      <span style={{ fontWeight: 600, color: '#0F766E', background: '#F0FDFA', padding: '2px 8px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
+                        {attr.data_type || (attr as any).dataType || 'TEXT'}
+                      </span>
                     </td>
 
                     {/* 3. Unit of Measure */}
@@ -888,23 +890,9 @@ export const AttributeMasterModule: React.FC = () => {
                 gap: 12,
                 fontSize: 13
               }}>
-                <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: 6, border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Attribute ID</div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0F172A', marginTop: 3, fontFamily: 'monospace' }}>
-                    {viewingAttr.attribute_id || viewingAttr.id}
-                  </div>
-                </div>
-
-                <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: 6, border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Attribute Code</div>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F766E', marginTop: 3, fontFamily: 'monospace' }}>
-                    {viewingAttr.attribute_code || viewingAttr.code}
-                  </div>
-                </div>
-
-                <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: 6, border: '1px solid #E2E8F0', gridColumn: 'span 2' }}>
+                <div style={{ background: '#F8FAFC', padding: '12px 14px', borderRadius: 6, border: '1px solid #E2E8F0', gridColumn: 'span 2' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Attribute Name</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', marginTop: 3 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#0F172A', marginTop: 3 }}>
                     {viewingAttr.attribute_name || viewingAttr.name}
                   </div>
                 </div>
@@ -1319,31 +1307,7 @@ export const AttributeMasterModule: React.FC = () => {
                 </div>
               )}
 
-              {/* 1. ATTRIBUTE CODE * */}
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Attribute Code *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. STORAGE_TEMP, SHELF_LIFE, MATERIAL_GRADE"
-                  value={formData.attributeCode}
-                  onChange={e => setFormData({ ...formData, attributeCode: e.target.value.toUpperCase() })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    border: '1px solid #CBD5E1',
-                    borderRadius: 6,
-                    fontSize: 13,
-                    fontFamily: 'monospace',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              {/* 2. ATTRIBUTE NAME * */}
+              {/* ATTRIBUTE NAME * */}
               <div>
                 <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
                   Attribute Name *
@@ -1355,11 +1319,11 @@ export const AttributeMasterModule: React.FC = () => {
                   value={formData.attributeName}
                   onChange={e => {
                     const name = e.target.value;
-                    const autoCode = name.toUpperCase().trim().replace(/[^A-Z0-9]/g, '_');
+                    const autoCode = name.toUpperCase().trim().replace(/[^A-Z0-9]/g, '_') || 'ATTR';
                     setFormData({
                       ...formData,
                       attributeName: name,
-                      attributeCode: editingAttr ? formData.attributeCode : autoCode
+                      attributeCode: editingAttr && formData.attributeCode ? formData.attributeCode : autoCode
                     });
                   }}
                   style={{

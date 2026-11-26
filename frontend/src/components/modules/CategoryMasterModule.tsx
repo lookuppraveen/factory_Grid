@@ -1932,9 +1932,6 @@ export const CategoryMasterModule: React.FC = () => {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <span style={{ color: '#0F766E', fontWeight: 800 }}>•</span>
                                 <span style={{ fontWeight: 700, color: '#0F172A' }}>{rec.category} (Direct Record)</span>
-                                <span style={{ fontSize: 10.5, fontFamily: 'monospace', fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
-                                  {rec.category_code}
-                                </span>
                               </div>
                               <div style={{ position: 'relative', display: 'inline-block' }} data-actions-menu={`tree_dir_${rec.category_id || recIdx}`}>
                                 <button
@@ -2096,12 +2093,6 @@ export const CategoryMasterModule: React.FC = () => {
                                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                             <span style={{ color: '#0F766E', fontWeight: 800 }}>•</span>
                                             <span style={{ fontWeight: 700, color: '#0F172A' }}>{label}</span>
-                                            <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontFamily: 'monospace' }}>
-                                              {leaf.category_code}
-                                            </span>
-                                            <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#64748B', background: '#F8FAFC', padding: '1px 5px', borderRadius: 3, border: '1px solid #E2E8F0' }}>
-                                              ID: {leaf.category_id}
-                                            </span>
                                             <span style={{
                                               fontSize: 9.5, fontWeight: 800, padding: '1px 5px', borderRadius: 4,
                                               background: isActive ? '#DCFCE7' : '#FEE2E2',
@@ -3041,9 +3032,6 @@ export const CategoryMasterModule: React.FC = () => {
                       <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: 0 }}>
                         {viewingCat.category}
                       </h3>
-                      <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
-                        {viewCatCode}
-                      </span>
                       <span style={{
                         fontSize: 10,
                         fontWeight: 700,
@@ -3216,9 +3204,6 @@ export const CategoryMasterModule: React.FC = () => {
                                   justifyContent: 'center'
                                 }}>
                                   {idx + 1}
-                                </span>
-                                <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>
-                                  {attrCode}
                                 </span>
                                 <strong style={{ fontSize: 12.5, color: '#0F172A' }}>
                                   {attrName}
@@ -3782,9 +3767,6 @@ export const CategoryMasterModule: React.FC = () => {
                       <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0 }}>
                         {ptName}
                       </h3>
-                      <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontFamily: 'monospace' }}>
-                        {ptCode}
-                      </span>
                       <span style={{
                         fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4,
                         background: isActive ? '#DCFCE7' : '#FEE2E2',
@@ -3795,7 +3777,7 @@ export const CategoryMasterModule: React.FC = () => {
                       </span>
                     </div>
                     <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>
-                      Product Type ID: <strong style={{ color: '#0F766E', fontFamily: 'monospace' }}>{ptId}</strong> • Display Order: #{viewingPt.display_order ?? 1}
+                      Display Order: #{viewingPt.display_order ?? 1}
                     </div>
                   </div>
                 </div>
@@ -3879,8 +3861,7 @@ export const CategoryMasterModule: React.FC = () => {
                           <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                             <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 50, textAlign: 'center' }}>#</th>
                             <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: '#475569' }}>ASSIGNED ATTRIBUTE NAME</th>
-                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 130 }}>CODE</th>
-                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 100 }}>DATA TYPE</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 110 }}>DATA TYPE</th>
                             <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 70, textAlign: 'center' }}>UOM</th>
                             <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 90, textAlign: 'center' }}>REQUIRED</th>
                             <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: '#475569', width: 140 }}>FILTER / SEARCH</th>
@@ -3890,13 +3871,13 @@ export const CategoryMasterModule: React.FC = () => {
                         <tbody>
                           {viewPtLoading ? (
                             <tr>
-                              <td colSpan={8} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
+                              <td colSpan={7} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
                                 Loading assigned attributes from database...
                               </td>
                             </tr>
                           ) : attrs.length === 0 ? (
                             <tr>
-                              <td colSpan={8} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
+                              <td colSpan={7} style={{ padding: 36, textAlign: 'center', color: '#64748B' }}>
                                 <Sliders size={28} style={{ color: '#94A3B8', margin: '0 auto 6px', display: 'block' }} />
                                 <div>No attributes assigned to this Product Type.</div>
                               </td>
@@ -3924,11 +3905,6 @@ export const CategoryMasterModule: React.FC = () => {
                                         Options: {a.allowed_values.join(', ')}
                                       </div>
                                     )}
-                                  </td>
-                                  <td style={{ padding: '10px 12px' }}>
-                                    <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4, background: '#F1F5F9', color: '#334155', border: '1px solid #E2E8F0', fontFamily: 'monospace' }}>
-                                      {aCode}
-                                    </span>
                                   </td>
                                   <td style={{ padding: '10px 12px' }}>
                                     <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>

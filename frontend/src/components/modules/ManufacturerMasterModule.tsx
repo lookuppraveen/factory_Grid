@@ -173,27 +173,24 @@ export const ManufacturerMasterModule: React.FC = () => {
   const handleSaveManufacturer = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = formData.manufacturer_name.trim();
-    const cleanCode = formData.manufacturer_code.trim().toUpperCase();
-
     if (!cleanName) {
       setFormError('Manufacturer Name is required.');
       return;
     }
-    if (!cleanCode) {
-      setFormError('Manufacturer Code is required.');
-      return;
-    }
+    const autoCode = cleanName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10) || 'MFG';
+    const cleanCode = (formData.manufacturer_code.trim() || autoCode).toUpperCase();
 
-    // Uniqueness validation on Manufacturer Code
+    // Uniqueness validation on Manufacturer
     const duplicate = (manufacturers || []).find(m => {
       const isSelf = editingMfg && (m.id === editingMfg.id || m.manufacturer_id === editingMfg.manufacturer_id);
       if (isSelf) return false;
       const mCode = (m.manufacturer_code || m.code || '').toUpperCase().trim();
-      return mCode === cleanCode;
+      const mName = (m.manufacturer_name || m.companyName || m.name || '').toLowerCase().trim();
+      return mCode === cleanCode || mName === cleanName.toLowerCase();
     });
 
     if (duplicate) {
-      setFormError(`Manufacturer Code "${cleanCode}" is already in use by another manufacturer.`);
+      setFormError(`A manufacturer named "${cleanName}" already exists.`);
       return;
     }
 
@@ -434,8 +431,7 @@ export const ManufacturerMasterModule: React.FC = () => {
         <table style={{ width: '100%', minWidth: 1050, borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 140 }}>MANUFACTURER CODE</th>
-              <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 260 }}>MANUFACTURER NAME</th>
+              <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 280 }}>MANUFACTURER NAME</th>
               <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>DESCRIPTION</th>
               <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>LIFECYCLE STATUS</th>
               <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 120 }}>EFFECTIVE FROM</th>
@@ -447,7 +443,7 @@ export const ManufacturerMasterModule: React.FC = () => {
           <tbody>
             {filteredManufacturers.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
                   <Factory size={36} style={{ color: '#94A3B8', marginBottom: 10, display: 'block', margin: '0 auto 10px' }} />
                   <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No manufacturers found.</div>
                   <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 18 }}>
@@ -479,13 +475,8 @@ export const ManufacturerMasterModule: React.FC = () => {
                     onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                     onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
                   >
-                    {/* Manufacturer Code */}
-                    <td style={{ padding: '12px 14px', fontSize: 12.5, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {codeStr}
-                    </td>
-
                     {/* Manufacturer Name */}
-                    <td style={{ padding: '12px 14px' }}>
+                    <td style={{ padding: '12px 16px' }}>
                       <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0F172A', lineHeight: 1.3 }}>{nameStr}</div>
                       {mfg.city && mfg.state && (
                         <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{mfg.city}, {mfg.state}</div>
@@ -609,22 +600,16 @@ export const ManufacturerMasterModule: React.FC = () => {
                   required
                   placeholder="e.g. SunBio LifeSciences Ltd"
                   value={formData.manufacturer_name}
-                  onChange={e => setFormData({ ...formData, manufacturer_name: e.target.value })}
+                  onChange={e => {
+                    const name = e.target.value;
+                    const autoCode = name.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10) || 'MFG';
+                    setFormData({
+                      ...formData,
+                      manufacturer_name: name,
+                      manufacturer_code: editingMfg && formData.manufacturer_code ? formData.manufacturer_code : autoCode
+                    });
+                  }}
                   style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Manufacturer Code * (UNIQUE)
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. MFG001"
-                  value={formData.manufacturer_code}
-                  onChange={e => setFormData({ ...formData, manufacturer_code: e.target.value.toUpperCase() })}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', fontWeight: 800, color: '#0F766E', outline: 'none' }}
                 />
               </div>
 
@@ -755,10 +740,7 @@ export const ManufacturerMasterModule: React.FC = () => {
               background: '#F8FAFC'
             }}>
               <div>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>
-                  {selectedMfgForDetail.manufacturer_code || selectedMfgForDetail.code}
-                </span>
-                <h2 style={{ margin: '2px 0 0', fontSize: 18, fontWeight: 800, color: '#0F172A' }}>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0F172A' }}>
                   {selectedMfgForDetail.manufacturer_name || selectedMfgForDetail.companyName || selectedMfgForDetail.name}
                 </h2>
                 <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
@@ -781,12 +763,8 @@ export const ManufacturerMasterModule: React.FC = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12.5 }}>
                   <div>
-                    <span style={{ color: '#64748B' }}>Manufacturer ID:</span>
-                    <strong style={{ color: '#0F172A', fontFamily: 'monospace', display: 'block' }}>{selectedMfgForDetail.manufacturer_id || selectedMfgForDetail.id}</strong>
-                  </div>
-                  <div>
-                    <span style={{ color: '#64748B' }}>Manufacturer Code:</span>
-                    <strong style={{ color: '#0F766E', fontFamily: 'monospace', display: 'block' }}>{selectedMfgForDetail.manufacturer_code || selectedMfgForDetail.code}</strong>
+                    <span style={{ color: '#64748B' }}>Manufacturer Name:</span>
+                    <strong style={{ color: '#0F172A', display: 'block' }}>{selectedMfgForDetail.manufacturer_name || selectedMfgForDetail.companyName || selectedMfgForDetail.name}</strong>
                   </div>
                   <div>
                     <span style={{ color: '#64748B' }}>Lifecycle Status:</span>
@@ -957,7 +935,7 @@ export const ManufacturerMasterModule: React.FC = () => {
               <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Confirm Manufacturer Deletion</h3>
             </div>
             <p style={{ margin: '0 0 18px', fontSize: 13, color: '#475569', lineHeight: 1.5 }}>
-              Are you sure you want to delete manufacturer <strong>{confirmDeleteMfg.manufacturer_name || confirmDeleteMfg.companyName}</strong> ({confirmDeleteMfg.manufacturer_code || confirmDeleteMfg.code})?
+              Are you sure you want to delete manufacturer <strong>{confirmDeleteMfg.manufacturer_name || confirmDeleteMfg.companyName}</strong>?
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button

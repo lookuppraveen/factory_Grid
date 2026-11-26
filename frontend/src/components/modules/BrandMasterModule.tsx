@@ -125,16 +125,12 @@ export const BrandMasterModule: React.FC = () => {
   const handleSaveBrand = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = formData.brand_name.trim();
-    const cleanCode = formData.brand_code.trim().toUpperCase();
-
     if (!cleanName) {
       setFormError('Brand Name is required.');
       return;
     }
-    if (!cleanCode) {
-      setFormError('Brand Code is required.');
-      return;
-    }
+    const autoCode = cleanName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10) || 'BRD';
+    const cleanCode = (formData.brand_code.trim() || autoCode).toUpperCase();
 
     // Uniqueness validation
     const duplicate = (brands || []).find(b => {
@@ -146,12 +142,7 @@ export const BrandMasterModule: React.FC = () => {
     });
 
     if (duplicate) {
-      const dupCode = (duplicate.brand_code || duplicate.code || '').toUpperCase();
-      if (dupCode === cleanCode) {
-        setFormError(`Brand Code "${cleanCode}" is already in use by another brand.`);
-      } else {
-        setFormError(`A brand named "${cleanName}" already exists.`);
-      }
+      setFormError(`A brand named "${cleanName}" already exists.`);
       return;
     }
 
@@ -441,9 +432,7 @@ export const BrandMasterModule: React.FC = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>BRAND ID</th>
-                <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 180 }}>BRAND NAME</th>
-                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 130 }}>BRAND CODE</th>
+                <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>BRAND NAME</th>
                 <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 200 }}>DESCRIPTION</th>
                 <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110, textAlign: 'center' }}>STATUS</th>
                 <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 120 }}>CREATED AT</th>
@@ -454,7 +443,7 @@ export const BrandMasterModule: React.FC = () => {
             <tbody>
               {filteredBrands.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
                     <Tag size={36} style={{ color: '#94A3B8', margin: '0 auto 10px', display: 'block' }} />
                     <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No brands found.</div>
                     <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 16 }}>
@@ -485,14 +474,7 @@ export const BrandMasterModule: React.FC = () => {
                       onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
                       onMouseLeave={e => e.currentTarget.style.background = '#FFFFFF'}
                     >
-                      {/* 1. BRAND ID */}
-                      <td style={{ padding: '14px 14px' }}>
-                        <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace', background: '#F0FDFA', padding: '3px 8px', borderRadius: 4, border: '1px solid #CCFBF1' }}>
-                          {formattedId}
-                        </span>
-                      </td>
-
-                      {/* 2. BRAND NAME */}
+                      {/* 1. BRAND NAME */}
                       <td style={{ padding: '14px 16px' }}>
                         <div style={{ fontWeight: 800, color: '#0F172A', fontSize: 13.5, display: 'flex', alignItems: 'center', gap: 8 }}>
                           <Tag size={15} style={{ color: '#0F766E', flexShrink: 0 }} />
@@ -500,14 +482,7 @@ export const BrandMasterModule: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* 3. BRAND CODE */}
-                      <td style={{ padding: '14px 14px' }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontFamily: 'monospace' }}>
-                          {bCode}
-                        </span>
-                      </td>
-
-                      {/* 4. DESCRIPTION */}
+                      {/* 2. DESCRIPTION */}
                       <td style={{ padding: '14px 16px', color: '#475569', fontSize: 12.5, maxWidth: 220 }}>
                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.description || 'Catalogue brand'}>
                           {b.description || <span style={{ color: '#94A3B8', fontStyle: 'italic' }}>No description</span>}
@@ -739,22 +714,16 @@ export const BrandMasterModule: React.FC = () => {
                   required
                   placeholder="e.g. SunBio, Cipla Partner, Augmentin"
                   value={formData.brand_name}
-                  onChange={e => setFormData({ ...formData, brand_name: e.target.value })}
+                  onChange={e => {
+                    const name = e.target.value;
+                    const autoCode = name.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10) || 'BRD';
+                    setFormData({
+                      ...formData,
+                      brand_name: name,
+                      brand_code: editingBrand && formData.brand_code ? formData.brand_code : autoCode
+                    });
+                  }}
                   style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Brand Code *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. SUNBIO, CIPLA, BRD-AUG"
-                  value={formData.brand_code}
-                  onChange={e => setFormData({ ...formData, brand_code: e.target.value.toUpperCase() })}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', fontWeight: 700, outline: 'none' }}
                 />
               </div>
 

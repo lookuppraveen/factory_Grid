@@ -107,23 +107,22 @@ export const CustomerSegmentMasterModule: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.segment_code.trim()) {
-      setFormError('Segment Code is mandatory.');
-      return;
-    }
-    if (!formData.segment_name.trim()) {
+    const cleanName = formData.segment_name.trim();
+    if (!cleanName) {
       setFormError('Segment Name is mandatory.');
       return;
     }
 
-    const codeClean = formData.segment_code.trim().toUpperCase();
+    const autoCode = cleanName.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10) || 'SEG';
+    const codeClean = (formData.segment_code.trim() || autoCode).toUpperCase();
     const isDuplicate = (customerSegments || []).some(s =>
       (s.customer_segment_id || s.id) !== editingSegmentId &&
-      (s.segment_code || s.code || '').toUpperCase().trim() === codeClean
+      ((s.segment_name || s.name || '').toLowerCase().trim() === cleanName.toLowerCase() ||
+       (s.segment_code || s.code || '').toUpperCase().trim() === codeClean)
     );
 
     if (isDuplicate) {
-      setFormError(`Segment Code "${codeClean}" already exists. Code must be unique.`);
+      setFormError(`Customer Segment "${cleanName}" already exists.`);
       return;
     }
 
@@ -165,14 +164,16 @@ export const CustomerSegmentMasterModule: React.FC = () => {
 
   const handleDelete = (seg: CustomerSegment) => {
     const id = seg.customer_segment_id || seg.id || '';
-    if (window.confirm(`Are you sure you want to remove customer segment ${seg.segment_code || seg.code}?`)) {
+    const segName = seg.segment_name || seg.name || 'this segment';
+    if (window.confirm(`Are you sure you want to remove customer segment ${segName}?`)) {
       removeCustomerSegment(id);
-      addAuditLog('DELETE_CUSTOMER_SEGMENT', `Removed customer segment ${seg.segment_code}`);
+      addAuditLog('DELETE_CUSTOMER_SEGMENT', `Removed customer segment ${segName}`);
     }
   };
 
   const handleToggleStatus = (seg: CustomerSegment) => {
     const id = seg.customer_segment_id || seg.id || '';
+    const segName = seg.segment_name || seg.name || 'Segment';
     const current = seg.lifecycle_status || (seg.is_active ? 'ACTIVE' : 'INACTIVE');
     const nextStatus = current === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     updateCustomerSegment(id, {
@@ -180,7 +181,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
       is_active: nextStatus === 'ACTIVE',
       updated_at: new Date().toISOString()
     });
-    addAuditLog('TOGGLE_CUSTOMER_SEGMENT_STATUS', `Toggled customer segment ${seg.segment_code} to ${nextStatus}`);
+    addAuditLog('TOGGLE_CUSTOMER_SEGMENT_STATUS', `Toggled customer segment ${segName} to ${nextStatus}`);
   };
 
   return (
@@ -247,8 +248,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
           <table style={{ width: '100%', minWidth: 800, borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 140 }}>SEGMENT CODE</th>
-                <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 220 }}>SEGMENT NAME</th>
+                <th style={{ padding: '12px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 220 }}>SEGMENT NAME</th>
                 <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>DESCRIPTION</th>
                 <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 140 }}>LIFECYCLE STATUS</th>
                 <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 120 }}>CREATED AT</th>
@@ -261,7 +261,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
             <tbody>
               {paginatedSegments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>
                     <Users size={32} style={{ color: '#94A3B8', display: 'block', margin: '0 auto 10px' }} />
                     <div style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>No customer segments found.</div>
                     <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 4 }}>Add a customer segment to configure tiered commercial pricing.</div>
@@ -274,10 +274,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
 
                   return (
                     <tr key={seg.customer_segment_id || seg.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '12px 14px', fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace', color: '#0F766E' }}>
-                        {seg.segment_code || seg.code}
-                      </td>
-                      <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
+                      <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
                         {seg.segment_name || seg.name}
                       </td>
                       <td style={{ padding: '12px 14px', fontSize: 12.5, color: '#475569' }}>
@@ -321,7 +318,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0F172A' }}>
                   {editingSegmentId ? 'Edit Customer Segment' : 'Add Customer Segment'}
                 </h3>
-                <span style={{ fontSize: 12, color: '#64748B' }}>Entity: CUSTOMER_SEGMENT</span>
+                <span style={{ fontSize: 12, color: '#64748B' }}>Commercial Pricing Tier</span>
               </div>
               <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer' }}>
                 <X size={18} />
@@ -338,20 +335,6 @@ export const CustomerSegmentMasterModule: React.FC = () => {
             <form onSubmit={handleSubmit} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
                 <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                  Segment Code * (UNIQUE)
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. DIST, HOSP, GOVT, RET"
-                  value={formData.segment_code}
-                  onChange={e => setFormData({ ...formData, segment_code: e.target.value.toUpperCase() })}
-                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', fontWeight: 800, color: '#0F766E', outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
                   Segment Name *
                 </label>
                 <input
@@ -359,7 +342,15 @@ export const CustomerSegmentMasterModule: React.FC = () => {
                   required
                   placeholder="e.g. Authorized Wholesale Distributor"
                   value={formData.segment_name}
-                  onChange={e => setFormData({ ...formData, segment_name: e.target.value })}
+                  onChange={e => {
+                    const name = e.target.value;
+                    const autoCode = name.toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10) || 'SEG';
+                    setFormData({
+                      ...formData,
+                      segment_name: name,
+                      segment_code: editingSegmentId && formData.segment_code ? formData.segment_code : autoCode
+                    });
+                  }}
                   style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, outline: 'none' }}
                 />
               </div>

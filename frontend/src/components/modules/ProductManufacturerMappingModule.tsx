@@ -884,10 +884,10 @@ export const ProductManufacturerMappingModule: React.FC = () => {
                 }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Primary Key (product_manufacturer_id)
+                      Relationship Status
                     </div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#134E4A', fontFamily: 'monospace', marginTop: 2 }}>
-                      {pmId}
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#134E4A', marginTop: 2 }}>
+                      {prdName} · {mfgName}
                     </div>
                   </div>
                   <span style={{
