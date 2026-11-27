@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { isB2bSpecial } from '../../utils/customerClassification';
 import { ViewModeToggle } from '../common/ViewModeToggle';
 import {
   ShoppingBag, CheckCircle2, Clock, Truck, FileText, Download, 
@@ -1686,7 +1687,7 @@ export const BuyerOrderTrackingModule: React.FC<BuyerOrderTrackingModuleProps> =
                 <h2 style={{ fontSize: 22, fontWeight: 800, color: '#0F172A', margin: '2px 0 0' }}>{activeMasterOrder.orderNumber}</h2>
                 <div style={{ fontSize: 12.5, color: '#475569', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span>Consignee Buyer: <strong style={{ color: '#0F172A' }}>{activeMasterOrder.customerName}</strong></span>
-                  {activeMasterOrder.customerClassification === 'SPECIAL_PARTY' && (
+                  {isB2bSpecial(activeMasterOrder.customerClassification) && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 10, fontWeight: 800 }}>
                       <Star size={10} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
                     </span>
@@ -1792,7 +1793,7 @@ export const BuyerOrderTrackingModule: React.FC<BuyerOrderTrackingModuleProps> =
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Consignee Buyer</div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span>{activeMasterOrder.customerName}</span>
-                  {activeMasterOrder.customerClassification === 'SPECIAL_PARTY' && (
+                  {isB2bSpecial(activeMasterOrder.customerClassification) && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 10, fontWeight: 800 }}>
                       <Star size={10} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
                     </span>

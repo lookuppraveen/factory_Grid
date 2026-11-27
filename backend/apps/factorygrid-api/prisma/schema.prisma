@@ -161,7 +161,7 @@ model CustomerVerificationRequest {
   customerName              String             @map("customer_name") @db.VarChar(150)
   companyName               String             @map("company_name") @db.VarChar(150)
   customerType              String             @map("customer_type") @db.VarChar(50)
-  customerClassification    String             @default("REGULAR") @map("customer_classification") @db.VarChar(50)
+  customerClassification    String             @default("B2B") @map("customer_classification") @db.VarChar(50)
   verificationStatus        String             @default("Under Review") @map("verification_status") @db.VarChar(50)
   assignedComplianceOfficer String?            @map("assigned_compliance_officer") @db.VarChar(150)
   gstNumber                 String             @map("gst_number") @db.VarChar(30)
@@ -223,6 +223,8 @@ model CatalogProduct {
   discontinuedOn       DateTime?             @map("discontinued_on") @db.Date
   replacementProductId String?               @map("replacement_product_id") @db.VarChar(50)
   isSellable           Boolean               @default(true) @map("is_sellable")
+  isGenericMedicine    Boolean               @default(false) @map("is_generic_medicine")
+  genericMedicinePrice Decimal?              @map("generic_medicine_price") @db.Decimal(12, 2)
   attributes           Json?                 @map("attributes")
   attribute1           String?               @map("attribute_1") @db.VarChar(255)
   attribute2           String?               @map("attribute_2") @db.VarChar(255)
@@ -258,6 +260,7 @@ model CatalogProduct {
   @@index([categoryId], map: "idx_catalog_products_category_id")
   @@index([productTypeId], map: "idx_catalog_products_product_type_id")
   @@index([lifecycleStatus], map: "idx_catalog_products_lifecycle_status")
+  @@index([isGenericMedicine], map: "idx_catalog_products_is_generic_medicine")
   @@map("catalog_products")
 }
 
@@ -370,6 +373,8 @@ model ManufacturerProduct {
   effectiveFrom           DateTime?                @map("effective_from") @db.Timestamptz(6)
   effectiveTo             DateTime?                @map("effective_to") @db.Timestamptz(6)
   isPreferred             Boolean                  @default(false) @map("is_preferred")
+  isGenericMedicine       Boolean                  @default(false) @map("is_generic_medicine")
+  genericMedicinePrice    Decimal?                 @map("generic_medicine_price") @db.Decimal(12, 2)
   packagingDetails        String?                  @map("packaging_details") @db.VarChar(255)
   createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt               DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -378,6 +383,7 @@ model ManufacturerProduct {
   productPrices        ProductPrice[]
 
   @@unique([registrationId, productId], map: "uq_mfg_product_registration_product")
+  @@index([isGenericMedicine], map: "idx_mfg_products_is_generic_medicine")
   @@map("manufacturer_products")
 }
 
@@ -533,7 +539,7 @@ model Rfq {
   buyerName              String             @map("buyer_name") @db.VarChar(150)
   companyName            String             @map("company_name") @db.VarChar(150)
   customerCode           String             @map("customer_code") @db.VarChar(50)
-  customerClassification String             @default("REGULAR") @map("customer_classification") @db.VarChar(50)
+  customerClassification String             @default("B2B") @map("customer_classification") @db.VarChar(50)
   status                 String             @default("Draft") @db.VarChar(50)
   priority               String             @default("STANDARD") @db.VarChar(50)
   deliveryLocation       String             @map("delivery_location") @db.VarChar(500)
@@ -959,7 +965,7 @@ model MasterOrder {
   buyerRegistrationId    BigInt?            @map("buyer_registration_id")
   customerName           String             @map("customer_name") @db.VarChar(250)
   customerCode           String?            @map("customer_code") @db.VarChar(50)
-  customerClassification String?            @default("REGULAR") @map("customer_classification") @db.VarChar(50)
+  customerClassification String?            @default("B2B") @map("customer_classification") @db.VarChar(50)
   totalAmount            Decimal            @default(0) @map("total_amount") @db.Decimal(14, 2)
   totalQuantity          Int                @default(0) @map("total_quantity")
   status                 String             @default("PENDING_ADMIN_APPROVAL") @db.VarChar(50)

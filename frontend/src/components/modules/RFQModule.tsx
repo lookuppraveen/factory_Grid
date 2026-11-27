@@ -9,6 +9,7 @@ import {
 } from '../../types';
 import { rfqApi, BackendRfq, BackendRfqLine, RfqMatchResponse, ManufacturerMatch } from '../../services/rfqApi';
 import { catalogApi } from '../../services/catalogApi';
+import { isB2bSpecial, normalizeCustomerClassification } from '../../utils/customerClassification';
 import {
   FileText, Plus, Search, Filter, Download, ChevronDown, ChevronRight,
   MoreHorizontal, Calendar, Clock, Users, CheckCircle2, AlertCircle,
@@ -51,6 +52,7 @@ interface DraftProductLine {
   molecule?: string;
   strength?: string;
   brand?: string;
+  genericMedicinePrice?: number | null;
   isCustomMolecule?: boolean;
 }
 
@@ -71,30 +73,49 @@ export const STANDARD_MOLECULES = [
 import { ManufacturerAssignedRFQsModule } from './ManufacturerAssignedRFQsModule';
 
 interface SearchableProductSelectProps {
-  products: Product[];
+  products?: Product[];
+  productTypeId?: string;
+  category?: string;
+  subCategory?: string;
+  subSubCategory?: string;
+  genericMedicine?: boolean;
   selectedProductId: string;
   selectedProductName: string;
+  selectedProductCode?: string;
   isOther?: boolean;
   customProductName?: string;
   disabledProductIds?: string[];
+  placeholder?: string;
+  otherLabel?: string;
   onSelectProduct: (product: Product) => void;
   onSelectOther: () => void;
   onCustomProductNameChange: (customName: string) => void;
 }
 
 const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
-  products,
+  products: fallbackProducts = [],
+  productTypeId,
+  category,
+  subCategory,
+  subSubCategory,
+  genericMedicine,
   selectedProductId,
   selectedProductName,
+  selectedProductCode,
   isOther,
   customProductName,
   disabledProductIds = [],
+  placeholder = 'Select Product ▼',
+  otherLabel = 'Other (Enter custom product name)',
   onSelectProduct,
   onSelectOther,
   onCustomProductNameChange
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [remoteProducts, setRemoteProducts] = useState<Product[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -107,33 +128,64 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return products;
-    const term = searchTerm.toLowerCase();
-    return products.filter(p =>
-      p.name.toLowerCase().includes(term) ||
-      (p.genericName && p.genericName.toLowerCase().includes(term)) ||
-      (p.code && p.code.toLowerCase().includes(term)) ||
-      ((p as any).productCode && (p as any).productCode.toLowerCase().includes(term)) ||
-      (p.category && p.category.toLowerCase().includes(term)) ||
-      (p.subCategory && p.subCategory.toLowerCase().includes(term))
-    );
-  }, [products, searchTerm]);
+  // Live PostgreSQL query via backend Product Catalog API whenever dropdown opens or filters/search change
+  React.useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    const timer = setTimeout(async () => {
+      setIsLoadingProducts(true);
+      setApiError(null);
+      try {
+        const res = await catalogApi.listProducts({
+          buyerView: true,
+          activeOnly: true,
+          productTypeId: productTypeId && productTypeId !== 'ALL' ? productTypeId : undefined,
+          category: category && category !== 'ALL' ? category : undefined,
+          subCategory: subCategory && subCategory !== 'ALL' ? subCategory : undefined,
+          subSubCategory: subSubCategory && subSubCategory !== 'ALL' ? subSubCategory : undefined,
+          search: searchTerm.trim() || undefined,
+          genericMedicine,
+          size: 100,
+        });
+        if (!active) return;
+        const list = Array.isArray(res) ? res : ((res as any)?.content || (res as any)?.products || []);
+        setRemoteProducts(list);
+      } catch (err: any) {
+        if (!active) return;
+        setApiError(err?.message || 'Failed to load products from catalog.');
+        setRemoteProducts([]);
+      } finally {
+        if (active) setIsLoadingProducts(false);
+      }
+    }, searchTerm.trim() ? 200 : 0);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [isOpen, productTypeId, category, subCategory, subSubCategory, genericMedicine, searchTerm]);
+
+  const filteredProducts = remoteProducts;
 
   const displayLabel = useMemo(() => {
     if (selectedProductId === 'other' || isOther) {
       return customProductName ? `Other: ${customProductName}` : 'Other (Custom Product)';
     }
     if (selectedProductId) {
-      const found = products.find(p => p.id === selectedProductId || (p as any).productCode === selectedProductId);
+      const found =
+        remoteProducts.find(p => p.id === selectedProductId || (p as any).productCode === selectedProductId) ||
+        fallbackProducts.find(p => p.id === selectedProductId || (p as any).productCode === selectedProductId);
       if (found) {
-        const pCode = found.code || (found as any).productCode || (found as any).product_code;
-        return pCode ? `[${pCode}] ${found.name}` : found.name;
+        const pName = found.name || (found as any).productName || (found as any).product_name || selectedProductName;
+        const pCode = found.code || (found as any).productCode || (found as any).product_code || selectedProductCode;
+        return pCode ? `${pName} (${pCode})` : pName;
       }
-      if (selectedProductName) return selectedProductName;
+      if (selectedProductName) {
+        return selectedProductCode ? `${selectedProductName} (${selectedProductCode})` : selectedProductName;
+      }
     }
-    return 'Select Product ▼';
-  }, [products, selectedProductId, selectedProductName, isOther, customProductName]);
+    return placeholder;
+  }, [remoteProducts, fallbackProducts, selectedProductId, selectedProductName, selectedProductCode, isOther, customProductName, placeholder]);
 
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
@@ -210,13 +262,24 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
           </div>
 
           {/* Product Options List */}
-          <div style={{ maxHeight: 250, overflowY: 'auto' }}>
-            {filteredProducts.length > 0 ? (
+          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+            {isLoadingProducts ? (
+              <div style={{ padding: '14px', fontSize: 12, color: '#64748B', textAlign: 'center' }}>
+                Loading products from Product Master...
+              </div>
+            ) : apiError ? (
+              <div style={{ padding: '12px 14px', fontSize: 12, color: '#B91C1C', background: '#FEF2F2', textAlign: 'center', fontWeight: 600 }}>
+                {apiError}
+              </div>
+            ) : filteredProducts.length > 0 ? (
               filteredProducts.map(p => {
                 const isSelected = (p.id === selectedProductId || (p as any).productCode === selectedProductId) && !isOther;
                 const isDisabled = disabledProductIds.includes(p.id) && !isSelected;
-                const pCode = p.code || (p as any).productCode || (p as any).product_code;
-                const categoryPath = [p.category, p.subCategory, (p as any).subSubCategory].filter(Boolean).join(' → ');
+                const pName = p.name || (p as any).productName || (p as any).product_name || 'Unnamed Product';
+                const pCode = (p as any).productCode || p.code || (p as any).product_code || '';
+                const pBrand = (p as any).brandName || (p as any).brand || (p.brandNames && p.brandNames[0]) || '';
+                const categoryPath = [p.category, p.subCategory || (p as any).sub_category, p.subSubCategory || (p as any).sub_sub_category].filter(Boolean).join(' → ');
+                const genericPrice = p.genericMedicinePrice ?? p.generic_medicine_price;
 
                 return (
                   <div
@@ -249,26 +312,47 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {/* Primary Line: Product Name */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 700, color: isDisabled ? '#94A3B8' : '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {pName}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                          {Boolean(p.isGenericMedicine ?? p.is_generic_medicine) && genericPrice != null && (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#DCFCE7', padding: '1px 6px', borderRadius: 4, border: '1px solid #86EFAC' }}>
+                              ₹{Number(genericPrice).toFixed(2)}
+                            </span>
+                          )}
+                          {isDisabled && (
+                            <span style={{ fontSize: 10.5, color: '#DC2626', background: '#FEE2E2', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
+                              Already Added
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Secondary Line: Product Code + Brand */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
                         {pCode && (
                           <span style={{ fontFamily: 'monospace', fontSize: 10.5, fontWeight: 700, color: '#0F766E', background: '#CCFBF1', padding: '1px 6px', borderRadius: 4 }}>
                             {pCode}
                           </span>
                         )}
-                        <span style={{ fontWeight: 700, color: isDisabled ? '#94A3B8' : '#0F172A' }}>{p.name}</span>
-                        {isDisabled && (
-                          <span style={{ fontSize: 10.5, color: '#DC2626', background: '#FEE2E2', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
-                            Already Added
+                        {pBrand && (
+                          <span style={{ fontSize: 11, color: '#475569', fontWeight: 600 }}>
+                            Brand: {pBrand}
                           </span>
                         )}
                       </div>
+
+                      {/* Tertiary Line: Category Hierarchy + Pack Info */}
                       {categoryPath && (
-                        <div style={{ fontSize: 11, color: '#0F766E', marginTop: 2, fontWeight: 500 }}>
-                          📁 {categoryPath}
+                        <div style={{ fontSize: 11, color: '#64748B', marginTop: 2, fontWeight: 500 }}>
+                          {categoryPath}
                         </div>
                       )}
                       {(p.dosageForm || p.packSize) && (
-                        <div style={{ fontSize: 11, color: '#64748B', marginTop: 1 }}>
+                        <div style={{ fontSize: 10.5, color: '#94A3B8', marginTop: 1 }}>
                           {[p.dosageForm, p.packSize, (p as any).packUom || (p as any).baseUom || p.uom].filter(Boolean).join(' • ')}
                         </div>
                       )}
@@ -279,7 +363,7 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
               })
             ) : (
               <div style={{ padding: '14px', fontSize: 12, color: '#94A3B8', textAlign: 'center' }}>
-                No matching catalog products found under selected hierarchy
+                No products found for this classification.
               </div>
             )}
 
@@ -312,7 +396,7 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Plus size={14} style={{ color: '#0F766E' }} />
-                <span>Other (Enter custom product name)</span>
+                <span>{otherLabel}</span>
               </div>
               {(selectedProductId === 'other' || isOther) && <Check size={14} style={{ color: '#0F766E', flexShrink: 0 }} />}
             </div>
@@ -367,8 +451,8 @@ export const RFQModule: React.FC = () => {
   const [isMatchingLoading, setIsMatchingLoading] = useState<boolean>(false);
   const [liveMatchingResult, setLiveMatchingResult] = useState<RfqMatchResponse | null>(null);
 
-  // Determine Special Party status directly from verified backend profile
-  const isSpecialPartyBuyer = (buyerBackendProfile?.customerClassification || realBuyerProfile?.customerClassification || activeBuyerAccount) === 'SPECIAL_PARTY';
+  // Determine B2B Special status directly from verified backend profile
+  const isSpecialPartyBuyer = isB2bSpecial(buyerBackendProfile?.customerClassification || realBuyerProfile?.customerClassification || activeBuyerAccount);
 
   if (currentRole === 'SUPPLIER') {
     return <ManufacturerAssignedRFQsModule />;
@@ -508,15 +592,22 @@ export const RFQModule: React.FC = () => {
         isGeneric: sr.isGeneric ?? false,
         lines: (sr.lines || []).map((l: any, idx: number) => ({
           id: l.id || `line_${idx}`,
-          productId: l.productId || l.productCode || 'p1',
+          productId: l.productId || '',
+          productCode: l.productCode || '',
           productName: l.productName,
+          category: l.category || '',
+          subCategory: l.subCategory || '',
+          subSubCategory: l.subSubCategory || '',
           dosageForm: l.dosageForm || 'Tablet',
           packSize: l.packSize || '10 x 10 Strip',
+          uom: l.uom || 'Unit',
           quantity: Number(l.quantity),
           requiredDate: l.requiredDate || '',
           remarks: l.remarks || '',
           productType: l.productType || 'BRANDED',
           molecule: l.molecule,
+          strength: l.strength || '',
+          targetPrice: l.targetPrice ?? null,
           eligibleManufacturersCount: 0
         }))
       }));
@@ -947,14 +1038,19 @@ export const RFQModule: React.FC = () => {
     }));
   };
 
-  const handleSelectProduct = (idx: number, product: Product) => {
+  const handleSelectProduct = (idx: number, product: Product, mode?: 'BRANDED' | 'GENERIC') => {
     setRfqLines(prev => prev.map((l, i) => {
       if (i !== idx) return l;
+      const effectiveMode = mode || l.productType || 'BRANDED';
+      const pName = product.name || (product as any).productName || (product as any).product_name || '';
+      const pCode = (product as any).productCode || product.code || (product as any).product_code || '';
+      const pBrand = (product as any).brandName || (product as any).brand || (product.brandNames && product.brandNames[0]) || '';
+      const genericPrice = product.genericMedicinePrice ?? product.generic_medicine_price ?? null;
       return {
         ...l,
         productId: product.id,
-        productCode: product.productCode || (product as any).code || '',
-        productName: product.name,
+        productCode: pCode,
+        productName: pName,
         dosageForm: product.dosageForm || (product as any).dosage_form || '',
         packSize: product.packSize || (product as any).pack_size || '',
         uom: (product as any).packUom || (product as any).baseUom || product.uom || 'Unit',
@@ -962,12 +1058,14 @@ export const RFQModule: React.FC = () => {
         subCategory: product.subCategory || (product as any).sub_category || l.subCategory,
         subSubCategory: product.subSubCategory || (product as any).sub_sub_category || l.subSubCategory,
         productTypeId: product.productTypeId || (product as any).product_type_id || l.productTypeId,
-        brand: product.brand || (product as any).brandName || '',
-        molecule: product.genericName || '',
+        brand: pBrand,
+        molecule: product.genericName || pName,
         strength: (product as any).strength || (product.attributes as any)?.strength || '',
+        genericMedicinePrice: genericPrice != null ? Number(genericPrice) : null,
         isOther: false,
         customProductName: '',
-        productType: 'BRANDED'
+        isCustomMolecule: false,
+        productType: effectiveMode
       };
     }));
   };
@@ -1009,22 +1107,21 @@ export const RFQModule: React.FC = () => {
 
       if (field === 'productType') {
         if (value === 'GENERIC') {
-          const dbFormulations = getDatabaseFormulationsForLine(line);
-          const firstDb = dbFormulations[0];
           return {
             ...line,
             productType: 'GENERIC',
-            molecule: firstDb?.molecule || line.molecule || '',
-            productId: firstDb?.id || '',
+            productId: '',
             productCode: '',
-            productName: firstDb?.molecule ? `${firstDb.molecule} (Generic)` : (line.molecule ? `${line.molecule} (Generic)` : ''),
-            dosageForm: firstDb?.dosageForm || line.subCategory || line.dosageForm || 'Tablet',
-            packSize: firstDb?.packSize || line.packSize || '10 x 10 Strip',
-            uom: line.uom || 'Unit',
-            strength: line.strength || firstDb?.strength || '500mg',
+            productName: '',
+            molecule: '',
+            brand: '',
+            genericMedicinePrice: null,
+            dosageForm: line.subCategory || '',
+            packSize: '',
+            strength: '',
             isOther: false,
             customProductName: '',
-            isCustomMolecule: !firstDb && !!line.molecule,
+            isCustomMolecule: false,
           };
         } else {
           return {
@@ -1038,6 +1135,9 @@ export const RFQModule: React.FC = () => {
             uom: 'Unit',
             molecule: '',
             brand: '',
+            genericMedicinePrice: null,
+            isOther: false,
+            customProductName: '',
             isCustomMolecule: false,
           };
         }
@@ -1191,12 +1291,12 @@ export const RFQModule: React.FC = () => {
         creditRequired,
         creditTerms: creditRequired ? (creditTermsOption === 'Custom' ? (customCreditTerms || 'Credit Required') : creditTermsOption) : 'No Credit Required',
         isGeneric: validLines.some(l => l.productType === 'GENERIC'),
-        customerClassification: isSpecialPartyBuyer ? 'SPECIAL_PARTY' : 'REGULAR',
+        customerClassification: isSpecialPartyBuyer ? 'B2B_SPECIAL' : normalizeCustomerClassification(buyerBackendProfile?.customerClassification || realBuyerProfile?.customerClassification),
         lines: validLines.map((line, idx) => ({
           lineItemNumber: idx + 1,
           productId: line.productId || undefined,
           productName: line.productType === 'GENERIC'
-            ? (line.molecule ? `${line.molecule.trim()} (Generic)` : (line.productName || 'Generic Formulation'))
+            ? (line.productId && line.productId !== 'other' ? line.productName : (line.molecule ? `${line.molecule.trim()} (Generic)` : (line.productName || 'Generic Formulation')))
             : (line.customProductName || line.productName),
           productCode: line.productCode || undefined,
           category: line.category || undefined,
@@ -1277,12 +1377,12 @@ export const RFQModule: React.FC = () => {
         creditRequired,
         creditTerms: creditRequired ? (creditTermsOption === 'Custom' ? (customCreditTerms || 'Credit Required') : creditTermsOption) : 'No Credit Required',
         isGeneric: rfqLines.some(l => l.productType === 'GENERIC'),
-        customerClassification: isSpecialPartyBuyer ? 'SPECIAL_PARTY' : 'REGULAR',
+        customerClassification: isSpecialPartyBuyer ? 'B2B_SPECIAL' : normalizeCustomerClassification(buyerBackendProfile?.customerClassification || realBuyerProfile?.customerClassification),
         lines: rfqLines.map((line, idx) => ({
           lineItemNumber: idx + 1,
           productId: line.productId || undefined,
           productName: line.productType === 'GENERIC'
-            ? (line.molecule ? `${line.molecule.trim()} (Generic)` : (line.productName || 'Generic Formulation'))
+            ? (line.productId && line.productId !== 'other' ? line.productName : (line.molecule ? `${line.molecule.trim()} (Generic)` : (line.productName || 'Generic Formulation')))
             : (line.customProductName || line.productName),
           productCode: line.productCode || undefined,
           category: line.category || undefined,
@@ -1879,7 +1979,7 @@ export const RFQModule: React.FC = () => {
                       <td style={{ padding: '14px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>{rfq.customerName}</span>
-                          {rfq.customerClassification === 'SPECIAL_PARTY' ? (
+                          {isB2bSpecial(rfq.customerClassification) ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 4, fontSize: 10.5, fontWeight: 800, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
                               <Star size={10} fill="#0E7490" /> SPECIAL PARTY
                             </span>
@@ -2562,71 +2662,78 @@ export const RFQModule: React.FC = () => {
                               </span>
                             </div>
 
-                            {/* Active Ingredient / Molecule selector */}
+                            {/* Generic Medicine Product Selector from PostgreSQL (is_generic_medicine = true) */}
                             <div style={{ marginBottom: 10 }}>
                               <label style={{ fontSize: 11, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
-                                5. Active Ingredient / Molecule *
+                                5. Select Generic Medicine from Product Master *
                               </label>
-                              
-                              {(() => {
-                                const dbFormulations = getDatabaseFormulationsForLine(line);
-                                const selectedMol = line.isCustomMolecule ? '__CUSTOM_MOLECULE__' : (line.molecule || '');
-                                return (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    <select
-                                      value={selectedMol}
-                                      onChange={e => handleSelectMolecule(idx, e.target.value)}
-                                      style={{
-                                        width: '100%',
-                                        padding: '8px 12px',
-                                        background: '#FFFFFF',
-                                        border: '1px solid #86EFAC',
-                                        borderRadius: 6,
-                                        fontSize: 13,
-                                        fontWeight: 700,
-                                        color: '#0F172A'
-                                      }}
-                                    >
-                                      <option value="">-- Select Active Molecule from Master Catalog --</option>
-                                      {dbFormulations.length > 0 && (
-                                        <optgroup label={`Database Formulations (${dbFormulations.length} matching hierarchy)`}>
-                                          {dbFormulations.map(f => (
-                                            <option key={f.id || f.molecule} value={f.molecule}>
-                                              {f.molecule} {f.strength ? `(${f.strength})` : ''} — {f.dosageForm}
-                                            </option>
-                                          ))}
-                                        </optgroup>
-                                      )}
-                                      <optgroup label="Standard Registered Pharmacopoeia Molecules">
-                                        {STANDARD_MOLECULES.filter(sm => !dbFormulations.some(df => df.molecule.toLowerCase() === sm.toLowerCase())).map(m => (
-                                          <option key={m} value={m}>{m}</option>
-                                        ))}
-                                      </optgroup>
-                                      <optgroup label="Controlled Generic Product Request">
-                                        <option value="__CUSTOM_MOLECULE__">+ Request New Generic Molecule (Not in Master Catalog)</option>
-                                      </optgroup>
-                                    </select>
+                              <SearchableProductSelect
+                                products={catalogProductList}
+                                productTypeId={line.productTypeId}
+                                category={line.category}
+                                subCategory={line.subCategory}
+                                subSubCategory={line.subSubCategory}
+                                genericMedicine={true}
+                                selectedProductId={line.productId}
+                                selectedProductName={line.productName}
+                                selectedProductCode={line.productCode}
+                                isOther={line.isOther || line.isCustomMolecule}
+                                customProductName={line.customProductName || line.molecule}
+                                disabledProductIds={rfqLines.map((l, i) => i !== idx ? l.productId : '').filter(Boolean)}
+                                placeholder="Select Generic Medicine ▼"
+                                otherLabel="Request Custom Generic Molecule (Not in Master Catalog)"
+                                onSelectProduct={(product) => handleSelectProduct(idx, product, 'GENERIC')}
+                                onSelectOther={() => {
+                                  setRfqLines(prev => prev.map((l, i) => {
+                                    if (i !== idx) return l;
+                                    return {
+                                      ...l,
+                                      productId: 'other',
+                                      productCode: '',
+                                      productName: l.customProductName || '',
+                                      molecule: l.customProductName || '',
+                                      genericMedicinePrice: null,
+                                      isOther: true,
+                                      isCustomMolecule: true,
+                                      productType: 'GENERIC'
+                                    };
+                                  }));
+                                }}
+                                onCustomProductNameChange={(customName) => {
+                                  setRfqLines(prev => prev.map((l, i) => {
+                                    if (i !== idx) return l;
+                                    return {
+                                      ...l,
+                                      customProductName: customName,
+                                      molecule: customName,
+                                      productName: customName ? `${customName} (Generic)` : ''
+                                    };
+                                  }));
+                                }}
+                              />
 
-                                    {line.isCustomMolecule && (
-                                      <div style={{ background: '#FFFFFF', border: '1px dashed #16A34A', borderRadius: 6, padding: '10px 12px' }}>
-                                        <label style={{ fontSize: 10.5, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
-                                          New Generic Molecule / Active Formulation Name *
-                                        </label>
-                                        <input
-                                          type="text"
-                                          placeholder="Enter formulation molecule (e.g. Teneligliptin + Metformin)"
-                                          value={line.molecule || ''}
-                                          onChange={e => handleRowChange(idx, 'molecule', e.target.value)}
-                                          style={{ width: '100%', padding: '7px 10px', background: '#F8FAFC', border: '1px solid #86EFAC', borderRadius: 5, fontSize: 12.5, color: '#0F172A', fontWeight: 600 }}
-                                        />
-                                        <div style={{ fontSize: 10.5, color: '#15803D', marginTop: 4 }}>
-                                          ℹ️ Controlled generic requisition process: Will be reviewed and mapped by FactoryGrid Formulation Desk.
-                                        </div>
-                                      </div>
-                                    )}
+                              {line.productId && line.productId !== 'other' && (
+                                <div style={{ marginTop: 10, background: '#FFFFFF', border: '1px solid #86EFAC', borderRadius: 8, padding: '10px 14px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                      <strong style={{ fontSize: 13.5, color: '#0F172A' }}>{line.productName}</strong>
+                                      {line.productCode && (
+                                        <span style={{ fontSize: 10.5, fontWeight: 800, color: '#0F766E', background: '#CCFBF1', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>
+                                          {line.productCode}
+                                        </span>
+                                      )}
+                                      {line.genericMedicinePrice != null && (
+                                        <span style={{ fontSize: 11.5, fontWeight: 800, color: '#166534', background: '#DCFCE7', padding: '2px 8px', borderRadius: 4, border: '1px solid #86EFAC' }}>
+                                          Generic Price: ₹{Number(line.genericMedicinePrice).toFixed(2)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>
+                                      {[line.category, line.subCategory, line.subSubCategory].filter(Boolean).join(' → ')}
+                                    </span>
                                   </div>
-                                );
-                              })()}
+                                </div>
+                              )}
                             </div>
 
                             {/* 3-Column Specifications Grid: Strength, Dosage Form, Pack Size */}
@@ -2687,13 +2794,19 @@ export const RFQModule: React.FC = () => {
                                 )}
                               </div>
                               <SearchableProductSelect
-                                products={getEligibleProductsForLine(line)}
+                                products={catalogProductList}
+                                productTypeId={line.productTypeId}
+                                category={line.category}
+                                subCategory={line.subCategory}
+                                subSubCategory={line.subSubCategory}
+                                genericMedicine={false}
                                 selectedProductId={line.productId}
                                 selectedProductName={line.productName}
+                                selectedProductCode={line.productCode}
                                 isOther={line.isOther}
                                 customProductName={line.customProductName}
                                 disabledProductIds={rfqLines.map((l, i) => i !== idx ? l.productId : '').filter(Boolean)}
-                                onSelectProduct={(product) => handleSelectProduct(idx, product)}
+                                onSelectProduct={(product) => handleSelectProduct(idx, product, 'BRANDED')}
                                 onSelectOther={() => {
                                   setRfqLines(prev => prev.map((l, i) => {
                                     if (i !== idx) return l;

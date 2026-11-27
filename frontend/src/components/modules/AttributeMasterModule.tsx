@@ -10,7 +10,8 @@ import {
   MasterBreadcrumbs,
   MasterPageHeader,
   MasterStatsStrip,
-  MasterStatusBadge
+  MasterStatusBadge,
+  MasterApiStatusBanner
 } from '../common/MasterComponents';
 
 const DATA_TYPES: AttributeDataType[] = ['TEXT', 'NUMBER', 'DECIMAL', 'BOOLEAN', 'DATE', 'LIST'];
@@ -18,6 +19,9 @@ const DATA_TYPES: AttributeDataType[] = ['TEXT', 'NUMBER', 'DECIMAL', 'BOOLEAN',
 export const AttributeMasterModule: React.FC = () => {
   const {
     attributeMasters,
+    masterLoading,
+    masterErrors,
+    refreshAttributeMasters,
     addAttributeMaster,
     updateAttributeMaster,
     toggleAttributeMasterStatus,
@@ -407,6 +411,12 @@ export const AttributeMasterModule: React.FC = () => {
       />
 
       {/* ── Compact Statistics Strip ── */}
+      <MasterApiStatusBanner
+        loading={masterLoading.attributes && attributeMasters.length === 0}
+        error={masterErrors.attributes}
+        entityLabel="Attributes"
+        onRetry={refreshAttributeMasters}
+      />
       <MasterStatsStrip
         stats={[
           { label: 'TOTAL ATTRIBUTES', value: totalCount },

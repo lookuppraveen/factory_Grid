@@ -5,7 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { AuthUser } from '@factorygrid/auth';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BadRequestException } from '@nestjs/common';
 import {
   CreateManufacturerProductDto,
   ManufacturerProductBulkUploadDto,
@@ -16,6 +18,37 @@ import {
 @Injectable()
 export class ManufacturerProductService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private resolveAndValidateGenericMedicine(
+    rawFlag: boolean | undefined,
+    rawPrice: number | string | null | undefined,
+    fallbackFlag = false,
+    fallbackPrice: number | null = null,
+  ): { isGenericMedicine: boolean; genericMedicinePrice: number | null } {
+    const isGenericMedicine = rawFlag !== undefined ? Boolean(rawFlag) : Boolean(fallbackFlag);
+    if (!isGenericMedicine) {
+      return { isGenericMedicine: false, genericMedicinePrice: null };
+    }
+
+    const effectiveRawPrice = rawPrice !== undefined ? rawPrice : fallbackPrice;
+    if (effectiveRawPrice === undefined || effectiveRawPrice === null || String(effectiveRawPrice).trim() === '') {
+      throw new BadRequestException(
+        'Generic Medicine Price is required when Generic Medicine is enabled.',
+      );
+    }
+
+    const parsed = Number(effectiveRawPrice);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new BadRequestException(
+        'Generic Medicine Price must be a valid positive number greater than 0.',
+      );
+    }
+
+    return {
+      isGenericMedicine: true,
+      genericMedicinePrice: Math.round(parsed * 100) / 100,
+    };
+  }
 
   /**
    * Authoritatively resolves the authenticated manufacturer registration from PostgreSQL.
@@ -143,6 +176,9 @@ export class ManufacturerProductService {
     }
 
     const productWhere: any = {};
+    if (query.genericMedicine !== undefined) {
+      where.isGenericMedicine = query.genericMedicine;
+    }
     if (query.category && query.category !== 'ALL') {
       productWhere.category = { equals: query.category.trim(), mode: 'insensitive' };
     }
@@ -245,6 +281,13 @@ export class ManufacturerProductService {
   async createMapping(user: AuthUser, dto: CreateManufacturerProductDto, explicitMfgId?: string) {
     const reg = await this.resolveManufacturer(user, explicitMfgId);
 
+    const rawIsGeneric = dto.isGenericMedicine !== undefined ? dto.isGenericMedicine : dto.is_generic_medicine;
+    const rawGenericPrice = dto.genericMedicinePrice !== undefined ? dto.genericMedicinePrice : dto.generic_medicine_price;
+    const hasExplicitGeneric = rawIsGeneric !== undefined || rawGenericPrice !== undefined;
+    const validatedCreateGeneric = hasExplicitGeneric
+      ? this.resolveAndValidateGenericMedicine(rawIsGeneric, rawGenericPrice, false, null)
+      : null;
+
     // 1. Resolve or create central product in catalog_products
     let product: any = null;
     if (dto.productId) {
@@ -282,6 +325,11 @@ export class ManufacturerProductService {
             productTypeId: dto.productTypeId?.trim() || 'pt_med',
             lifecycleStatus: 'ACTIVE',
             isSellable: true,
+            isGenericMedicine: validatedCreateGeneric?.isGenericMedicine ?? false,
+            genericMedicinePrice:
+              validatedCreateGeneric?.genericMedicinePrice !== null && validatedCreateGeneric?.genericMedicinePrice !== undefined
+                ? new Prisma.Decimal(validatedCreateGeneric.genericMedicinePrice)
+                : null,
             active: true,
           },
         });
@@ -310,6 +358,16 @@ export class ManufacturerProductService {
       );
     }
 
+    const resolvedMappingGeneric = hasExplicitGeneric
+      ? validatedCreateGeneric!
+      : {
+          isGenericMedicine: Boolean(product.isGenericMedicine),
+          genericMedicinePrice:
+            product.genericMedicinePrice !== null && product.genericMedicinePrice !== undefined
+              ? Number(product.genericMedicinePrice)
+              : null,
+        };
+
     const created = await this.prisma.manufacturerProduct.create({
       data: {
         registrationId: reg.id,
@@ -323,6 +381,11 @@ export class ManufacturerProductService {
         effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : null,
         effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
         isPreferred: dto.isPreferred ?? false,
+        isGenericMedicine: resolvedMappingGeneric.isGenericMedicine,
+        genericMedicinePrice:
+          resolvedMappingGeneric.genericMedicinePrice !== null
+            ? new Prisma.Decimal(resolvedMappingGeneric.genericMedicinePrice)
+            : null,
         lifecycleStatus: dto.lifecycleStatus || 'ACTIVE',
       },
       include: {
@@ -593,6 +656,37 @@ export class ManufacturerProductService {
       throw new ForbiddenException("Access to another manufacturer's product mapping is denied.");
     }
 
+    const hasGenericUpdate =
+      dto.isGenericMedicine !== undefined ||
+      dto.is_generic_medicine !== undefined ||
+      dto.genericMedicinePrice !== undefined ||
+      dto.generic_medicine_price !== undefined;
+
+    let genericUpdateData: { isGenericMedicine?: boolean; genericMedicinePrice?: Prisma.Decimal | null } = {};
+    if (hasGenericUpdate) {
+      const rawIsGeneric =
+        dto.isGenericMedicine !== undefined ? dto.isGenericMedicine : dto.is_generic_medicine;
+      const rawGenericPrice =
+        dto.genericMedicinePrice !== undefined ? dto.genericMedicinePrice : dto.generic_medicine_price;
+      const existingGenericPrice =
+        existing.genericMedicinePrice !== null && existing.genericMedicinePrice !== undefined
+          ? Number(existing.genericMedicinePrice)
+          : null;
+      const resolved = this.resolveAndValidateGenericMedicine(
+        rawIsGeneric,
+        rawGenericPrice,
+        existing.isGenericMedicine,
+        existingGenericPrice,
+      );
+      genericUpdateData = {
+        isGenericMedicine: resolved.isGenericMedicine,
+        genericMedicinePrice:
+          resolved.genericMedicinePrice !== null
+            ? new Prisma.Decimal(resolved.genericMedicinePrice)
+            : null,
+      };
+    }
+
     const updated = await this.prisma.manufacturerProduct.update({
       where: { id: mappingId },
       data: {
@@ -618,6 +712,7 @@ export class ManufacturerProductService {
           : {}),
         ...(dto.isPreferred !== undefined ? { isPreferred: dto.isPreferred } : {}),
         ...(dto.lifecycleStatus !== undefined ? { lifecycleStatus: dto.lifecycleStatus } : {}),
+        ...genericUpdateData,
       },
       include: {
         product: true,
@@ -707,6 +802,10 @@ export class ManufacturerProductService {
       effectiveFrom: m.effectiveFrom ? m.effectiveFrom.toISOString() : null,
       effectiveTo: m.effectiveTo ? m.effectiveTo.toISOString() : null,
       isPreferred: m.isPreferred ?? false,
+      isGenericMedicine: Boolean(m.isGenericMedicine),
+      is_generic_medicine: Boolean(m.isGenericMedicine),
+      genericMedicinePrice: m.genericMedicinePrice !== null && m.genericMedicinePrice !== undefined ? Number(m.genericMedicinePrice) : null,
+      generic_medicine_price: m.genericMedicinePrice !== null && m.genericMedicinePrice !== undefined ? Number(m.genericMedicinePrice) : null,
       packagingDetails: m.packagingDetails || p.packSize || null,
       createdAt: m.createdAt.toISOString(),
       updatedAt: m.updatedAt.toISOString(),
@@ -728,6 +827,10 @@ export class ManufacturerProductService {
         brand: p.brand || null,
         lifecycleStatus: p.lifecycleStatus || 'ACTIVE',
         isSellable: p.isSellable ?? true,
+        isGenericMedicine: Boolean(p.isGenericMedicine),
+        is_generic_medicine: Boolean(p.isGenericMedicine),
+        genericMedicinePrice: p.genericMedicinePrice !== null && p.genericMedicinePrice !== undefined ? Number(p.genericMedicinePrice) : null,
+        generic_medicine_price: p.genericMedicinePrice !== null && p.genericMedicinePrice !== undefined ? Number(p.genericMedicinePrice) : null,
       },
     };
   }

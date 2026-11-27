@@ -12,12 +12,16 @@ import {
   MasterPageHeader,
   MasterStatsStrip,
   MasterStatusBadge,
-  TableActionGroup
+  TableActionGroup,
+  MasterApiStatusBanner
 } from '../common/MasterComponents';
 
 export const CustomerSegmentMasterModule: React.FC = () => {
   const {
     customerSegments,
+    masterLoading,
+    masterErrors,
+    refreshCustomerSegments,
     addCustomerSegment,
     updateCustomerSegment,
     removeCustomerSegment,
@@ -104,7 +108,7 @@ export const CustomerSegmentMasterModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const cleanName = formData.segment_name.trim();
@@ -128,60 +132,72 @@ export const CustomerSegmentMasterModule: React.FC = () => {
 
     const nowIso = new Date().toISOString().split('T')[0];
 
-    if (editingSegmentId) {
-      updateCustomerSegment(editingSegmentId, {
-        segment_code: codeClean,
-        segment_name: formData.segment_name.trim(),
-        description: formData.description.trim(),
-        lifecycle_status: formData.lifecycle_status,
-        is_active: formData.lifecycle_status === 'ACTIVE',
-        updated_at: nowIso,
-        code: codeClean,
-        name: formData.segment_name.trim()
-      });
-      addAuditLog('UPDATE_CUSTOMER_SEGMENT', `Updated customer segment ${codeClean}`);
-    } else {
-      const newSeg: CustomerSegment = {
-        customer_segment_id: `seg_${Date.now()}`,
-        segment_code: codeClean,
-        segment_name: formData.segment_name.trim(),
-        description: formData.description.trim(),
-        lifecycle_status: formData.lifecycle_status,
-        is_active: formData.lifecycle_status === 'ACTIVE',
-        created_at: nowIso,
-        updated_at: nowIso,
-        id: `seg_${Date.now()}`,
-        code: codeClean,
-        name: formData.segment_name.trim()
-      };
-      addCustomerSegment(newSeg);
-      addAuditLog('ADD_CUSTOMER_SEGMENT', `Created customer segment ${codeClean}`);
-      resetPage();
-    }
+    try {
+      if (editingSegmentId) {
+        await updateCustomerSegment(editingSegmentId, {
+          segment_code: codeClean,
+          segment_name: formData.segment_name.trim(),
+          description: formData.description.trim(),
+          lifecycle_status: formData.lifecycle_status,
+          is_active: formData.lifecycle_status === 'ACTIVE',
+          updated_at: nowIso,
+          code: codeClean,
+          name: formData.segment_name.trim()
+        });
+        addAuditLog('UPDATE_CUSTOMER_SEGMENT', `Updated customer segment ${codeClean}`);
+      } else {
+        const newSeg: CustomerSegment = {
+          customer_segment_id: `seg_${Date.now()}`,
+          segment_code: codeClean,
+          segment_name: formData.segment_name.trim(),
+          description: formData.description.trim(),
+          lifecycle_status: formData.lifecycle_status,
+          is_active: formData.lifecycle_status === 'ACTIVE',
+          created_at: nowIso,
+          updated_at: nowIso,
+          id: `seg_${Date.now()}`,
+          code: codeClean,
+          name: formData.segment_name.trim()
+        };
+        await addCustomerSegment(newSeg);
+        addAuditLog('ADD_CUSTOMER_SEGMENT', `Created customer segment ${codeClean}`);
+        resetPage();
+      }
 
-    setIsModalOpen(false);
+      setIsModalOpen(false);
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to save customer segment. Please try again.');
+    }
   };
 
-  const handleDelete = (seg: CustomerSegment) => {
+  const handleDelete = async (seg: CustomerSegment) => {
     const id = seg.customer_segment_id || seg.id || '';
     const segName = seg.segment_name || seg.name || 'this segment';
     if (window.confirm(`Are you sure you want to remove customer segment ${segName}?`)) {
-      removeCustomerSegment(id);
-      addAuditLog('DELETE_CUSTOMER_SEGMENT', `Removed customer segment ${segName}`);
+      try {
+        await removeCustomerSegment(id);
+        addAuditLog('DELETE_CUSTOMER_SEGMENT', `Removed customer segment ${segName}`);
+      } catch (err: any) {
+        window.alert(err?.message || 'Failed to delete customer segment.');
+      }
     }
   };
 
-  const handleToggleStatus = (seg: CustomerSegment) => {
+  const handleToggleStatus = async (seg: CustomerSegment) => {
     const id = seg.customer_segment_id || seg.id || '';
     const segName = seg.segment_name || seg.name || 'Segment';
     const current = seg.lifecycle_status || (seg.is_active ? 'ACTIVE' : 'INACTIVE');
     const nextStatus = current === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    updateCustomerSegment(id, {
-      lifecycle_status: nextStatus as LifecycleStatus,
-      is_active: nextStatus === 'ACTIVE',
-      updated_at: new Date().toISOString()
-    });
-    addAuditLog('TOGGLE_CUSTOMER_SEGMENT_STATUS', `Toggled customer segment ${segName} to ${nextStatus}`);
+    try {
+      await updateCustomerSegment(id, {
+        lifecycle_status: nextStatus as LifecycleStatus,
+        is_active: nextStatus === 'ACTIVE',
+        updated_at: new Date().toISOString()
+      });
+      addAuditLog('TOGGLE_CUSTOMER_SEGMENT_STATUS', `Toggled customer segment ${segName} to ${nextStatus}`);
+    } catch (err: any) {
+      window.alert(err?.message || 'Failed to update customer segment status.');
+    }
   };
 
   return (
@@ -206,6 +222,12 @@ export const CustomerSegmentMasterModule: React.FC = () => {
       />
 
       {/* ── Compact Statistics Strip ── */}
+      <MasterApiStatusBanner
+        loading={masterLoading.customerSegments && customerSegments.length === 0}
+        error={masterErrors.customerSegments}
+        entityLabel="Customer Segments"
+        onRetry={refreshCustomerSegments}
+      />
       <MasterStatsStrip
         stats={[
           { label: 'TOTAL SEGMENTS', value: totalCount },

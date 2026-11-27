@@ -42,26 +42,26 @@ export class ProductPriceQueryDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ example: 1, default: 1 })
+  @ApiPropertyOptional({ example: 0, default: 0 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  page?: number = 1;
+  @Min(0)
+  page?: number = 0;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  limit?: number = 20;
+  limit?: number;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  size?: number = 20;
+  size?: number;
 
   @ApiPropertyOptional({ description: 'Sort e.g. createdAt,desc' })
   @IsOptional()
@@ -208,26 +208,26 @@ export class ProductTaxQueryDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ example: 1, default: 1 })
+  @ApiPropertyOptional({ example: 0, default: 0 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  page?: number = 1;
+  @Min(0)
+  page?: number = 0;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  limit?: number = 20;
+  limit?: number;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  size?: number = 20;
+  size?: number;
 
   @ApiPropertyOptional({ description: 'Sort e.g. createdAt,desc' })
   @IsOptional()
@@ -317,26 +317,26 @@ export class ProductUomQueryDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ example: 1, default: 1 })
+  @ApiPropertyOptional({ example: 0, default: 0 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  page?: number = 1;
+  @Min(0)
+  page?: number = 0;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  limit?: number = 20;
+  limit?: number;
 
   @ApiPropertyOptional({ example: 20, default: 20 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  size?: number = 20;
+  size?: number;
 
   @ApiPropertyOptional({ description: 'Sort e.g. createdAt,desc' })
   @IsOptional()

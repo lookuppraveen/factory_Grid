@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { adminRfqApi, AdminRfqItem, AdminRfqStats } from '../../services/adminRfqApi';
+import { isB2bSpecial } from '../../utils/customerClassification';
 import {
   FileText, Search, Eye, X, Clock, CheckCircle2, ShieldCheck, Filter,
   Star, DollarSign, Check, AlertCircle, Building2, Tag, Calendar, Layers, RefreshCw
@@ -374,7 +375,7 @@ export const AdminRfqMonitor: React.FC = () => {
                     <td style={{ padding: '12px 16px', fontWeight: 700, color: '#334155' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>{rfq.customerName}</span>
-                        {rfq.customerClassification === 'SPECIAL_PARTY' ? (
+                        {isB2bSpecial(rfq.customerClassification) ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 4, fontSize: 10.5, fontWeight: 800, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
                             <Star size={10} fill="#0E7490" /> SPECIAL PARTY
                           </span>
@@ -693,7 +694,7 @@ export const AdminRfqMonitor: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <strong>Customer Name:</strong>
                 <span>{selectedRfq.customerName}</span>
-                {selectedRfq.customerClassification === 'SPECIAL_PARTY' ? (
+                {isB2bSpecial(selectedRfq.customerClassification) ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 4, fontSize: 10.5, fontWeight: 800, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
                     <Star size={10} fill="#0E7490" /> SPECIAL PARTY
                   </span>

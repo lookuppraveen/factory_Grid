@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { adminVerificationApi } from '../../services/adminVerificationApi';
+import {
+  CUSTOMER_CLASSIFICATION_OPTIONS,
+  CustomerClassification as ThreeWayClassification,
+  getCustomerClassificationLabel,
+  isB2bSpecial,
+  normalizeCustomerClassification,
+} from '../../utils/customerClassification';
 import { analyzeComplianceDocument, AIComplianceFinding } from '../../services/aiComplianceService';
 import {
   CustomerVerificationRequest,
@@ -129,14 +136,14 @@ export const CustomerVerificationModule: React.FC = () => {
   const [activeStatusTab, setActiveStatusTab] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('ALL');
-  const [classificationFilter, setClassificationFilter] = useState<'ALL' | 'REGULAR' | 'SPECIAL_PARTY'>('ALL');
+  const [classificationFilter, setClassificationFilter] = useState<'ALL' | ThreeWayClassification>('ALL');
 
   // Classification Confirmation Modal & Toast State
   const [classificationConfirmModal, setClassificationConfirmModal] = useState<{
     isOpen: boolean;
     targetRecordId: string;
     targetCompanyName: string;
-    targetClassification: 'REGULAR' | 'SPECIAL_PARTY';
+    targetClassification: ThreeWayClassification;
   } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -337,9 +344,8 @@ export const CustomerVerificationModule: React.FC = () => {
     if (customerTypeFilter !== 'ALL' && r.customerType !== customerTypeFilter) return false;
 
     if (classificationFilter !== 'ALL') {
-      const isSpecial = r.customerClassification === 'SPECIAL_PARTY';
-      if (classificationFilter === 'SPECIAL_PARTY' && !isSpecial) return false;
-      if (classificationFilter === 'REGULAR' && isSpecial) return false;
+      const normalizedClass = normalizeCustomerClassification(r.customerClassification);
+      if (classificationFilter !== 'ALL' && normalizedClass !== classificationFilter) return false;
     }
 
     if (activeStatusTab === 'PENDING') return r.verificationStatus === 'Pending';
@@ -385,12 +391,12 @@ export const CustomerVerificationModule: React.FC = () => {
     setIsActionLoading(true);
     try {
       const targetCode = selectedRecord.requestCode || selectedRecord.id;
-      const currentClassification = selectedRecord.customerClassification === 'SPECIAL_PARTY' ? 'SPECIAL_PARTY' : 'REGULAR';
+      const currentClassification = normalizeCustomerClassification(selectedRecord.customerClassification);
       const updated = await adminVerificationApi.approveCustomerVerification(targetCode, {
         customerClassification: currentClassification,
         remarks: approvalRemarks.trim() || undefined,
       });
-      setToastMessage(`✓ Successfully approved ${selectedRecord.companyName} as ${currentClassification === 'SPECIAL_PARTY' ? 'Special Buyer' : 'Normal Buyer'}. Customer Code: ${updated.customerCode || 'Issued'}`);
+      setToastMessage(`✓ Successfully approved ${selectedRecord.companyName} as ${getCustomerClassificationLabel(currentClassification)}. Customer Code: ${updated.customerCode || 'Issued'}`);
       addAuditLog('Customer Verification', `Approved ${selectedRecord.companyName} as ${currentClassification} (${targetCode})`);
       setDecisionModalType(null);
       setApprovalRemarks('');
@@ -512,15 +518,20 @@ export const CustomerVerificationModule: React.FC = () => {
     }
   };
 
-  const handleUpdateClassification = async (recordId: string, classification: 'REGULAR' | 'SPECIAL_PARTY', remarks?: string) => {
+  const [isUpdatingClassification, setIsUpdatingClassification] = useState(false);
+
+  const handleUpdateClassification = async (recordId: string, classification: ThreeWayClassification, remarks?: string) => {
+    setIsUpdatingClassification(true);
     try {
-      await adminVerificationApi.updateCustomerClassification(recordId, classification, remarks);
-      setToastMessage(`Customer classification updated to ${classification === 'SPECIAL_PARTY' ? 'Special Party / Special Buyer' : 'Standard Regular Buyer'}`);
+      const updated = await adminVerificationApi.updateCustomerClassification(recordId, classification, remarks);
+      setToastMessage(`Customer classification updated to ${getCustomerClassificationLabel(updated?.customerClassification || classification)}`);
       setClassificationConfirmModal(null);
       setClassificationRemarksInput('');
       await loadVerifications();
     } catch (err: any) {
       alert(`Classification update failed: ${err.message}`);
+    } finally {
+      setIsUpdatingClassification(false);
     }
   };
 
@@ -777,8 +788,9 @@ export const CustomerVerificationModule: React.FC = () => {
               style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid #CBD5E1', fontSize: 12.5, fontWeight: 600, background: '#FFF', color: '#0F172A', cursor: 'pointer' }}
             >
               <option value="ALL">All Classifications</option>
-              <option value="REGULAR">Regular Customer</option>
-              <option value="SPECIAL_PARTY">Special Party / Special Buyer</option>
+              <option value="RETAIL">Retail</option>
+              <option value="B2B">B2B</option>
+              <option value="B2B_SPECIAL">B2B Special</option>
             </select>
           </div>
 
@@ -917,7 +929,7 @@ export const CustomerVerificationModule: React.FC = () => {
                       </td>
 
                       <td style={{ padding: '12px 14px' }}>
-                        {record.customerClassification === 'SPECIAL_PARTY' ? (
+                        {isB2bSpecial(record.customerClassification) ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
                             <Star size={11} fill="#0E7490" /> Special Buyer
                           </span>
@@ -992,35 +1004,15 @@ export const CustomerVerificationModule: React.FC = () => {
                   {selectedRecord.companyName}
                 </h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                  {selectedRecord.customerClassification === 'SPECIAL_PARTY' ? (
+                  {isB2bSpecial(selectedRecord.customerClassification) ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 800, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
-                      <Star size={12} fill="#0E7490" /> Special Buyer (Pre-Agreed Pricing Permitted)
+                      <Star size={12} fill="#0E7490" /> B2B Special (Pre-Agreed Pricing Permitted)
                     </span>
                   ) : (
                     <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1' }}>
-                      Standard Normal Buyer (Competitive Bidding)
+                      {getCustomerClassificationLabel(selectedRecord.customerClassification)} (Competitive Bidding)
                     </span>
                   )}
-                  <button
-                    onClick={() => {
-                      const nextClassification = selectedRecord.customerClassification === 'SPECIAL_PARTY' ? 'REGULAR' : 'SPECIAL_PARTY';
-                      setClassificationConfirmModal({
-                        isOpen: true,
-                        targetRecordId: selectedRecord.requestCode || selectedRecord.id,
-                        targetCompanyName: selectedRecord.companyName,
-                        targetClassification: nextClassification,
-                      });
-                    }}
-                    style={{
-                      padding: '3px 10px', fontSize: 11, fontWeight: 700, borderRadius: 5,
-                      background: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#FFFBEB' : '#ECFEFF',
-                      color: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#92400E' : '#0E7490',
-                      border: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '1px solid #FCD34D' : '1px solid #A5F3FC',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {selectedRecord.customerClassification === 'SPECIAL_PARTY' ? 'Change to Normal Buyer' : '★ Promote to Special Buyer'}
-                  </button>
                 </div>
               </div>
               <button onClick={() => setSelectedRecordId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: 4 }}>
@@ -1485,82 +1477,64 @@ export const CustomerVerificationModule: React.FC = () => {
                           <Tag size={15} style={{ color: '#0E7490' }} />
                           <span>Customer Classification &amp; Governance</span>
                         </div>
-                        {selectedRecord.customerClassification === 'SPECIAL_PARTY' ? (
+                        {isB2bSpecial(selectedRecord.customerClassification) ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 800, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC' }}>
-                            <Star size={11} fill="#0E7490" /> SPECIAL PARTY
+                            <Star size={11} fill="#0E7490" /> B2B SPECIAL
                           </span>
                         ) : (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1' }}>
-                            Regular Customer
+                            {getCustomerClassificationLabel(selectedRecord.customerClassification)}
                           </span>
                         )}
                       </div>
 
                       <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>
-                        Platform Admin customer-level classification. Special Party status flows across Buyer Dashboard, RFQ generation, Manufacturer quoting visibility, and Order tracking.
+                        Platform Admin customer-level classification. B2B Special status flows across Buyer Dashboard, RFQ generation, Manufacturer quoting visibility, and Order tracking.
                       </div>
 
-                      {/* Segmented Control */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8FAFC', padding: '6px', borderRadius: 8, border: '1px solid #E2E8F0', width: 'fit-content' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if ((selectedRecord.customerClassification || 'REGULAR') !== 'REGULAR') {
+                      {/* Single Authoritative Dropdown: Retail / B2B / B2B Special */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 320 }}>
+                        <label
+                          htmlFor="customer-classification-select"
+                          style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.03em' }}
+                        >
+                          Customer Type / Customer Classification
+                        </label>
+                        <select
+                          id="customer-classification-select"
+                          disabled={isUpdatingClassification}
+                          value={normalizeCustomerClassification(selectedRecord.customerClassification)}
+                          onChange={(e) => {
+                            const nextVal = e.target.value as ThreeWayClassification;
+                            const currentVal = normalizeCustomerClassification(selectedRecord.customerClassification);
+                            if (nextVal !== currentVal) {
                               setClassificationConfirmModal({
                                 isOpen: true,
-                                targetRecordId: selectedRecord.id,
+                                targetRecordId: selectedRecord.requestCode || selectedRecord.id,
                                 targetCompanyName: selectedRecord.companyName,
-                                targetClassification: 'REGULAR'
+                                targetClassification: nextVal,
                               });
                             }
                           }}
                           style={{
-                            padding: '6px 16px',
-                            borderRadius: 6,
-                            fontSize: 12,
-                            fontWeight: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? 800 : 500,
-                            background: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '#FFFFFF' : 'transparent',
-                            color: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '#0F172A' : '#64748B',
-                            border: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '1px solid #CBD5E1' : 'none',
-                            boxShadow: (selectedRecord.customerClassification || 'REGULAR') === 'REGULAR' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease'
+                            width: '100%',
+                            padding: '9px 12px',
+                            borderRadius: 8,
+                            border: isB2bSpecial(selectedRecord.customerClassification) ? '1.5px solid #0E7490' : '1px solid #CBD5E1',
+                            background: isB2bSpecial(selectedRecord.customerClassification) ? '#ECFEFF' : '#FFFFFF',
+                            color: isB2bSpecial(selectedRecord.customerClassification) ? '#0E7490' : '#0F172A',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            outline: 'none',
+                            cursor: isUpdatingClassification ? 'wait' : 'pointer',
                           }}
                         >
-                          Regular Customer
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (selectedRecord.customerClassification !== 'SPECIAL_PARTY') {
-                              setClassificationConfirmModal({
-                                isOpen: true,
-                                targetRecordId: selectedRecord.id,
-                                targetCompanyName: selectedRecord.companyName,
-                                targetClassification: 'SPECIAL_PARTY'
-                              });
-                            }
-                          }}
-                          style={{
-                            padding: '6px 16px',
-                            borderRadius: 6,
-                            fontSize: 12,
-                            fontWeight: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? 800 : 500,
-                            background: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#0E7490' : 'transparent',
-                            color: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#FFFFFF' : '#64748B',
-                            border: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '1px solid #0891B2' : 'none',
-                            boxShadow: selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '0 1px 3px rgba(14,116,144,0.3)' : 'none',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 5,
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          <Star size={12} fill={selectedRecord.customerClassification === 'SPECIAL_PARTY' ? '#FFFFFF' : 'none'} />
-                          Special Party
-                        </button>
+                          {CUSTOMER_CLASSIFICATION_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 
@@ -1845,7 +1819,7 @@ export const CustomerVerificationModule: React.FC = () => {
 
       {/* ── DECISION MODAL DIALOGS ────────────────────────────── */}
       {decisionModalType === 'APPROVE' && selectedRecord && (() => {
-        const isSpecialBuyer = selectedRecord.customerClassification === 'SPECIAL_PARTY';
+        const isSpecialBuyer = isB2bSpecial(selectedRecord.customerClassification);
         const classificationLabel = isSpecialBuyer ? 'Special Buyer (Pre-Agreed Pricing Permitted)' : 'Standard Normal Buyer';
 
         return (
@@ -1870,7 +1844,7 @@ export const CustomerVerificationModule: React.FC = () => {
                   </div>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: isSpecialBuyer ? '#CFFAFE' : '#F1F5F9', color: isSpecialBuyer ? '#0E7490' : '#475569', border: `1px solid ${isSpecialBuyer ? '#A5F3FC' : '#CBD5E1'}` }}>
-                  {isSpecialBuyer ? 'SPECIAL PARTY' : 'REGULAR'}
+                  {getCustomerClassificationLabel(selectedRecord.customerClassification).toUpperCase()}
                 </span>
               </div>
 
@@ -2183,12 +2157,12 @@ export const CustomerVerificationModule: React.FC = () => {
         <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)' }}>
           <div style={{ width: '100%', maxWidth: 480, background: '#FFFFFF', borderRadius: 14, overflow: 'hidden', boxShadow: '0 20px 30px rgba(0,0,0,0.2)', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: classificationConfirmModal.targetClassification === 'SPECIAL_PARTY' ? '#ECFEFF' : '#F1F5F9', border: `1px solid ${classificationConfirmModal.targetClassification === 'SPECIAL_PARTY' ? '#A5F3FC' : '#CBD5E1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: classificationConfirmModal.targetClassification === 'SPECIAL_PARTY' ? '#0E7490' : '#475569' }}>
-                <Star size={22} fill={classificationConfirmModal.targetClassification === 'SPECIAL_PARTY' ? '#0E7490' : 'none'} />
+              <div style={{ width: 44, height: 44, borderRadius: 10, background: classificationConfirmModal.targetClassification === 'B2B_SPECIAL' ? '#ECFEFF' : '#F1F5F9', border: `1px solid ${classificationConfirmModal.targetClassification === 'B2B_SPECIAL' ? '#A5F3FC' : '#CBD5E1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: classificationConfirmModal.targetClassification === 'B2B_SPECIAL' ? '#0E7490' : '#475569' }}>
+                <Star size={22} fill={classificationConfirmModal.targetClassification === 'B2B_SPECIAL' ? '#0E7490' : 'none'} />
               </div>
               <div>
                 <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0F172A' }}>
-                  {classificationConfirmModal.targetClassification === 'SPECIAL_PARTY' ? 'Mark as Special Party?' : 'Remove Special Party status?'}
+                  {classificationConfirmModal.targetClassification === 'B2B_SPECIAL' ? 'Mark as Special Party?' : 'Remove Special Party status?'}
                 </h3>
                 <div style={{ fontSize: 12.5, color: '#64748B', marginTop: 2 }}>
                   {classificationConfirmModal.targetCompanyName}
@@ -2197,7 +2171,7 @@ export const CustomerVerificationModule: React.FC = () => {
             </div>
 
             <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.5, background: '#F8FAFC', padding: 14, borderRadius: 8, border: '1px solid #E2E8F0' }}>
-              {classificationConfirmModal.targetClassification === 'SPECIAL_PARTY'
+              {classificationConfirmModal.targetClassification === 'B2B_SPECIAL'
                 ? 'This customer will be identified as a Special Party across the FactoryGrid procurement workflow and will receive the Special Buyer RFQ interface with pre-agreed pricing permissions.'
                 : 'This will revert this customer to a Standard Regular Buyer with competitive bidding workflow.'}
             </div>
@@ -2234,7 +2208,7 @@ export const CustomerVerificationModule: React.FC = () => {
                 }}
                 style={{
                   height: 38, padding: '0 18px', borderRadius: 8,
-                  background: classificationConfirmModal.targetClassification === 'SPECIAL_PARTY' ? '#0E7490' : '#2563EB',
+                  background: classificationConfirmModal.targetClassification === 'B2B_SPECIAL' ? '#0E7490' : '#2563EB',
                   border: 'none', fontSize: 12.5, fontWeight: 700, color: '#FFFFFF', cursor: 'pointer',
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}

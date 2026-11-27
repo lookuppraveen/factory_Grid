@@ -1,4 +1,5 @@
 import React from 'react';
+import { RowActionsMenu, RowActionItem } from './RowActionsMenu';
 import { Eye, Edit3, Pause, Play, Trash2, CheckCircle2 } from 'lucide-react';
 
 /* ==========================================================================
@@ -312,243 +313,137 @@ export const TableActionGroup: React.FC<TableActionGroupProps> = ({
   const rawStatus = isBool ? (status ? 'ACTIVE' : 'INACTIVE') : (status || 'ACTIVE').toString().toUpperCase();
   const isActive = rawStatus === 'ACTIVE' || rawStatus === 'TRUE';
 
-  return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, whiteSpace: 'nowrap' }}>
-      {/* 1. View Action */}
-      {onView && (
-        <button
-          type="button"
-          onClick={onView}
-          title={viewTitle}
-          aria-label={viewTitle}
-          style={{
-            height: 28,
-            padding: '0 9px',
-            fontSize: 12,
-            fontWeight: 600,
-            borderRadius: 6,
-            background: '#FFFFFF',
-            color: '#334155',
-            border: '1px solid #CBD5E1',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 5,
-            boxSizing: 'border-box',
-            lineHeight: 1,
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = '#F8FAFC';
-            e.currentTarget.style.borderColor = '#94A3B8';
-            e.currentTarget.style.color = '#0F172A';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = '#FFFFFF';
-            e.currentTarget.style.borderColor = '#CBD5E1';
-            e.currentTarget.style.color = '#334155';
-          }}
-        >
-          <Eye size={12.5} style={{ flexShrink: 0, color: '#64748B' }} />
-          <span className="hidden sm:inline">View</span>
-        </button>
-      )}
+  const menuItems: RowActionItem[] = [];
 
-      {/* 2. Edit Action */}
-      {onEdit && (
-        <button
-          type="button"
-          onClick={onEdit}
-          title={editTitle}
-          aria-label={editTitle}
-          style={{
-            height: 28,
-            padding: '0 9px',
-            fontSize: 12,
-            fontWeight: 600,
-            borderRadius: 6,
-            background: '#FFFFFF',
-            color: '#334155',
-            border: '1px solid #CBD5E1',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 5,
-            boxSizing: 'border-box',
-            lineHeight: 1,
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = '#F8FAFC';
-            e.currentTarget.style.borderColor = '#94A3B8';
-            e.currentTarget.style.color = '#0F172A';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = '#FFFFFF';
-            e.currentTarget.style.borderColor = '#CBD5E1';
-            e.currentTarget.style.color = '#334155';
-          }}
-        >
-          <Edit3 size={12.5} style={{ flexShrink: 0, color: '#64748B' }} />
-          <span className="hidden sm:inline">Edit</span>
-        </button>
-      )}
+  if (onView) {
+    menuItems.push({
+      key: 'view',
+      label: 'View',
+      icon: <Eye size={13} style={{ color: '#64748B', flexShrink: 0 }} />,
+      onClick: onView,
+    });
+  }
 
-      {/* 3. Custom Action Items (e.g., Preferred, Inspect) */}
-      {customActions.map((ca, idx) => (
-        <button
-          key={idx}
-          type="button"
-          onClick={ca.onClick}
-          title={ca.title || ca.label}
-          aria-label={ca.title || ca.label}
-          style={{
-            height: 28,
-            padding: '0 9px',
-            fontSize: 12,
-            fontWeight: 600,
-            borderRadius: 6,
-            background: '#FFFFFF',
-            color: ca.color || '#334155',
-            border: `1px solid ${ca.borderColor || '#CBD5E1'}`,
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 5,
-            boxSizing: 'border-box',
-            lineHeight: 1,
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = ca.hoverBg || '#F8FAFC';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = '#FFFFFF';
-          }}
-        >
-          <ca.icon size={12} style={{ flexShrink: 0 }} />
-          <span className="hidden sm:inline">{ca.label}</span>
-        </button>
-      ))}
+  if (onEdit) {
+    menuItems.push({
+      key: 'edit',
+      label: 'Edit',
+      icon: <Edit3 size={13} style={{ color: '#0F766E', flexShrink: 0 }} />,
+      onClick: onEdit,
+    });
+  }
 
-      {/* 4. Activate / Deactivate Toggle Action */}
-      {onToggleStatus && (
-        isActive ? (
+  customActions.forEach((ca, idx) => {
+    const IconComp = ca.icon;
+    menuItems.push({
+      key: `custom_${idx}_${ca.label}`,
+      label: ca.label,
+      icon: <IconComp size={13} style={{ color: ca.color || '#334155', flexShrink: 0 }} />,
+      onClick: ca.onClick,
+      color: ca.color,
+    });
+  });
+
+  if (onToggleStatus) {
+    menuItems.push({
+      key: 'toggle_status',
+      label: isActive ? 'Deactivate' : 'Activate',
+      icon: isActive
+        ? <Pause size={13} style={{ color: '#D97706', flexShrink: 0 }} />
+        : <Play size={13} style={{ color: '#15803D', flexShrink: 0 }} />,
+      onClick: onToggleStatus,
+      color: isActive ? '#B45309' : '#15803D',
+    });
+  }
+
+  if (onDelete) {
+    menuItems.push({
+      key: 'delete',
+      label: 'Delete',
+      icon: <Trash2 size={13} style={{ flexShrink: 0 }} />,
+      onClick: onDelete,
+      danger: true,
+    });
+  }
+
+  if (menuItems.length === 0) return null;
+
+  return <RowActionsMenu items={menuItems} />;
+};
+
+// ── 6. API LOADING / ERROR BANNER (NO MOCK FALLBACK) ───────────────────────
+export interface MasterApiStatusBannerProps {
+  loading?: boolean;
+  error?: string | null;
+  entityLabel: string;
+  onRetry?: () => void;
+}
+
+export const MasterApiStatusBanner: React.FC<MasterApiStatusBannerProps> = ({
+  loading,
+  error,
+  entityLabel,
+  onRetry,
+}) => {
+  if (error) {
+    return (
+      <div
+        role="alert"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '12px 16px',
+          background: '#FEF2F2',
+          border: '1px solid #FECACA',
+          borderRadius: 8,
+          color: '#991B1B',
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+      >
+        <span>Unable to load {entityLabel}. {error}</span>
+        {onRetry && (
           <button
             type="button"
-            onClick={onToggleStatus}
-            title={deactivateTitle}
-            aria-label={deactivateTitle}
+            onClick={onRetry}
             style={{
-              height: 28,
-              padding: '0 9px',
-              fontSize: 12,
-              fontWeight: 600,
+              padding: '6px 12px',
               borderRadius: 6,
+              border: '1px solid #FCA5A5',
               background: '#FFFFFF',
-              color: '#DC2626',
-              border: '1px solid #FECACA',
+              color: '#991B1B',
+              fontSize: 12,
+              fontWeight: 700,
               cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 5,
-              boxSizing: 'border-box',
-              lineHeight: 1,
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#FEF2F2';
-              e.currentTarget.style.borderColor = '#FCA5A5';
-              e.currentTarget.style.color = '#B91C1C';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = '#FFFFFF';
-              e.currentTarget.style.borderColor = '#FECACA';
-              e.currentTarget.style.color = '#DC2626';
+              flexShrink: 0,
             }}
           >
-            <Pause size={11.5} style={{ flexShrink: 0 }} />
-            <span className="hidden sm:inline">Deactivate</span>
+            Retry
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onToggleStatus}
-            title={activateTitle}
-            aria-label={activateTitle}
-            style={{
-              height: 28,
-              padding: '0 9px',
-              fontSize: 12,
-              fontWeight: 600,
-              borderRadius: 6,
-              background: '#FFFFFF',
-              color: '#15803D',
-              border: '1px solid #BBF7D0',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 5,
-              boxSizing: 'border-box',
-              lineHeight: 1,
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#F0FDF4';
-              e.currentTarget.style.borderColor = '#86EFAC';
-              e.currentTarget.style.color = '#166534';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = '#FFFFFF';
-              e.currentTarget.style.borderColor = '#BBF7D0';
-              e.currentTarget.style.color = '#15803D';
-            }}
-          >
-            <Play size={11} style={{ flexShrink: 0 }} />
-            <span className="hidden sm:inline">Activate</span>
-          </button>
-        )
-      )}
+        )}
+      </div>
+    );
+  }
 
-      {/* 5. Delete Action (Only when supported) */}
-      {onDelete && (
-        <button
-          type="button"
-          onClick={onDelete}
-          title={deleteTitle}
-          aria-label={deleteTitle}
-          style={{
-            height: 28,
-            padding: '0 7px',
-            borderRadius: 6,
-            background: '#FFFFFF',
-            color: '#94A3B8',
-            border: '1px solid #E2E8F0',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.color = '#DC2626';
-            e.currentTarget.style.borderColor = '#FCA5A5';
-            e.currentTarget.style.background = '#FEF2F2';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.color = '#94A3B8';
-            e.currentTarget.style.borderColor = '#E2E8F0';
-            e.currentTarget.style.background = '#FFFFFF';
-          }}
-        >
-          <Trash2 size={12} />
-        </button>
-      )}
-    </div>
-  );
+  if (loading) {
+    return (
+      <div
+        style={{
+          padding: '10px 16px',
+          background: '#F8FAFC',
+          border: '1px solid #E2E8F0',
+          borderRadius: 8,
+          color: '#475569',
+          fontSize: 12.5,
+          fontWeight: 600,
+        }}
+      >
+        Loading {entityLabel}...
+      </div>
+    );
+  }
+
+  return null;
 };

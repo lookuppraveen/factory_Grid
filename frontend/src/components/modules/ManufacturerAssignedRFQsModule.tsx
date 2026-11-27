@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
+import { isB2bSpecial } from '../../utils/customerClassification';
 import {
   FileText, Search, Clock, CheckCircle2, AlertTriangle,
   X, Send, Eye, Save, Calendar, Check, AlertCircle, Building2, Package,
@@ -204,7 +205,7 @@ export const ManufacturerAssignedRFQsModule: React.FC = () => {
           (ql) => ql.rfqLineId === line.id || (ql.productId && ql.productId === line.productId)
         );
 
-        const isSpecialParty = detail.rfq.customerClassification === 'SPECIAL_PARTY';
+        const isSpecialParty = isB2bSpecial(detail.rfq.customerClassification);
         const defaultRespType: LineResponseType = matchQuoteLine
           ? (matchQuoteLine.responseType || (matchQuoteLine.cannotSupplyReason ? 'CANNOT_SUPPLY' : 'QUOTE'))
           : (isSpecialParty ? 'QUOTE' : 'UNANSWERED');
@@ -515,7 +516,7 @@ export const ManufacturerAssignedRFQsModule: React.FC = () => {
                     <h1 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
                       {rfq.companyName || rfq.buyerName}
                     </h1>
-                    {rfq.customerClassification === 'SPECIAL_PARTY' && (
+                    {isB2bSpecial(rfq.customerClassification) && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 11, fontWeight: 800 }}>
                         <Star size={11} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
                       </span>
@@ -1134,7 +1135,7 @@ export const ManufacturerAssignedRFQsModule: React.FC = () => {
                           <td style={{ padding: '10px 14px', fontWeight: 700, color: '#0F172A' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                               <span>{rfq.customerName}</span>
-                              {rfq.customerClassification === 'SPECIAL_PARTY' && (
+                              {isB2bSpecial(rfq.customerClassification) && (
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 10, fontWeight: 800 }}>
                                   <Star size={9} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
                                 </span>

@@ -9,7 +9,8 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { IsNumber, ValidateIf } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateManufacturerProductDto {
@@ -137,6 +138,30 @@ export class CreateManufacturerProductDto {
   @IsBoolean()
   isPreferred?: boolean;
 
+  @ApiPropertyOptional({ description: 'Whether the product is classified as a Generic Medicine', default: false })
+  @IsOptional()
+  @IsBoolean()
+  isGenericMedicine?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  is_generic_medicine?: boolean;
+
+  @ApiPropertyOptional({ description: 'Generic Medicine Price (required and > 0 when Generic Medicine is checked)' })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01, { message: 'Generic Medicine Price must be greater than 0.' })
+  genericMedicinePrice?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01, { message: 'Generic Medicine Price must be greater than 0.' })
+  generic_medicine_price?: number | null;
+
   @ApiPropertyOptional({ description: 'Lifecycle status', enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' })
   @IsOptional()
   @IsEnum(['ACTIVE', 'INACTIVE'])
@@ -193,6 +218,30 @@ export class UpdateManufacturerProductDto {
   @IsBoolean()
   isPreferred?: boolean;
 
+  @ApiPropertyOptional({ description: 'Whether the product is classified as a Generic Medicine' })
+  @IsOptional()
+  @IsBoolean()
+  isGenericMedicine?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  is_generic_medicine?: boolean;
+
+  @ApiPropertyOptional({ description: 'Generic Medicine Price (required and > 0 when Generic Medicine is checked)' })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01, { message: 'Generic Medicine Price must be greater than 0.' })
+  genericMedicinePrice?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01, { message: 'Generic Medicine Price must be greater than 0.' })
+  generic_medicine_price?: number | null;
+
   @ApiPropertyOptional({ description: 'Lifecycle status', enum: ['ACTIVE', 'INACTIVE'] })
   @IsOptional()
   @IsEnum(['ACTIVE', 'INACTIVE'])
@@ -230,6 +279,16 @@ export class ManufacturerProductQueryDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by Generic Medicine flag (true or false)' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return undefined;
+  })
+  @IsBoolean()
+  genericMedicine?: boolean;
 
   @ApiPropertyOptional({ description: 'Page number (1-based)', default: 1 })
   @IsOptional()

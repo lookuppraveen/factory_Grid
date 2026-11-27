@@ -13,7 +13,8 @@ import {
   MasterBreadcrumbs,
   MasterPageHeader,
   MasterStatsStrip,
-  MasterStatusBadge
+  MasterStatusBadge,
+  MasterApiStatusBanner
 } from '../common/MasterComponents';
 
 export const MarginEngineModule: React.FC = () => {
@@ -47,18 +48,21 @@ export const MarginEngineModule: React.FC = () => {
   // Backend category margins from PostgreSQL (category_margin_configs)
   const [backendCategoryMargins, setBackendCategoryMargins] = useState<marginApi.BackendCategoryMargin[]>([]);
   const [isLoadingMargins, setIsLoadingMargins] = useState(false);
+  const [marginLoadError, setMarginLoadError] = useState<string | null>(null);
   const [isSavingCatId, setIsSavingCatId] = useState<string | null>(null);
   const [marginSaveSuccess, setMarginSaveSuccess] = useState<Record<string, boolean>>({});
 
   const refreshMarginsFromBackend = useCallback(async () => {
     setIsLoadingMargins(true);
+    setMarginLoadError(null);
     try {
       const data = await marginApi.fetchCategoryMargins();
       if (Array.isArray(data)) {
         setBackendCategoryMargins(data);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to load category margins from backend:', err);
+      setMarginLoadError(err?.message || 'Unable to load margin rules from backend. Please try again.');
     } finally {
       setIsLoadingMargins(false);
     }
@@ -71,9 +75,9 @@ export const MarginEngineModule: React.FC = () => {
     refreshMarginsFromBackend();
   }, [refreshUnifiedCategories, refreshMarginsFromBackend]);
 
-  // Canonical category list derived from PostgreSQL-backed unifiedCategories (from Admin -> Product Type & Category Master)
+  // Canonical category list derived strictly from PostgreSQL-backed unifiedCategories
   const distinctCategoryList = useMemo(() => {
-    const source = (unifiedCategories && unifiedCategories.length > 0) ? unifiedCategories : categories;
+    const source = unifiedCategories || [];
     const seen = new Set<string>();
     const list: Category[] = [];
 
@@ -87,7 +91,7 @@ export const MarginEngineModule: React.FC = () => {
       }
     }
     return list;
-  }, [unifiedCategories, categories]);
+  }, [unifiedCategories]);
 
   // Active Sub-view: 'CONFIG' (Category Matrix) | 'MFG_CONFIG' (Manufacturer Matrix) | 'SKU_INSPECTOR' (Product List / SKU Margin Matrix)
   const [activeSubTab, setActiveSubTab] = useState<'CONFIG' | 'MFG_CONFIG' | 'SKU_INSPECTOR'>('CONFIG');
@@ -291,36 +295,30 @@ export const MarginEngineModule: React.FC = () => {
       };
     }
 
-    const fromContext = getCategoryMarginConfig(c.category || c.name);
     return {
-      marginType: fromContext.marginType || 'PERCENTAGE',
-      marginValue: fromContext.marginValue ?? 10
+      marginType: 'PERCENTAGE',
+      marginValue: 0
     };
-  }, [backendCategoryMargins, getCategoryMarginConfig]);
+  }, [backendCategoryMargins]);
 
   // Summary Metrics
   const metrics = useMemo(() => {
     const configuredCount = distinctCategoryList.filter(cat => {
       const cid = (cat.category_id || cat.id || '').toLowerCase().trim();
       const cname = (cat.category || cat.name || '').toLowerCase().trim();
-      return (
-        backendCategoryMargins.some(m => (m.categoryId && m.categoryId.toLowerCase() === cid) || (m.categoryName && m.categoryName.toLowerCase() === cname)) ||
-        categoryMargins.some(m => (m.categoryId && m.categoryId.toLowerCase() === cid) || (m.categoryName && m.categoryName.toLowerCase() === cname))
+      return backendCategoryMargins.some(
+        m => (m.categoryId && m.categoryId.toLowerCase() === cid) || (m.categoryName && m.categoryName.toLowerCase() === cname)
       );
     }).length;
 
-    const totalPercentage = backendCategoryMargins.length > 0
-      ? backendCategoryMargins.reduce((sum, m) => sum + (m.marginMode === 'PERCENTAGE' ? Number(m.marginValue) : 0), 0)
-      : categoryMargins.reduce((sum, m) => {
-          const type = m.marginType || 'PERCENTAGE';
-          return sum + (type === 'PERCENTAGE' ? m.marginPercentage : 0);
-        }, 0);
+    const totalPercentage = backendCategoryMargins.reduce(
+      (sum, m) => sum + (m.marginMode === 'PERCENTAGE' ? Number(m.marginValue) : 0),
+      0
+    );
 
-    const pctCount = backendCategoryMargins.length > 0
-      ? backendCategoryMargins.filter(m => m.marginMode === 'PERCENTAGE').length
-      : categoryMargins.filter(m => (m.marginType || 'PERCENTAGE') === 'PERCENTAGE').length;
+    const pctCount = backendCategoryMargins.filter(m => m.marginMode === 'PERCENTAGE').length;
 
-    const avgMargin = pctCount > 0 ? (totalPercentage / pctCount).toFixed(1) : (distinctCategoryList.length > 0 ? '10.0' : '0.0');
+    const avgMargin = pctCount > 0 ? (totalPercentage / pctCount).toFixed(1) : '0.0';
     const activeRulesCount = marginRules.filter(r => r.status === 'Active').length;
     const mfgRulesCount = marginRules.filter(r => r.status === 'Active' && r.manufacturer_id).length;
 
@@ -331,7 +329,7 @@ export const MarginEngineModule: React.FC = () => {
       mfgRulesCount,
       totalProducts: allAvailableProducts.length
     };
-  }, [distinctCategoryList, backendCategoryMargins, categoryMargins, marginRules, allAvailableProducts]);
+  }, [distinctCategoryList, backendCategoryMargins, marginRules, allAvailableProducts]);
 
   // Filtered categories for config tab
   const filteredCategoryList = useMemo(() => {
@@ -448,16 +446,7 @@ export const MarginEngineModule: React.FC = () => {
       setTimeout(() => setSavedCategoryToast(null), 3500);
     } catch (err: any) {
       console.error('Failed to save category margin to PostgreSQL:', err);
-      // Fallback update to context so user can continue
-      updateCategoryMargin(catName, draft.value, draft.type);
-      setEditingMargins(prev => {
-        const next = { ...prev };
-        delete next[catKey];
-        return next;
-      });
-      const displayUnit = draft.type === 'FIXED_RATE' ? `₹${draft.value}/unit` : `${draft.value}%`;
-      setSavedCategoryToast(`Saved locally: Margin for ${catName} set to ${displayUnit}`);
-      setTimeout(() => setSavedCategoryToast(null), 3500);
+      setMarginLoadError(err?.message || `Failed to save margin for ${catName}. Please try again.`);
     } finally {
       setIsSavingCatId(null);
     }
@@ -564,15 +553,15 @@ export const MarginEngineModule: React.FC = () => {
   const simCalculation = useMemo(() => {
     if (!selectedSkuForSimulation) {
       return {
-        base: 100,
-        marginDisplay: '10%',
+        base: 0,
+        marginDisplay: '0%',
         marginType: 'PERCENTAGE' as MarginType,
-        marginAmt: 10,
-        platformFeePct: 2.0,
-        platformFeeAmt: 2.2,
-        buyerPrice: 112.2,
-        ruleType: 'DEFAULT',
-        ruleSource: 'Platform Baseline'
+        marginAmt: 0,
+        platformFeePct: 0,
+        platformFeeAmt: 0,
+        buyerPrice: 0,
+        ruleType: 'NONE',
+        ruleSource: 'No margin rule configured'
       };
     }
     const resolved = resolveProductMargin(selectedSkuForSimulation);
@@ -918,6 +907,12 @@ BioCure Pharmaceuticals Ltd,BIO-MET-500,MET-500,Metformin SR 500mg Tablets,Perce
       </MasterPageHeader>
 
       {/* ── KPI Summary Strip ── */}
+      <MasterApiStatusBanner
+        loading={isLoadingMargins && backendCategoryMargins.length === 0}
+        error={marginLoadError}
+        entityLabel="Margin Rules"
+        onRetry={refreshMarginsFromBackend}
+      />
       <MasterStatsStrip
         stats={[
           { label: 'CONFIGURED CATEGORIES', value: metrics.configuredCount, color: '#0F766E' },

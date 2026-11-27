@@ -10,6 +10,10 @@ import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { AuthUser } from '@factorygrid/auth';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  isB2bSpecialClassification,
+  normalizeCustomerClassification,
+} from '../../common/customer-classification';
 import { StorageService } from '../storage/storage.service';
 import {
   BuyerFullRegistrationDto,
@@ -574,7 +578,7 @@ export class BuyerRegistrationService {
             customerName: dto.contactPerson.trim(),
             companyName: dto.companyName.trim(),
             customerType: this.mapCustomerType(dto.businessType),
-            customerClassification: 'REGULAR',
+            customerClassification: 'B2B',
             verificationStatus: 'Under Review',
             assignedComplianceOfficer: 'Rajesh Kumar (Compliance Desk A)',
             gstNumber: gst,
@@ -778,9 +782,11 @@ export class BuyerRegistrationService {
 
     const verificationStatus = verification?.verificationStatus || (accountStatus === 'ACTIVE' ? 'Active' : 'Under Review');
     const isApproved = accountStatus === 'ACTIVE' && (verificationStatus === 'Active' || verificationStatus === 'Approved');
-    const rawClassification = verification?.customerClassification || 'REGULAR';
-    const effectiveClassification = (isApproved && rawClassification === 'SPECIAL_PARTY') ? 'SPECIAL_PARTY' : 'REGULAR';
-    const isSpecialBuyer = effectiveClassification === 'SPECIAL_PARTY';
+    const rawClassification = normalizeCustomerClassification(verification?.customerClassification);
+    const isSpecialBuyer = isApproved && isB2bSpecialClassification(rawClassification);
+    const effectiveClassification = isSpecialBuyer
+      ? 'B2B_SPECIAL'
+      : (rawClassification === 'RETAIL' ? 'RETAIL' : 'B2B');
 
     return {
       userId: user.id,
@@ -799,8 +805,8 @@ export class BuyerRegistrationService {
       customerClassification: effectiveClassification,
       rawCustomerClassification: rawClassification,
       isSpecialBuyer,
-      workflowClassification: isSpecialBuyer ? 'SPECIAL_PARTY' : 'NORMAL',
-      workflowType: isSpecialBuyer ? 'SPECIAL_PARTY' : 'NORMAL',
+      workflowClassification: isSpecialBuyer ? 'B2B_SPECIAL' : effectiveClassification,
+      workflowType: isSpecialBuyer ? 'B2B_SPECIAL' : effectiveClassification,
       isApproved,
       capabilities: {
         canCreateSpecialRfq: isSpecialBuyer,

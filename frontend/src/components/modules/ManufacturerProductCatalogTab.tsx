@@ -36,6 +36,7 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('ALL');
   const [selectedSubSubCategory, setSelectedSubSubCategory] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [selectedGenericFilter, setSelectedGenericFilter] = useState<'ALL' | 'GENERIC_ONLY' | 'NON_GENERIC'>('ALL');
 
   // Cascading Category Options for Filter
   const [categoryTree, setCategoryTree] = useState<any[]>([]);
@@ -114,6 +115,12 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
           subCategory: selectedSubCategory,
           subSubCategory: selectedSubSubCategory,
           status: selectedStatus,
+          genericMedicine:
+            selectedGenericFilter === 'GENERIC_ONLY'
+              ? true
+              : selectedGenericFilter === 'NON_GENERIC'
+                ? false
+                : undefined,
         }),
       ]);
 
@@ -126,7 +133,7 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [searchTerm, selectedCategory, selectedSubCategory, selectedSubSubCategory, selectedStatus]);
+  }, [searchTerm, selectedCategory, selectedSubCategory, selectedSubSubCategory, selectedStatus, selectedGenericFilter]);
 
   useEffect(() => {
     fetchCatalogData();
@@ -138,9 +145,10 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
     setSelectedSubCategory('ALL');
     setSelectedSubSubCategory('ALL');
     setSelectedStatus('ALL');
+    setSelectedGenericFilter('ALL');
   };
 
-  const isFiltered = searchTerm !== '' || selectedCategory !== 'ALL' || selectedSubCategory !== 'ALL' || selectedSubSubCategory !== 'ALL' || selectedStatus !== 'ALL';
+  const isFiltered = searchTerm !== '' || selectedCategory !== 'ALL' || selectedSubCategory !== 'ALL' || selectedSubSubCategory !== 'ALL' || selectedStatus !== 'ALL' || selectedGenericFilter !== 'ALL';
 
   // ── Toggle Mapping Status ────────────────────────────────────────────
   const handleToggleStatus = async (item: ManufacturerProductMappingItem) => {
@@ -249,7 +257,7 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
             }}
           >
             <Plus size={16} />
-            + Create New Product (Manual)
+            Create New Product (Manual)
           </button>
 
           <button
@@ -549,6 +557,30 @@ export const ManufacturerProductCatalogTab: React.FC<ManufacturerProductCatalogT
               <option value="ALL">All Status</option>
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
+            </select>
+          </div>
+
+          {/* Generic Medicine Filter (DB-backed) */}
+          <div style={{ minWidth: 165 }}>
+            <select
+              value={selectedGenericFilter}
+              onChange={(e) => setSelectedGenericFilter(e.target.value as 'ALL' | 'GENERIC_ONLY' | 'NON_GENERIC')}
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: 8,
+                border: selectedGenericFilter !== 'ALL' ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
+                fontSize: 13,
+                color: selectedGenericFilter !== 'ALL' ? '#0F766E' : '#0F172A',
+                background: selectedGenericFilter !== 'ALL' ? '#F0FDFA' : '#FFFFFF',
+                fontWeight: selectedGenericFilter !== 'ALL' ? 600 : 400,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="ALL">All Products</option>
+              <option value="GENERIC_ONLY">Generic Medicines Only</option>
+              <option value="NON_GENERIC">Standard (Non-Generic)</option>
             </select>
           </div>
 
@@ -1016,7 +1048,9 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
     basePrice: 100,
     certificationsStr: 'WHO-GMP, CDSCO Form 25/28',
     description: '',
-    status: 'Active'
+    status: 'Active',
+    isGenericMedicine: false,
+    genericMedicinePrice: ''
   });
 
   // Dynamic Category Cascading Options from Real PostgreSQL Database
@@ -1142,44 +1176,40 @@ const OriginalAddProductModal: React.FC<OriginalAddProductModalProps> = ({
       setAddFormError('Valid Delivery Schedule (Days) is required.');
       return;
     }
+    if (createProductForm.isGenericMedicine) {
+      const parsedPrice = Number(createProductForm.genericMedicinePrice);
+      if (createProductForm.genericMedicinePrice === '' || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+        setAddFormError('Generic Medicine Price is required and must be a valid positive amount when Generic Medicine is checked.');
+        return;
+      }
+    }
 
     const cleanSku = createProductForm.sku.trim().toUpperCase();
     setIsSubmitting(true);
 
     try {
-      // 1. Create canonical product in Central Master (PostgreSQL catalog_products)
-      let productId = cleanSku;
-      try {
-        const created = await catalogApi.createProduct({
-          productCode: cleanSku,
-          name: createProductForm.name.trim(),
-          category: createProductForm.category.trim(),
-          subCategory: currentSub || undefined,
-          subSubCategory: createProductForm.subSubCategory?.trim() || undefined,
-          pharmaReference: createProductForm.pharmaReference?.trim() || undefined,
-          genericName: createProductForm.genericName.trim() || createProductForm.name.trim(),
-          dosageForm: createProductForm.dosageForm || currentSub || 'Tablet',
-          packSize: createProductForm.packSize.trim() || createProductForm.packaging.trim(),
-          baseUom: createProductForm.uom || 'Unit',
-          description: createProductForm.description.trim() || `${createProductForm.name} formulation`,
-          lifecycleStatus: 'ACTIVE',
-        });
-        if (created?.id) productId = created.id;
-      } catch (err: any) {
-        console.log('Central master creation check:', err?.message);
-        const existing = await manufacturerProductsApi.searchMasterProducts({ search: cleanSku });
-        const match = existing.find(p => p.productCode === cleanSku);
-        if (match) productId = match.id;
-      }
-
-      // 2. Create Manufacturer-Product Mapping in PostgreSQL manufacturer_products
+      // Create product + manufacturer mapping directly via authorized Manufacturer endpoint in PostgreSQL
       await manufacturerProductsApi.createMapping({
-        productId,
+        productCode: cleanSku,
+        name: createProductForm.name.trim(),
+        category: createProductForm.category.trim(),
+        subCategory: currentSub || undefined,
+        subSubCategory: createProductForm.subSubCategory?.trim() || undefined,
+        genericName: createProductForm.genericName.trim() || createProductForm.name.trim(),
+        saltCombination: createProductForm.saltCombination?.trim() || undefined,
+        strength: createProductForm.strength?.trim() || undefined,
+        dosageForm: createProductForm.dosageForm || currentSub || 'Tablet',
+        packSize: createProductForm.packSize.trim() || createProductForm.packaging.trim(),
+        uom: createProductForm.uom || 'Strip',
+        baseUom: createProductForm.uom || 'Unit',
+        description: createProductForm.description.trim() || `${createProductForm.name} formulation`,
         manufacturerProductCode: cleanSku,
         moq: createProductForm.moq,
         leadTimeDays: createProductForm.standardLeadTimeDays,
         packagingDetails: createProductForm.packaging.trim(),
         lifecycleStatus: 'ACTIVE',
+        isGenericMedicine: createProductForm.isGenericMedicine,
+        genericMedicinePrice: createProductForm.isGenericMedicine ? Number(createProductForm.genericMedicinePrice) : null,
       });
 
       onSuccess();
@@ -1884,6 +1914,65 @@ ALB-400-CHEW,Albendazole 400mg Chewable Tablets,Albendazole,Drugs,Tablets,Anthel
               />
             </div>
 
+            {/* Generic Medicine Classification & Price */}
+            <div style={{
+              padding: '12px 14px',
+              borderRadius: 8,
+              border: createProductForm.isGenericMedicine ? '1.5px solid #0F766E' : '1px solid #E2E8F0',
+              background: createProductForm.isGenericMedicine ? '#F0FDFA' : '#F8FAFC',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 14
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
+                <input
+                  type="checkbox"
+                  checked={createProductForm.isGenericMedicine}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setCreateProductForm(prev => ({
+                      ...prev,
+                      isGenericMedicine: checked,
+                      genericMedicinePrice: checked ? prev.genericMedicinePrice : ''
+                    }));
+                  }}
+                  style={{ width: 17, height: 17, accentColor: '#0F766E', cursor: 'pointer' }}
+                />
+                <span>Generic Medicine</span>
+              </label>
+
+              {createProductForm.isGenericMedicine && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px', maxWidth: 280 }}>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                    Generic Price (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    placeholder="Enter price"
+                    value={createProductForm.genericMedicinePrice}
+                    onChange={(e) => setCreateProductForm(prev => ({ ...prev, genericMedicinePrice: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '8px 10px',
+                      border: '1.5px solid #0F766E',
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      background: '#FFFFFF',
+                      color: '#0F172A',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
             {/* 3. MANUFACTURER SPECIFICATIONS & MAPPING */}
             <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <ShieldCheck size={14} /> 3. MANUFACTURER SPECIFICATIONS & MAPPING
@@ -2353,14 +2442,31 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ mapping, onClose, o
   const [packagingDetails, setPackagingDetails] = useState<string>(mapping.packagingDetails || '');
   const [lifecycleStatus, setLifecycleStatus] = useState<'ACTIVE' | 'INACTIVE'>(mapping.lifecycleStatus || 'ACTIVE');
   const [isPreferred, setIsPreferred] = useState<boolean>(mapping.isPreferred || false);
+  const [isGenericMedicine, setIsGenericMedicine] = useState<boolean>(
+    Boolean(mapping.isGenericMedicine ?? mapping.product?.isGenericMedicine ?? false)
+  );
+  const [genericMedicinePrice, setGenericMedicinePrice] = useState<string>(
+    (mapping.genericMedicinePrice ?? mapping.product?.genericMedicinePrice) != null
+      ? String(mapping.genericMedicinePrice ?? mapping.product?.genericMedicinePrice)
+      : ''
+  );
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true);
     setError(null);
+
+    if (isGenericMedicine) {
+      const parsedPrice = Number(genericMedicinePrice);
+      if (genericMedicinePrice === '' || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+        setError('Generic Medicine Price is required and must be a valid positive amount when Generic Medicine is checked.');
+        return;
+      }
+    }
+
+    setIsSaving(true);
 
     try {
       await manufacturerProductsApi.updateMapping(mapping.id, {
@@ -2371,6 +2477,8 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ mapping, onClose, o
         packagingDetails: packagingDetails || undefined,
         lifecycleStatus,
         isPreferred,
+        isGenericMedicine,
+        genericMedicinePrice: isGenericMedicine ? Number(genericMedicinePrice) : null,
       });
 
       onSuccess();
@@ -2521,6 +2629,48 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ mapping, onClose, o
             <label htmlFor="editPref" style={{ fontSize: 13, color: '#334155', cursor: 'pointer' }}>
               Preferred manufacturing facility for this formulation
             </label>
+          </div>
+
+          <div style={{
+            padding: '12px 14px',
+            borderRadius: 8,
+            border: isGenericMedicine ? '1.5px solid #0F766E' : '1px solid #E2E8F0',
+            background: isGenericMedicine ? '#F0FDFA' : '#F8FAFC',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10
+          }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
+              <input
+                type="checkbox"
+                checked={isGenericMedicine}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIsGenericMedicine(checked);
+                  if (!checked) setGenericMedicinePrice('');
+                }}
+                style={{ width: 16, height: 16, accentColor: '#0F766E', cursor: 'pointer' }}
+              />
+              <span>Generic Medicine</span>
+            </label>
+
+            {isGenericMedicine && (
+              <div>
+                <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase', marginBottom: 4 }}>
+                  Generic Medicine Price (₹) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  placeholder="Enter price"
+                  value={genericMedicinePrice}
+                  onChange={(e) => setGenericMedicinePrice(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, border: '1.5px solid #0F766E', fontSize: 13, fontWeight: 700, background: '#FFFFFF' }}
+                />
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>

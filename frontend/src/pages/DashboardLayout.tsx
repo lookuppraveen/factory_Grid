@@ -30,6 +30,7 @@ import { ManufacturerMasterModule } from '../components/modules/ManufacturerMast
 import { ProductManufacturerMappingModule } from '../components/modules/ProductManufacturerMappingModule';
 import { MarginEngineModule } from '../components/modules/MarginEngineModule';
 import { useApp } from '../context/AppContext';
+import { isB2bSpecial } from '../utils/customerClassification';
 import { useTheme } from '../context/ThemeContext';
 import { UserRole } from '../types';
 
@@ -1314,17 +1315,17 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
                     borderRadius: 8,
                     fontSize: 11.5,
                     fontWeight: 700,
-                    background: activeBuyerAccount === 'SPECIAL_PARTY' ? '#ECFEFF' : '#F1F5F9',
-                    color: activeBuyerAccount === 'SPECIAL_PARTY' ? '#0E7490' : '#475569',
-                    border: `1px solid ${activeBuyerAccount === 'SPECIAL_PARTY' ? '#A5F3FC' : '#CBD5E1'}`,
+                    background: isB2bSpecial(activeBuyerAccount) ? '#ECFEFF' : '#F1F5F9',
+                    color: isB2bSpecial(activeBuyerAccount) ? '#0E7490' : '#475569',
+                    border: `1px solid ${isB2bSpecial(activeBuyerAccount) ? '#A5F3FC' : '#CBD5E1'}`,
                   }}
                   title={
-                    activeBuyerAccount === 'SPECIAL_PARTY'
+                    isB2bSpecial(activeBuyerAccount)
                       ? 'Verified Special Buyer: Authorized for pre-agreed pricing workflow'
                       : 'Standard Regular Buyer: Competitive bidding workflow'
                   }
                 >
-                  {activeBuyerAccount === 'SPECIAL_PARTY' ? (
+                  {isB2bSpecial(activeBuyerAccount) ? (
                     <>
                       <Star size={12} fill="#0E7490" color="#0E7490" />
                       <span>Special Buyer (Verified)</span>
@@ -1378,10 +1379,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
                       padding: '3px 8px',
                       borderRadius: 6,
                       border: 'none',
-                      background: activeBuyerAccount === 'SPECIAL_PARTY' ? '#FEF3C7' : 'transparent',
-                      color: activeBuyerAccount === 'SPECIAL_PARTY' ? '#92400E' : 'var(--text-tertiary)',
-                      fontWeight: activeBuyerAccount === 'SPECIAL_PARTY' ? 700 : 500,
-                      boxShadow: activeBuyerAccount === 'SPECIAL_PARTY' ? '0 1px 2px rgba(217, 119, 6, 0.2)' : 'none',
+                      background: isB2bSpecial(activeBuyerAccount) ? '#FEF3C7' : 'transparent',
+                      color: isB2bSpecial(activeBuyerAccount) ? '#92400E' : 'var(--text-tertiary)',
+                      fontWeight: isB2bSpecial(activeBuyerAccount) ? 700 : 500,
+                      boxShadow: isB2bSpecial(activeBuyerAccount) ? '0 1px 2px rgba(217, 119, 6, 0.2)' : 'none',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -1389,7 +1390,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onNavigate }) 
                     }}
                     title="MediPlus Healthcare (Special Party Pre-Agreed Pricing)"
                   >
-                    <Star size={11} fill={activeBuyerAccount === 'SPECIAL_PARTY' ? '#D97706' : 'none'} color="#D97706" />
+                    <Star size={11} fill={isB2bSpecial(activeBuyerAccount) ? '#D97706' : 'none'} color="#D97706" />
                     Special Party Buyer
                   </button>
                 </div>

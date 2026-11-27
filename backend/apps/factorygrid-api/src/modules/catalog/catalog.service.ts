@@ -63,6 +63,37 @@ import { createPageResponse } from '../../common/pagination/page-response.dto';
 export class CatalogService {
   constructor(private readonly prisma: PrismaService) { }
 
+  private resolveAndValidateGenericMedicine(
+    rawFlag: boolean | undefined,
+    rawPrice: number | string | null | undefined,
+    fallbackFlag = false,
+    fallbackPrice: number | null = null,
+  ): { isGenericMedicine: boolean; genericMedicinePrice: number | null } {
+    const isGenericMedicine = rawFlag !== undefined ? Boolean(rawFlag) : Boolean(fallbackFlag);
+    if (!isGenericMedicine) {
+      return { isGenericMedicine: false, genericMedicinePrice: null };
+    }
+
+    const effectiveRawPrice = rawPrice !== undefined ? rawPrice : fallbackPrice;
+    if (effectiveRawPrice === undefined || effectiveRawPrice === null || String(effectiveRawPrice).trim() === '') {
+      throw new BadRequestException(
+        'Generic Medicine Price is required when Generic Medicine is enabled.',
+      );
+    }
+
+    const parsed = Number(effectiveRawPrice);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new BadRequestException(
+        'Generic Medicine Price must be a valid positive number greater than 0.',
+      );
+    }
+
+    return {
+      isGenericMedicine: true,
+      genericMedicinePrice: Math.round(parsed * 100) / 100,
+    };
+  }
+
   // ===================================================================
   // PRODUCTS
   // ===================================================================
@@ -95,6 +126,10 @@ export class CatalogService {
       where.productTypeId = query.productTypeId;
     }
 
+    if (query.categoryId && query.categoryId !== 'ALL') {
+      where.categoryId = query.categoryId;
+    }
+
     if (query.category && query.category !== 'ALL') {
       where.category = { equals: query.category, mode: 'insensitive' };
     }
@@ -109,6 +144,14 @@ export class CatalogService {
 
     if (query.dosageForm && query.dosageForm !== 'ALL') {
       where.dosageForm = { equals: query.dosageForm, mode: 'insensitive' };
+    }
+
+    const genericFilter =
+      query.genericMedicine !== undefined
+        ? query.genericMedicine
+        : query.isGenericMedicine;
+    if (genericFilter !== undefined) {
+      where.isGenericMedicine = genericFilter;
     }
 
     const term = query.search?.trim();
@@ -279,6 +322,14 @@ export class CatalogService {
     const effectiveDiscOn = dto.discontinuedOn || dto.discontinued_on;
     const effectiveReplId = dto.replacementProductId?.trim() || dto.replacement_product_id?.trim() || null;
     const effectiveIsSellable = dto.isSellable !== undefined ? dto.isSellable : (dto.is_sellable !== undefined ? dto.is_sellable : true);
+    const rawIsGeneric = dto.isGenericMedicine !== undefined ? dto.isGenericMedicine : dto.is_generic_medicine;
+    const rawGenericPrice = dto.genericMedicinePrice !== undefined ? dto.genericMedicinePrice : dto.generic_medicine_price;
+    const { isGenericMedicine, genericMedicinePrice } = this.resolveAndValidateGenericMedicine(
+      rawIsGeneric,
+      rawGenericPrice,
+      false,
+      null,
+    );
 
     // Validate required attributes configured for this product type
     const requiredAttributes = await this.prisma.productTypeAttribute.findMany({
@@ -348,6 +399,8 @@ export class CatalogService {
         discontinuedOn: effectiveDiscOn ? new Date(effectiveDiscOn) : null,
         replacementProductId: effectiveReplId,
         isSellable: effectiveIsSellable,
+        isGenericMedicine,
+        genericMedicinePrice: genericMedicinePrice !== null ? new Prisma.Decimal(genericMedicinePrice) : null,
         attributes: dto.attributes ? (dto.attributes as Prisma.InputJsonValue) : Prisma.DbNull,
         active,
       },
@@ -562,6 +615,36 @@ export class CatalogService {
       updateData.replacementProductId = dto.replacementProductId?.trim() || null;
     }
     if (dto.isSellable !== undefined) updateData.isSellable = dto.isSellable;
+    const hasGenericUpdate =
+      dto.isGenericMedicine !== undefined ||
+      dto.is_generic_medicine !== undefined ||
+      dto.genericMedicinePrice !== undefined ||
+      dto.generic_medicine_price !== undefined;
+    if (hasGenericUpdate) {
+      const rawIsGeneric =
+        dto.isGenericMedicine !== undefined
+          ? dto.isGenericMedicine
+          : dto.is_generic_medicine;
+      const rawGenericPrice =
+        dto.genericMedicinePrice !== undefined
+          ? dto.genericMedicinePrice
+          : dto.generic_medicine_price;
+      const existingGenericPrice =
+        existing.genericMedicinePrice !== null && existing.genericMedicinePrice !== undefined
+          ? Number(existing.genericMedicinePrice)
+          : null;
+      const resolvedGeneric = this.resolveAndValidateGenericMedicine(
+        rawIsGeneric,
+        rawGenericPrice,
+        existing.isGenericMedicine,
+        existingGenericPrice,
+      );
+      updateData.isGenericMedicine = resolvedGeneric.isGenericMedicine;
+      updateData.genericMedicinePrice =
+        resolvedGeneric.genericMedicinePrice !== null
+          ? new Prisma.Decimal(resolvedGeneric.genericMedicinePrice)
+          : null;
+    }
     if (dto.attributes !== undefined) {
       updateData.attributes = dto.attributes ? (dto.attributes as Prisma.InputJsonValue) : Prisma.DbNull;
     }
@@ -688,27 +771,44 @@ export class CatalogService {
     }
 
     const normalizedPairs: Array<{ attributeId: string; value: string }> = [];
+    const clearedAttrIds: string[] = [];
 
     if (Array.isArray(attributesInput)) {
       for (const item of attributesInput) {
         const key = item.attribute_id || item.attributeId || item.id || item.code || item.name;
         const val = item.attribute_value !== undefined ? item.attribute_value : (item.value !== undefined ? item.value : item.attributeValue);
-        if (key && val !== undefined && val !== null && String(val).trim() !== '') {
+        if (key) {
           const matched = masterMap.get(String(key).toLowerCase().trim());
           if (matched) {
-            normalizedPairs.push({ attributeId: matched.id, value: String(val).trim() });
+            if (val !== undefined && val !== null && String(val).trim() !== '') {
+              normalizedPairs.push({ attributeId: matched.id, value: String(val).trim() });
+            } else {
+              clearedAttrIds.push(matched.id);
+            }
           }
         }
       }
     } else if (attributesInput && typeof attributesInput === 'object') {
       for (const [key, rawVal] of Object.entries(attributesInput)) {
-        if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
-          const matched = masterMap.get(key.toLowerCase().trim());
-          if (matched) {
+        const matched = masterMap.get(key.toLowerCase().trim());
+        if (matched) {
+          if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
             normalizedPairs.push({ attributeId: matched.id, value: String(rawVal).trim() });
+          } else {
+            clearedAttrIds.push(matched.id);
           }
         }
       }
+    }
+
+    // Remove attributes that were explicitly cleared
+    if (clearedAttrIds.length > 0) {
+      await this.prisma.productAttribute.deleteMany({
+        where: {
+          productId: product.id,
+          attributeId: { in: clearedAttrIds },
+        },
+      });
     }
 
     // Upsert into product_attributes
@@ -738,10 +838,17 @@ export class CatalogService {
       include: { attribute: true },
       orderBy: [{ id: 'asc' }],
     });
-    const genericSlots: Record<string, string | null> = {};
+    const genericSlots: Record<string, any> = {};
     for (let i = 1; i <= 20; i++) {
       genericSlots[`attribute${i}`] = allProductAttrs[i - 1]?.attributeValue?.substring(0, 255) || null;
     }
+    const syncedJson: Record<string, string> = {};
+    for (const pa of allProductAttrs) {
+      if (pa.attributeValue !== null && pa.attributeValue !== undefined) {
+        syncedJson[pa.attributeId] = pa.attributeValue;
+      }
+    }
+    genericSlots.attributes = Object.keys(syncedJson).length > 0 ? (syncedJson as Prisma.InputJsonValue) : Prisma.DbNull;
     await this.prisma.catalogProduct.update({
       where: { id: product.id },
       data: genericSlots,
@@ -3254,9 +3361,12 @@ export class CatalogService {
     return {
       // Backend canonical database schema
       id: p.id,
+      productId: p.id,
       productCode: p.productCode,
       name: p.name,
+      productName: p.name,
       shortName: p.shortName || p.name,
+      productShortName: p.shortName || p.name,
       genericName: p.genericName || p.name,
       dosageForm: p.dosageForm || 'Standard',
       pharmaReference: p.pharmaReference || null,
@@ -3264,9 +3374,11 @@ export class CatalogService {
       productTypeId: p.productTypeId || 'pt_med',
       categoryId: p.categoryId,
       category: p.category,
+      categoryName: p.category,
       subCategory: p.subCategory,
       subSubCategory: p.subSubCategory,
       brand: p.brand,
+      brandName: p.brand || null,
       brandId: p.brandId,
       description: p.description,
       baseUom: p.baseUom || 'Unit',
@@ -3277,6 +3389,10 @@ export class CatalogService {
       discontinuedOn: discontinuedOnStr,
       replacementProductId: p.replacementProductId,
       isSellable: p.isSellable !== undefined ? p.isSellable : true,
+      isGenericMedicine: Boolean(p.isGenericMedicine),
+      is_generic_medicine: Boolean(p.isGenericMedicine),
+      genericMedicinePrice: p.genericMedicinePrice !== null && p.genericMedicinePrice !== undefined ? Number(p.genericMedicinePrice) : null,
+      generic_medicine_price: p.genericMedicinePrice !== null && p.genericMedicinePrice !== undefined ? Number(p.genericMedicinePrice) : null,
       attributes: attributesObj,
       attribute_1: p.attribute1 || null,
       attribute_2: p.attribute2 || null,
@@ -3396,7 +3512,7 @@ export class CatalogService {
       base_uom: p.baseUom || 'Unit',
       pack_size: p.packSize || '10 x 10 Strip',
       pack_uom: p.packUom || 'Strip',
-      lifecycle_status: (p.lifecycleStatus === 'EOL' ? 'END_OF_LIFE' : p.lifecycleStatus) || (p.active ? 'ACTIVE' : 'INACTIVE'),
+      lifecycle_status: p.lifecycleStatus || (p.active ? 'ACTIVE' : 'INACTIVE'),
       available_from: availableFromStr,
       discontinued_on: discontinuedOnStr,
       replacement_product_id: p.replacementProductId,

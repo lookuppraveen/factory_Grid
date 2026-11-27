@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { RowActionsMenu } from '../common/RowActionsMenu';
 import { Brand, LifecycleStatus } from '../../types';
 import { PaginationControl } from '../common/PaginationControl';
 import { usePagination } from '../../hooks/usePagination';
@@ -513,123 +514,25 @@ export const BrandMasterModule: React.FC = () => {
 
                       {/* 8. ACTIONS */}
                       <td style={{ padding: '10px 16px', textAlign: 'right', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditModal(b)}
-                            title={`Edit ${bName} details`}
-                            aria-label="Edit Brand"
-                            style={{
-                              height: 28,
-                              padding: '0 9px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              borderRadius: 6,
-                              background: '#FFFFFF',
-                              color: '#334155',
-                              border: '1px solid #CBD5E1',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: 5,
-                              boxSizing: 'border-box',
-                              lineHeight: 1,
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={e => {
-                              e.currentTarget.style.background = '#F8FAFC';
-                              e.currentTarget.style.borderColor = '#94A3B8';
-                              e.currentTarget.style.color = '#0F172A';
-                            }}
-                            onMouseLeave={e => {
-                              e.currentTarget.style.background = '#FFFFFF';
-                              e.currentTarget.style.borderColor = '#CBD5E1';
-                              e.currentTarget.style.color = '#334155';
-                            }}
-                          >
-                            <Edit3 size={12.5} style={{ flexShrink: 0, color: '#64748B' }} />
-                            <span className="hidden sm:inline">Edit</span>
-                          </button>
-
-                          {isActive ? (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmToggleBrand(b)}
-                              title={`Deactivate ${bName}`}
-                              aria-label="Deactivate Brand"
-                              style={{
-                                height: 28,
-                                padding: '0 9px',
-                                fontSize: 12,
-                                fontWeight: 600,
-                                borderRadius: 6,
-                                background: '#FFFFFF',
-                                color: '#DC2626',
-                                border: '1px solid #FECACA',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 5,
-                                boxSizing: 'border-box',
-                                lineHeight: 1,
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = '#FEF2F2';
-                                e.currentTarget.style.borderColor = '#FCA5A5';
-                                e.currentTarget.style.color = '#B91C1C';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = '#FFFFFF';
-                                e.currentTarget.style.borderColor = '#FECACA';
-                                e.currentTarget.style.color = '#DC2626';
-                              }}
-                            >
-                              <Pause size={11.5} style={{ flexShrink: 0 }} />
-                              <span className="hidden sm:inline">Deactivate</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmToggleBrand(b)}
-                              title={`Activate ${bName}`}
-                              aria-label="Activate Brand"
-                              style={{
-                                height: 28,
-                                padding: '0 9px',
-                                fontSize: 12,
-                                fontWeight: 600,
-                                borderRadius: 6,
-                                background: '#FFFFFF',
-                                color: '#15803D',
-                                border: '1px solid #BBF7D0',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 5,
-                                boxSizing: 'border-box',
-                                lineHeight: 1,
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.background = '#F0FDF4';
-                                e.currentTarget.style.borderColor = '#86EFAC';
-                                e.currentTarget.style.color = '#166534';
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.background = '#FFFFFF';
-                                e.currentTarget.style.borderColor = '#BBF7D0';
-                                e.currentTarget.style.color = '#15803D';
-                              }}
-                            >
-                              <Play size={11} style={{ flexShrink: 0 }} />
-                              <span className="hidden sm:inline">Activate</span>
-                            </button>
-                          )}
-                        </div>
+                        <RowActionsMenu
+                          items={[
+                            {
+                              key: 'edit',
+                              label: 'Edit',
+                              icon: <Edit3 size={13} style={{ color: '#0F766E', flexShrink: 0 }} />,
+                              onClick: () => handleOpenEditModal(b),
+                            },
+                            {
+                              key: 'toggle',
+                              label: isActive ? 'Deactivate' : 'Activate',
+                              icon: isActive
+                                ? <Pause size={13} style={{ color: '#D97706', flexShrink: 0 }} />
+                                : <Play size={13} style={{ color: '#15803D', flexShrink: 0 }} />,
+                              onClick: () => setConfirmToggleBrand(b),
+                              color: isActive ? '#B45309' : '#15803D',
+                            },
+                          ]}
+                        />
                       </td>
                     </tr>
                   );

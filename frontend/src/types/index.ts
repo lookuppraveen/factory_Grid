@@ -9,7 +9,7 @@ export type UserRole =
 
 export type CustomerType = 'PCD' | 'TPM' | 'DISTRIBUTOR' | 'HOSPITAL' | 'EXPORT' | 'WHOLESALER';
 
-export type CustomerClassification = 'REGULAR' | 'SPECIAL_PARTY';
+export type CustomerClassification = 'RETAIL' | 'B2B' | 'B2B_SPECIAL' | 'REGULAR' | 'SPECIAL_PARTY';
 
 export type ComplianceStatus = 'PENDING' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
 
@@ -433,6 +433,11 @@ export interface Product {
   discontinued_on?: string | null;
   replacement_product_id?: string | null;
   is_sellable?: boolean;
+  isGenericMedicine?: boolean;
+  is_generic_medicine?: boolean;
+  genericMedicinePrice?: number | null;
+  generic_medicine_price?: number | null;
+  productAttributes?: ProductAttribute[];
   pharma_reference?: string | null;
   pharmaReference?: string | null;
   created_at?: string;

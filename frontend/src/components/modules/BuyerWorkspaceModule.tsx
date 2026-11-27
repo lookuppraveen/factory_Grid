@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { isB2bSpecial, normalizeCustomerClassification } from '../../utils/customerClassification';
 import {
   FileText, Plus, Search, Filter, Calendar, Clock, CheckCircle2, AlertCircle,
   X, Building2, Package, Layers, Eye, Trash2,
@@ -19,7 +20,7 @@ export const BuyerWorkspaceModule: React.FC = () => {
     activeBuyerAccount
   } = useApp();
 
-  const isSpecialPartyBuyer = activeBuyerAccount === 'SPECIAL_PARTY';
+  const isSpecialPartyBuyer = isB2bSpecial(activeBuyerAccount);
 
   const buyerCustomer = isSpecialPartyBuyer
     ? ((customers || []).find(c => c.id === 'c5' || c.name.includes('MediPlus')) || (customerVerifications || []).find(cv => cv.id === 'CUS-VER-105' || cv.companyName.includes('MediPlus')))
@@ -96,9 +97,9 @@ export const BuyerWorkspaceModule: React.FC = () => {
   const buyerRfqs = useMemo(() => {
     return rfqs.filter(r => {
       if (isSpecialPartyBuyer) {
-        return r.customerClassification === 'SPECIAL_PARTY' || r.customerId === 'c5' || r.customerName?.toLowerCase().includes('mediplus');
+        return isB2bSpecial(r.customerClassification) || r.customerId === 'c5' || r.customerName?.toLowerCase().includes('mediplus');
       } else {
-        return r.customerClassification !== 'SPECIAL_PARTY' && r.customerId !== 'c5' && !r.customerName?.toLowerCase().includes('mediplus');
+        return !isB2bSpecial(r.customerClassification) && r.customerId !== 'c5' && !r.customerName?.toLowerCase().includes('mediplus');
       }
     });
   }, [rfqs, isSpecialPartyBuyer]);
@@ -106,9 +107,9 @@ export const BuyerWorkspaceModule: React.FC = () => {
   const buyerOrders = useMemo(() => {
     return orders.filter(o => {
       if (isSpecialPartyBuyer) {
-        return o.customerClassification === 'SPECIAL_PARTY' || o.customerId === 'c5' || o.customerName?.toLowerCase().includes('mediplus');
+        return isB2bSpecial(o.customerClassification) || o.customerId === 'c5' || o.customerName?.toLowerCase().includes('mediplus');
       } else {
-        return o.customerClassification !== 'SPECIAL_PARTY' && o.customerId !== 'c5' && !o.customerName?.toLowerCase().includes('mediplus');
+        return !isB2bSpecial(o.customerClassification) && o.customerId !== 'c5' && !o.customerName?.toLowerCase().includes('mediplus');
       }
     });
   }, [orders, isSpecialPartyBuyer]);
@@ -288,7 +289,7 @@ export const BuyerWorkspaceModule: React.FC = () => {
       customerId: isSpecialPartyBuyer ? 'c5' : 'c1',
       customerName: isSpecialPartyBuyer ? 'MediPlus Healthcare' : 'Apex Pharma PCD Franchise',
       customerCode: isSpecialPartyBuyer ? 'CUS000105' : 'CUS000101',
-      customerClassification: isSpecialPartyBuyer ? 'SPECIAL_PARTY' : (buyerCustomer?.customerClassification || 'REGULAR'),
+      customerClassification: isSpecialPartyBuyer ? 'B2B_SPECIAL' : normalizeCustomerClassification(buyerCustomer?.customerClassification),
       createdDate: new Date().toISOString().split('T')[0],
       deadlineDate: quotationDueDate,
       status: 'PRICING_IN_PROGRESS',
@@ -502,7 +503,7 @@ export const BuyerWorkspaceModule: React.FC = () => {
                           <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', fontWeight: 500 }}>
                             {rfq.lines.length} {rfq.lines.length === 1 ? 'item' : 'items'}
                           </div>
-                          {rfq.customerClassification === 'SPECIAL_PARTY' ? (
+                          {isB2bSpecial(rfq.customerClassification) ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 5px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 9.5, fontWeight: 800, marginTop: 3 }}>
                               <Star size={9} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
                             </span>
@@ -595,7 +596,7 @@ export const BuyerWorkspaceModule: React.FC = () => {
                                 PO: {order.poNumber}
                               </div>
                             )}
-                            {order.customerClassification === 'SPECIAL_PARTY' ? (
+                            {isB2bSpecial(order.customerClassification) ? (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 5px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 9.5, fontWeight: 800, marginTop: 3 }}>
                                 <Star size={9} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
                               </span>
@@ -856,7 +857,7 @@ export const BuyerWorkspaceModule: React.FC = () => {
                 <tr key={rfq.id}>
                   <td className="ent-mono" style={{ fontWeight: 700 }}>
                     <div>{rfq.rfqNumber}</div>
-                    {rfq.customerClassification === 'SPECIAL_PARTY' ? (
+                    {isB2bSpecial(rfq.customerClassification) ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 5px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 9.5, fontWeight: 800, marginTop: 2 }}>
                         <Star size={9} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
                       </span>

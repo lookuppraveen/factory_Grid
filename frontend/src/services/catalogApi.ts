@@ -138,7 +138,15 @@ export function normalizePageResponse<T>(res: any, fallbackItems: T[] = []): Pag
           : (Array.isArray(res?.attributes)
             ? res.attributes
             : (Array.isArray(res?.products) ? res.products : fallbackItems)))));
-  let content: T[] = Array.isArray(rawContent) && rawContent.length > 0 && (rawContent[0] as any)?.category !== undefined
+  const isCategoryPayload =
+    Array.isArray(rawContent) &&
+    rawContent.length > 0 &&
+    (rawContent[0] as any)?.category !== undefined &&
+    (rawContent[0] as any)?.productCode === undefined &&
+    (rawContent[0] as any)?.product_code === undefined &&
+    ((rawContent[0] as any)?.category_code !== undefined || (rawContent[0] as any)?.categoryCode !== undefined);
+
+  let content: T[] = isCategoryPayload
     ? rawContent.map((item: any) => normalizeCategory(item) as unknown as T)
     : rawContent;
 
@@ -171,10 +179,13 @@ export function normalizePageResponse<T>(res: any, fallbackItems: T[] = []): Pag
 
 export interface ProductQueryParams extends PageableQuery {
   category?: string;
+  categoryId?: string;
   subCategory?: string;
   subSubCategory?: string;
   productTypeId?: string;
   lifecycleStatus?: string;
+  genericMedicine?: boolean;
+  buyerView?: boolean;
   activeOnly?: boolean;
 }
 
@@ -205,11 +216,15 @@ export const catalogApi = {
     if (params?.sort) qs.append('sort', params.sort);
     if (params?.search) qs.append('search', params.search);
     if (params?.category && params.category !== 'ALL') qs.append('category', params.category);
+    if (params?.categoryId && params.categoryId !== 'ALL') qs.append('categoryId', params.categoryId);
     if (params?.subCategory && params.subCategory !== 'ALL') qs.append('subCategory', params.subCategory);
     if (params?.subSubCategory && params.subSubCategory !== 'ALL') qs.append('subSubCategory', params.subSubCategory);
     if (params?.productTypeId && params.productTypeId !== 'ALL') qs.append('productTypeId', params.productTypeId);
     if (params?.lifecycleStatus && params.lifecycleStatus !== 'ALL') qs.append('lifecycleStatus', params.lifecycleStatus);
+    if (params?.genericMedicine !== undefined) qs.append('genericMedicine', String(params.genericMedicine));
+    if (params?.buyerView) qs.append('buyerView', 'true');
     if (params?.activeOnly) qs.append('activeOnly', 'true');
+
 
     const queryStr = qs.toString() ? `?${qs.toString()}` : '';
     const res = await request<any>(`${BASE}/products${queryStr}`, { method: 'GET' });
@@ -256,6 +271,7 @@ export const catalogApi = {
     if (params?.search) qs.append('search', params.search);
     if (params?.status && params.status !== 'ALL') qs.append('status', params.status);
     if (params?.activeOnly) qs.append('activeOnly', 'true');
+
 
     const queryStr = qs.toString() ? `?${qs.toString()}` : '';
     const res = await request<any>(`${BASE}/product-types${queryStr}`, { method: 'GET' });
@@ -358,6 +374,7 @@ export const catalogApi = {
     displayOrder?: number;
     remark?: string;
     lifecycleStatus?: string;
+  genericMedicine?: boolean;
   }): Promise<ProductTypeAttribute> {
     return request<ProductTypeAttribute>(`${BASE}/product-types/${encodeURIComponent(productTypeId)}/attributes`, {
       method: 'POST',
@@ -370,6 +387,7 @@ export const catalogApi = {
     displayOrder?: number;
     remark?: string;
     lifecycleStatus?: string;
+  genericMedicine?: boolean;
   }): Promise<ProductTypeAttribute> {
     return request<ProductTypeAttribute>(`${BASE}/product-types/${encodeURIComponent(productTypeId)}/attributes/${encodeURIComponent(attributeId)}`, {
       method: 'PUT',
@@ -386,6 +404,7 @@ export const catalogApi = {
     displayOrder?: number;
     lifecycle_status?: string;
     lifecycleStatus?: string;
+  genericMedicine?: boolean;
     remark?: string;
   }>): Promise<ProductTypeAttribute[]> {
     return request<ProductTypeAttribute[]>(`${BASE}/product-types/${encodeURIComponent(productTypeId)}/attributes`, {
@@ -436,6 +455,7 @@ export const catalogApi = {
     if (params?.dataType && params.dataType !== 'ALL') qs.append('dataType', params.dataType);
     if (params?.status && params.status !== 'ALL') qs.append('status', params.status);
     if (params?.activeOnly) qs.append('activeOnly', 'true');
+
 
     const queryStr = qs.toString() ? `?${qs.toString()}` : '';
     const res = await request<any>(`${BASE}/attributes${queryStr}`, { method: 'GET' });
@@ -531,6 +551,7 @@ export const catalogApi = {
     moq?: number;
     leadTimeDays?: number;
     lifecycleStatus?: string;
+  genericMedicine?: boolean;
     isPreferred?: boolean;
     packagingDetails?: string;
   }): Promise<any> {
@@ -571,17 +592,21 @@ export const catalogApi = {
   },
 
   async createPrice(payload: Partial<ProductPrice>): Promise<ProductPrice> {
+    const rawPm = payload.product_manufacturer_id ?? payload.productManufacturerId;
+    const pmNum = rawPm !== undefined && rawPm !== null && String(rawPm).trim() !== '' ? Number(rawPm) : NaN;
+    const rawMax = payload.maximum_quantity ?? payload.maxQuantity;
+    const maxNum = rawMax !== undefined && rawMax !== null && String(rawMax).trim() !== '' ? Number(rawMax) : NaN;
     return request<ProductPrice>(`${BASE}/prices`, {
       method: 'POST',
       body: JSON.stringify({
         productId: payload.product_id || payload.productId,
-        productManufacturerId: payload.product_manufacturer_id ? Number(payload.product_manufacturer_id) : (payload.productManufacturerId ? Number(payload.productManufacturerId) : undefined),
+        productManufacturerId: Number.isFinite(pmNum) && pmNum > 0 ? pmNum : undefined,
         customerSegmentId: payload.customer_segment_id || payload.customerSegmentId || undefined,
         priceType: payload.price_type || payload.priceType || 'BASE',
         currency: payload.currency || 'INR',
         unitPrice: Number(payload.unit_price ?? payload.unitPrice ?? 0),
         minQuantity: Number(payload.minimum_quantity ?? payload.minQuantity ?? 1),
-        maxQuantity: payload.maximum_quantity ? Number(payload.maximum_quantity) : (payload.maxQuantity ? Number(payload.maxQuantity) : undefined),
+        maxQuantity: Number.isFinite(maxNum) && maxNum > 0 ? maxNum : undefined,
         effectiveFrom: payload.effective_from || payload.effectiveFrom || undefined,
         effectiveTo: payload.effective_to || payload.effectiveTo || undefined,
         priceStatus: (payload.price_status || payload.status || 'ACTIVE').toUpperCase(),

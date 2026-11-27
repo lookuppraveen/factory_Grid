@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { ProductType, Category, LifecycleStatus, ProductTypeAttributeDraft } from '../../types';
 import { catalogApi } from '../../services/catalogApi';
 import { PaginationControl } from '../common/PaginationControl';
+import { MasterApiStatusBanner } from '../common/MasterComponents';
 import { usePagination } from '../../hooks/usePagination';
 import {
   FolderTree, Layers, Search, Plus, Edit3, Trash2, CheckCircle2,
@@ -14,6 +15,10 @@ import {
 export const CategoryMasterModule: React.FC = () => {
   const {
     productTypes,
+    masterLoading,
+    masterErrors,
+    refreshProductTypes,
+    refreshUnifiedCategories,
     addProductType,
     updateProductType,
     deleteProductType,
@@ -76,14 +81,7 @@ export const CategoryMasterModule: React.FC = () => {
   }, []);
 
   // Expanded nodes for Hierarchy View
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set([
-    'cat:pt_med:Drugs',
-    'sub:pt_med:Drugs:Tablets',
-    'sub:pt_med:Drugs:Capsules',
-    'cat:pt_nut:Dietary Supplements',
-    'cat:pt_cos:Clinical Skincare',
-    'cat:pt_ayr:Classical Ayurvedic'
-  ]));
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
   const toggleExpand = (nodeKey: string) => {
     setExpandedNodes(prev => {
@@ -1081,6 +1079,12 @@ export const CategoryMasterModule: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {activeMasterTab === 'PRODUCT_TYPE' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <MasterApiStatusBanner
+            loading={masterLoading.productTypes && productTypes.length === 0}
+            error={masterErrors.productTypes}
+            entityLabel="Product Types"
+            onRetry={refreshProductTypes}
+          />
 
               {/* Search & Filter Toolbar */}
               <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -1389,6 +1393,12 @@ export const CategoryMasterModule: React.FC = () => {
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {activeMasterTab === 'CATEGORY' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <MasterApiStatusBanner
+            loading={masterLoading.categories && unifiedCategories.length === 0}
+            error={masterErrors.categories}
+            entityLabel="Categories"
+            onRetry={refreshUnifiedCategories}
+          />
 
           {/* Search, Filter & View Mode Toolbar */}
           <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, padding: 14, boxShadow: '0 1px 3px rgba(15,23,42,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>

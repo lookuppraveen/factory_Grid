@@ -1,6 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuthUser } from '@factorygrid/auth';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  formatCustomerClassificationLabel,
+  isValidCustomerClassification,
+  normalizeCustomerClassification,
+} from '../../common/customer-classification';
 import { StorageService } from '../storage/storage.service';
 import { ApproveVerificationDto } from '../buyer/dto/verification.dto';
 
@@ -161,9 +166,9 @@ export class ComplianceService {
     }
 
     const requestedClassification = dto?.customerClassification;
-    const targetClassification = requestedClassification === 'SPECIAL_PARTY'
-      ? 'SPECIAL_PARTY'
-      : (requestedClassification === 'REGULAR' ? 'REGULAR' : (record.customerClassification || 'REGULAR'));
+    const targetClassification = requestedClassification
+      ? normalizeCustomerClassification(requestedClassification)
+      : normalizeCustomerClassification(record.customerClassification);
 
     const customerCode = dto?.customerCode || record.customerCode || `CUS000${Math.floor(Math.random() * 900 + 100)}`;
     const approvedAt = new Date();
@@ -175,7 +180,7 @@ export class ComplianceService {
       classification: targetClassification,
       reviewer: reviewerName,
       timestamp: approvedAt.toISOString(),
-      remarks: dto?.remarks || `Approved verification case as ${targetClassification === 'SPECIAL_PARTY' ? 'Special Party / Special Buyer' : 'Standard Regular Buyer'}`,
+      remarks: dto?.remarks || `Approved verification case as ${formatCustomerClassificationLabel(targetClassification)}`,
     };
     existingNotes.push(approvalAudit);
 
@@ -344,21 +349,26 @@ export class ComplianceService {
   }
 
   async updateClassification(idOrCode: string, classification: string, remarks?: string, updatedBy = 'Platform Admin') {
-    const valid = classification === 'SPECIAL_PARTY' ? 'SPECIAL_PARTY' : 'REGULAR';
+    if (!isValidCustomerClassification(classification)) {
+      throw new BadRequestException(
+        'Invalid customer classification. Allowed values are RETAIL, B2B, or B2B_SPECIAL.',
+      );
+    }
+    const valid = normalizeCustomerClassification(classification);
     const record = await this.getVerification(idOrCode);
 
-    if (valid === 'SPECIAL_PARTY' && record.verificationStatus === 'Rejected') {
-      throw new BadRequestException('Cannot set Special Party classification on a rejected customer case.');
+    if (valid === 'B2B_SPECIAL' && record.verificationStatus === 'Rejected') {
+      throw new BadRequestException('Cannot set B2B Special classification on a rejected customer case.');
     }
 
     const existingNotes = Array.isArray(record.reviewNotes) ? [...record.reviewNotes] : [];
     const auditEntry = {
       action: 'CLASSIFICATION_CHANGED',
-      previousClassification: record.customerClassification || 'REGULAR',
+      previousClassification: normalizeCustomerClassification(record.customerClassification),
       newClassification: valid,
       reviewer: updatedBy,
       timestamp: new Date().toISOString(),
-      remarks: remarks || `Classification updated to ${valid === 'SPECIAL_PARTY' ? 'Special Party' : 'Regular Buyer'}`,
+      remarks: remarks || `Classification updated to ${formatCustomerClassificationLabel(valid)}`,
     };
     existingNotes.push(auditEntry);
 
@@ -418,6 +428,7 @@ export class ComplianceService {
     return {
       ...r,
       id: r.id.toString(),
+      customerClassification: normalizeCustomerClassification(r.customerClassification),
       registrationId: r.registrationId ? r.registrationId.toString() : null,
       userId: r.userId ? r.userId.toString() : null,
       user: userClean,

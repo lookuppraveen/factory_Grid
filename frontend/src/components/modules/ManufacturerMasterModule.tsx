@@ -8,7 +8,8 @@ import {
   MasterPageHeader,
   MasterStatsStrip,
   MasterStatusBadge,
-  TableActionGroup
+  TableActionGroup,
+  MasterApiStatusBanner
 } from '../common/MasterComponents';
 import {
   Factory, Search, Plus, Edit3, Trash2, CheckCircle2,
@@ -21,6 +22,9 @@ export const ManufacturerMasterModule: React.FC = () => {
     manufacturers,
     mappings,
     products,
+    masterLoading,
+    masterErrors,
+    refreshManufacturers,
     addManufacturer,
     updateManufacturer,
     deleteManufacturer,
@@ -170,7 +174,7 @@ export const ManufacturerMasterModule: React.FC = () => {
   };
 
   // Save Manufacturer Form Handler
-  const handleSaveManufacturer = (e: React.FormEvent) => {
+  const handleSaveManufacturer = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = formData.manufacturer_name.trim();
     if (!cleanName) {
@@ -196,86 +200,80 @@ export const ManufacturerMasterModule: React.FC = () => {
 
     const nowIso = new Date().toISOString().split('T')[0];
 
-    if (editingMfg) {
-      const targetId = editingMfg.manufacturer_id || editingMfg.id;
-      updateManufacturer(targetId, {
-        manufacturer_name: cleanName,
-        companyName: cleanName,
-        name: cleanName,
-        manufacturer_code: cleanCode,
-        code: cleanCode,
-        description: formData.description.trim(),
-        lifecycle_status: formData.lifecycle_status,
-        status: formData.lifecycle_status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
-        effective_from: formData.effective_from,
-        discontinued_on: formData.discontinued_on || null,
-        updated_at: nowIso
-      });
-      showToast(`Manufacturer "${cleanName}" updated successfully.`);
-    } else {
-      const nextNum = (manufacturers && manufacturers.length > 0) ? manufacturers.length + 1 : 1;
-      const newId = `m_${Date.now()}`;
-      const newMfg: Manufacturer = {
-        manufacturer_id: newId,
-        manufacturer_code: cleanCode,
-        manufacturer_name: cleanName,
-        description: formData.description.trim(),
-        lifecycle_status: formData.lifecycle_status,
-        effective_from: formData.effective_from || nowIso,
-        discontinued_on: formData.discontinued_on || null,
-        created_at: nowIso,
-        updated_at: nowIso,
-        // Marketplace compatibility aliases
-        id: newId,
-        code: cleanCode,
-        companyName: cleanName,
-        name: cleanName,
-        mfgLicenseNo: 'ML-FORM-25',
-        gstin: '02AAAAA0000A1Z5',
-        pan: 'AAAAA0000A',
-        contactPerson: 'Authorized Plant Head',
-        email: 'info@plantoperations.com',
-        phone: '+91 98000 00000',
-        city: 'Industrial Area',
-        state: 'State',
-        status: formData.lifecycle_status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
-        complianceStatus: 'APPROVED',
-        rating: 4.5,
-        activeSubOrders: 0
-      };
-      addManufacturer(newMfg);
-      pagination.resetPage();
-      showToast(`Manufacturer "${cleanName}" created successfully.`);
-    }
+    try {
+      if (editingMfg) {
+        const targetId = editingMfg.manufacturer_id || editingMfg.id;
+        await updateManufacturer(targetId, {
+          manufacturer_name: cleanName,
+          companyName: cleanName,
+          name: cleanName,
+          manufacturer_code: cleanCode,
+          code: cleanCode,
+          description: formData.description.trim(),
+          lifecycle_status: formData.lifecycle_status,
+          status: formData.lifecycle_status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+          effective_from: formData.effective_from,
+          discontinued_on: formData.discontinued_on || null,
+          updated_at: nowIso
+        });
+        showToast(`Manufacturer "${cleanName}" updated successfully.`);
+      } else {
+        const newId = `m_${Date.now()}`;
+        const newMfg: Manufacturer = {
+          manufacturer_id: newId,
+          manufacturer_code: cleanCode,
+          manufacturer_name: cleanName,
+          description: formData.description.trim(),
+          lifecycle_status: formData.lifecycle_status,
+          effective_from: formData.effective_from || nowIso,
+          discontinued_on: formData.discontinued_on || null,
+          created_at: nowIso,
+          updated_at: nowIso,
+          id: newId,
+          code: cleanCode,
+          companyName: cleanName,
+          name: cleanName,
+          status: formData.lifecycle_status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+        };
+        await addManufacturer(newMfg);
+        pagination.resetPage();
+        showToast(`Manufacturer "${cleanName}" created successfully.`);
+      }
 
-    setIsModalOpen(false);
+      setIsModalOpen(false);
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to save manufacturer. Please try again.');
+    }
   };
 
   // Toggle Status
-  const handleToggleStatus = (mfg: Manufacturer, e?: React.MouseEvent) => {
+  const handleToggleStatus = async (mfg: Manufacturer, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const current = mfg.lifecycle_status || (mfg.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE');
     const next: ManufacturerLifecycleStatus = current === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     const targetId = mfg.manufacturer_id || mfg.id;
 
-    updateManufacturer(targetId, {
-      lifecycle_status: next,
-      status: next === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
-      updated_at: new Date().toISOString().split('T')[0]
-    });
-    toggleManufacturerStatus(targetId);
-    showToast(`Manufacturer status changed to ${next}`);
+    try {
+      await toggleManufacturerStatus(targetId);
+      showToast(`Manufacturer status changed to ${next}`);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update manufacturer status.');
+    }
   };
 
   // Delete confirmation
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!confirmDeleteMfg) return;
     const targetId = confirmDeleteMfg.manufacturer_id || confirmDeleteMfg.id;
-    deleteManufacturer(targetId);
-    showToast(`Manufacturer "${confirmDeleteMfg.manufacturer_name || confirmDeleteMfg.companyName}" deleted.`);
-    setConfirmDeleteMfg(null);
-    if (selectedMfgForDetail && (selectedMfgForDetail.id === targetId || selectedMfgForDetail.manufacturer_id === targetId)) {
-      setSelectedMfgForDetail(null);
+    try {
+      await deleteManufacturer(targetId);
+      showToast(`Manufacturer "${confirmDeleteMfg.manufacturer_name || confirmDeleteMfg.companyName}" deleted.`);
+      setConfirmDeleteMfg(null);
+      if (selectedMfgForDetail && (selectedMfgForDetail.id === targetId || selectedMfgForDetail.manufacturer_id === targetId)) {
+        setSelectedMfgForDetail(null);
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete manufacturer.');
     }
   };
 
@@ -325,6 +323,12 @@ export const ManufacturerMasterModule: React.FC = () => {
       />
 
       {/* ── Statistics Strip ── */}
+      <MasterApiStatusBanner
+        loading={masterLoading.manufacturers && manufacturers.length === 0}
+        error={masterErrors.manufacturers}
+        entityLabel="Manufacturers"
+        onRetry={refreshManufacturers}
+      />
       <MasterStatsStrip
         stats={[
           { label: 'TOTAL MANUFACTURERS', value: stats.total },

@@ -75,6 +75,7 @@ export const ProductCatalogModule: React.FC = () => {
     productPrices,
     addProductPrice,
     removeProductPrice,
+    refreshProductPrices,
     productTaxes,
     addProductTax,
     removeProductTax,
@@ -182,6 +183,30 @@ export const ProductCatalogModule: React.FC = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('ALL');
   const [selectedBrandId, setSelectedBrandId] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [selectedGenericFilter, setSelectedGenericFilter] = useState<'ALL' | 'GENERIC_ONLY' | 'NON_GENERIC'>('ALL');
+  const [genericFilteredProducts, setGenericFilteredProducts] = useState<Product[] | null>(null);
+
+  // Database-level filtering when Generic Medicine filter is active
+  useEffect(() => {
+    let active = true;
+    if (selectedGenericFilter === 'ALL') {
+      setGenericFilteredProducts(null);
+      return;
+    }
+    catalogApi.listProducts({
+      genericMedicine: selectedGenericFilter === 'GENERIC_ONLY',
+      size: 1000,
+    })
+      .then(res => {
+        if (active && Array.isArray(res)) {
+          setGenericFilteredProducts(res);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to filter generic medicines from backend:', err);
+      });
+    return () => { active = false; };
+  }, [selectedGenericFilter, products]);
 
   // Categories available for filter based on selected Product Type
   const filterCategoriesList = useMemo(() => {
@@ -201,6 +226,10 @@ export const ProductCatalogModule: React.FC = () => {
   // Dynamic Product Attributes Management Modal State (PRODUCT_ATTRIBUTE)
   const [isAttrModalOpen, setIsAttrModalOpen] = useState(false);
   const [attributeDraftValues, setAttributeDraftValues] = useState<Record<string, string>>({});
+  const [attrModalExtraIds, setAttrModalExtraIds] = useState<string[]>([]);
+  const [isSelectingAttrModal, setIsSelectingAttrModal] = useState(false);
+  const [isSavingAttrs, setIsSavingAttrs] = useState(false);
+  const [attrModalError, setAttrModalError] = useState<string | null>(null);
 
   // Single Actions Dropdown state (tracks product ID whose menu is currently open)
   const [openMenuProductId, setOpenMenuProductId] = useState<string | null>(null);
@@ -280,6 +309,8 @@ export const ProductCatalogModule: React.FC = () => {
 
   // Quick Add Price Modal State (PRODUCT_PRICE)
   const [isQuickPriceOpen, setIsQuickPriceOpen] = useState(false);
+  const [quickPriceError, setQuickPriceError] = useState<string | null>(null);
+  const [isSavingQuickPrice, setIsSavingQuickPrice] = useState(false);
   const [quickPriceForm, setQuickPriceForm] = useState({
     customer_segment_id: '',
     product_manufacturer_id: '' as string | null,
@@ -348,7 +379,9 @@ export const ProductCatalogModule: React.FC = () => {
     availableFrom: '2025-01-01',
     discontinuedOn: '',
     replacementProductId: '',
-    isSellable: true
+    isSellable: true,
+    isGenericMedicine: false,
+    genericMedicinePrice: ''
   });
 
   const [isSavingProduct, setIsSavingProduct] = useState(false);
@@ -608,7 +641,10 @@ export const ProductCatalogModule: React.FC = () => {
 
   // Filtered Central Product List Calculation
   const filteredProducts = useMemo(() => {
-    return (products || []).filter(p => {
+    const sourceList = selectedGenericFilter !== 'ALL' && genericFilteredProducts !== null
+      ? genericFilteredProducts
+      : (products || []);
+    return sourceList.filter(p => {
       const q = searchTerm.toLowerCase().trim();
       const pCode = (p.product_code || p.code || '').toLowerCase();
       const pName = (p.product_name || p.name || '').toLowerCase();
@@ -673,13 +709,13 @@ export const ProductCatalogModule: React.FC = () => {
       const idB = String(b.id || b.product_code || '');
       return idB.localeCompare(idA);
     });
-  }, [products, mappings, searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus, unifiedCategories, brands, productAttributes]);
+  }, [products, genericFilteredProducts, selectedGenericFilter, mappings, searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus, unifiedCategories, brands, productAttributes]);
 
   // Pagination Control
   const pagination = usePagination({
     totalItems: filteredProducts.length,
     initialPageSize: 10,
-    resetDependencies: [searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus]
+    resetDependencies: [searchTerm, selectedProductTypeId, selectedCategoryId, selectedBrandId, selectedStatus, selectedGenericFilter]
   });
   const paginatedProducts = pagination.paginateItems(filteredProducts);
 
@@ -863,7 +899,9 @@ export const ProductCatalogModule: React.FC = () => {
       availableFrom: new Date().toISOString().split('T')[0],
       discontinuedOn: '',
       replacementProductId: '',
-      isSellable: true
+      isSellable: true,
+      isGenericMedicine: false,
+      genericMedicinePrice: ''
     });
 
     setFormAttrValues({});
@@ -906,7 +944,11 @@ export const ProductCatalogModule: React.FC = () => {
       availableFrom: prd.available_from ? prd.available_from.split('T')[0] : '2025-01-01',
       discontinuedOn: prd.discontinued_on ? prd.discontinued_on.split('T')[0] : '',
       replacementProductId: prd.replacement_product_id || '',
-      isSellable: prd.is_sellable !== undefined ? prd.is_sellable : true
+      isSellable: prd.is_sellable !== undefined ? prd.is_sellable : true,
+      isGenericMedicine: Boolean(prd.isGenericMedicine ?? prd.is_generic_medicine ?? false),
+      genericMedicinePrice: (prd.genericMedicinePrice ?? prd.generic_medicine_price) != null
+        ? String(prd.genericMedicinePrice ?? prd.generic_medicine_price)
+        : ''
     });
 
     const currentAttrs = getProductAttributeMap(prd.id);
@@ -918,49 +960,177 @@ export const ProductCatalogModule: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
-  // Open Manage Dynamic Attributes Modal (PRODUCT_ATTRIBUTE configured for product's Product Type)
-  const handleOpenManageAttributes = (prd?: Product) => {
+  // Helper: Build unified list of attributes for Product Attributes Modal (configured + existing + dynamically selected)
+  const attrModalAttributesList = useMemo(() => {
+    if (!selectedProduct) return [];
+    const ptId = selectedProduct.product_type_id || selectedProduct.productTypeId || resolveCategoryRecord(selectedProduct.category_id || selectedProduct.categoryId)?.product_type_id || 'pt_med';
+    const configuredAttrs = getProductTypeConfiguredAttributes(ptId);
+    const list: any[] = [];
+    const seenIds = new Set<string>();
+
+    for (const ca of configuredAttrs) {
+      const master = ca.attribute || (attributeMasters || []).find(m =>
+        (m.attribute_id && m.attribute_id === (ca as any).attribute_id) ||
+        (m.id && m.id === (ca as any).attribute_id)
+      );
+      const aId = master?.attribute_id || master?.id || (ca as any).attribute_id || '';
+      if (!aId || seenIds.has(aId)) continue;
+      seenIds.add(aId);
+      if (master?.attribute_code) seenIds.add(master.attribute_code);
+
+      list.push({
+        attribute_id: aId,
+        attribute_name: master?.attribute_name || master?.name || (ca as any).attribute_name || master?.attribute_code || aId,
+        attribute_code: master?.attribute_code || master?.code || (ca as any).attribute_code || '',
+        data_type: (master?.data_type || master?.dataType || (ca as any).data_type || 'TEXT').toUpperCase(),
+        unit_of_measure: master?.unit_of_measure || master?.unitOfMeasure || (ca as any).unit_of_measure || '',
+        allowed_values: master?.allowed_values || master?.allowedValues || (ca as any).allowed_values || [],
+        is_required: !!(ca.is_required || (ca as any).isRequired),
+        is_dynamically_added: false,
+        remark: ca.remark,
+        attribute: master || ca
+      });
+    }
+
+    for (const extraId of attrModalExtraIds) {
+      if (!extraId || seenIds.has(extraId)) continue;
+      const master = (attributeMasters || []).find(m =>
+        m.attribute_id === extraId || m.id === extraId || m.attribute_code === extraId
+      );
+      const aId = master?.attribute_id || master?.id || extraId;
+      if (seenIds.has(aId)) continue;
+      seenIds.add(aId);
+      seenIds.add(extraId);
+      if (master?.attribute_code) seenIds.add(master.attribute_code);
+
+      list.push({
+        attribute_id: aId,
+        attribute_name: master?.attribute_name || master?.name || master?.attribute_code || aId,
+        attribute_code: master?.attribute_code || master?.code || '',
+        data_type: (master?.data_type || master?.dataType || 'TEXT').toUpperCase(),
+        unit_of_measure: master?.unit_of_measure || master?.unitOfMeasure || '',
+        allowed_values: master?.allowed_values || master?.allowedValues || [],
+        is_required: false,
+        is_dynamically_added: true,
+        remark: master?.remark,
+        attribute: master
+      });
+    }
+
+    return list;
+  }, [selectedProduct, getProductTypeConfiguredAttributes, productTypeAttributes, attributeMasters, attrModalExtraIds]);
+
+  const availableToSelectInAttrModal = useMemo(() => {
+    const usedIds = new Set<string>();
+    attrModalAttributesList.forEach(a => {
+      if (a.attribute_id) usedIds.add(a.attribute_id);
+      if (a.attribute_code) usedIds.add(a.attribute_code);
+      if (a.attribute?.attribute_id) usedIds.add(a.attribute.attribute_id);
+      if (a.attribute?.id) usedIds.add(a.attribute.id);
+    });
+    return (attributeMasters || []).filter(m => {
+      const isActive = m.is_active ?? m.isActive ?? true;
+      const mId = m.attribute_id || m.id || '';
+      const mCode = m.attribute_code || m.code || '';
+      return isActive && mId && !usedIds.has(mId) && (!mCode || !usedIds.has(mCode));
+    });
+  }, [attributeMasters, attrModalAttributesList]);
+
+  // Open Manage Dynamic Attributes Modal (PRODUCT_ATTRIBUTE)
+  const handleOpenManageAttributes = async (prd?: Product) => {
     const target = prd || selectedProduct;
     if (!target) return;
-    const currentAttrs = getProductAttributeMap(target.id);
+    if (prd && (!selectedProduct || selectedProduct.id !== prd.id)) {
+      setSelectedProduct(prd);
+    }
+
+    setAttrModalError(null);
+    setIsSelectingAttrModal(false);
+
+    // Load authoritative attributes from backend PostgreSQL (with context fallback)
+    const currentAttrs: Record<string, string> = { ...getProductAttributeMap(target.id) };
+    try {
+      const freshAttrs = await catalogApi.getProductAttributes(target.id);
+      if (Array.isArray(freshAttrs)) {
+        freshAttrs.forEach((pa: any) => {
+          const aId = pa.attribute_id || pa.attributeId || '';
+          const aVal = pa.attribute_value !== undefined && pa.attribute_value !== null
+            ? String(pa.attribute_value)
+            : (pa.attributeValue !== undefined && pa.attributeValue !== null ? String(pa.attributeValue) : '');
+          if (aId) currentAttrs[aId] = aVal;
+        });
+      }
+    } catch (err) {
+      console.warn('Could not load fresh product attributes from API, using cached state:', err);
+    }
+
     const ptId = target.product_type_id || target.productTypeId || resolveCategoryRecord(target.category_id || target.categoryId)?.product_type_id || 'pt_med';
     const configuredAttrs = getProductTypeConfiguredAttributes(ptId);
+    const configuredIds = new Set<string>();
     const draft: Record<string, string> = {};
+
     configuredAttrs.forEach(ca => {
-      const aId = ca.attribute_id;
-      draft[aId] = currentAttrs[aId] || '';
+      const aId = ca.attribute?.attribute_id || ca.attribute?.id || (ca as any).attribute_id || '';
+      if (aId) {
+        configuredIds.add(aId);
+        draft[aId] = currentAttrs[aId] ?? '';
+      }
     });
+
+    const extraIds: string[] = [];
+    Object.entries(currentAttrs).forEach(([aId, aVal]) => {
+      draft[aId] = aVal;
+      if (!configuredIds.has(aId)) {
+        extraIds.push(aId);
+      }
+    });
+
+    setAttrModalExtraIds(extraIds);
     setAttributeDraftValues(draft);
     setIsAttrModalOpen(true);
   };
 
   // Save Dynamic Product Attributes (PRODUCT_ATTRIBUTE)
-  const handleSaveProductAttributes = (e: React.FormEvent) => {
+  const handleSaveProductAttributes = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
-    const ptId = selectedProduct.product_type_id || selectedProduct.productTypeId || resolveCategoryRecord(selectedProduct.category_id || selectedProduct.categoryId)?.product_type_id || 'pt_med';
-    const configuredAttrs = getProductTypeConfiguredAttributes(ptId);
+    setAttrModalError(null);
 
-    // Validate is_required attributes
-    for (const ca of configuredAttrs) {
-      if (ca.is_required || ca.isRequired) {
+    // Validate required attributes
+    for (const ca of attrModalAttributesList) {
+      if (ca.is_required) {
         const aId = ca.attribute_id;
-        const aName = ca.attribute_name || ca.attribute?.attribute_name || aId;
+        const aName = ca.attribute_name || aId;
         const val = (attributeDraftValues[aId] || '').trim();
         if (!val) {
-          alert(`Attribute "${aName}" is mandatory for Product Type.`);
+          setAttrModalError(`Attribute "${aName}" is mandatory for this Product Type.`);
           return;
         }
       }
     }
 
-    const entries = configuredAttrs.map(ca => ({
-      attribute_id: ca.attribute_id,
-      attribute_value: attributeDraftValues[ca.attribute_id] || ''
-    }));
-    saveProductAttributesBulk(selectedProduct.id, entries);
-    addAuditLog('UPDATE_PRODUCT_ATTRIBUTES', `Updated dynamic attributes for product ${selectedProduct.product_code || selectedProduct.code}`);
-    setIsAttrModalOpen(false);
+    const entries = attrModalAttributesList
+      .filter(ca => Boolean(ca.attribute_id))
+      .map(ca => ({
+        attribute_id: ca.attribute_id,
+        attribute_value: attributeDraftValues[ca.attribute_id] ?? ''
+      }));
+
+    setIsSavingAttrs(true);
+    try {
+      await saveProductAttributesBulk(selectedProduct.id, entries);
+      await refreshProducts();
+      addAuditLog('UPDATE_PRODUCT_ATTRIBUTES', `Updated dynamic attributes for product ${selectedProduct.product_code || selectedProduct.code}`);
+      setFeedbackToast({
+        type: 'success',
+        message: `Product attributes saved for "${selectedProduct.product_name || selectedProduct.name}".`
+      });
+      setIsAttrModalOpen(false);
+    } catch (err: any) {
+      setAttrModalError(err?.message || 'Failed to save product attributes to database.');
+    } finally {
+      setIsSavingAttrs(false);
+    }
   };
 
   // Save Central Product Handler (Pure PRODUCT Entity + Dynamic Category Attributes in PRODUCT_ATTRIBUTE)
@@ -994,6 +1164,19 @@ export const ProductCatalogModule: React.FC = () => {
     if (!formData.packUom.trim()) {
       setModalFormError('Pack UOM is mandatory.');
       return;
+    }
+
+    // Generic Medicine Price validation
+    if (formData.isGenericMedicine) {
+      const parsedGenericPrice = Number(formData.genericMedicinePrice);
+      if (
+        formData.genericMedicinePrice === '' ||
+        !Number.isFinite(parsedGenericPrice) ||
+        parsedGenericPrice <= 0
+      ) {
+        setModalFormError('Generic Medicine Price is required and must be a valid positive amount when Generic Medicine is checked.');
+        return;
+      }
     }
 
     // Unique Product Code Validation Check
@@ -1054,6 +1237,8 @@ export const ProductCatalogModule: React.FC = () => {
       discontinuedOn: formData.discontinuedOn || undefined,
       replacementProductId: formData.replacementProductId || undefined,
       isSellable: formData.isSellable,
+      isGenericMedicine: formData.isGenericMedicine,
+      genericMedicinePrice: formData.isGenericMedicine ? Number(formData.genericMedicinePrice) : null,
       attributes: formAttrValues,
     };
 
@@ -1092,7 +1277,7 @@ export const ProductCatalogModule: React.FC = () => {
           attribute_value: formAttrValues[ca.attribute_id] || ''
         }));
       if (dynamicAttrEntries.length > 0) {
-        saveProductAttributesBulk(savedProduct.id || targetId, dynamicAttrEntries);
+        await saveProductAttributesBulk(savedProduct.id || targetId, dynamicAttrEntries);
       }
 
       // Refresh product catalog list from PostgreSQL
@@ -1309,7 +1494,7 @@ export const ProductCatalogModule: React.FC = () => {
                   boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
                 }}
               >
-                <Plus size={16} /> + Create New Product (Manual)
+                <Plus size={16} /> Create New Product (Manual)
               </button>
 
               <button
@@ -1482,6 +1667,29 @@ export const ProductCatalogModule: React.FC = () => {
               <option value="END_OF_LIFE">END OF LIFE</option>
               <option value="DRAFT">DRAFT</option>
               <option value="INACTIVE">INACTIVE</option>
+            </select>
+          </div>
+
+          {/* Generic Medicine Filter (DB-backed) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Generic Medicine:</span>
+            <select
+              value={selectedGenericFilter}
+              onChange={e => setSelectedGenericFilter(e.target.value as 'ALL' | 'GENERIC_ONLY' | 'NON_GENERIC')}
+              style={{
+                padding: '8px 12px',
+                fontSize: 12.5,
+                background: selectedGenericFilter !== 'ALL' ? '#F0FDFA' : '#FFFFFF',
+                border: selectedGenericFilter !== 'ALL' ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
+                borderRadius: 6,
+                color: selectedGenericFilter !== 'ALL' ? '#0F766E' : '#0F172A',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <option value="ALL">All Products</option>
+              <option value="GENERIC_ONLY">Generic Medicines Only</option>
+              <option value="NON_GENERIC">Standard (Non-Generic)</option>
             </select>
           </div>
 
@@ -2611,7 +2819,10 @@ export const ProductCatalogModule: React.FC = () => {
                         color: '#0F766E',
                         border: '1px solid #99F6E4'
                       }}>
-                        {(productPrices || []).filter(p => p.product_id === selectedProduct.product_id || p.product_id === selectedProduct.id).length} Price Rules
+                        {(productPrices || []).filter(p => {
+                          const selectedPid = selectedProduct.product_id || selectedProduct.id;
+                          return p.product_id === selectedPid || p.product_id === selectedProduct.id || (p as any).productId === selectedPid || (p as any).productId === selectedProduct.id;
+                        }).length} Price Rules
                       </span>
                     </div>
                     <p style={{ margin: '3px 0 0', fontSize: 12.5, color: '#64748B' }}>
@@ -2623,8 +2834,9 @@ export const ProductCatalogModule: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
+                        setQuickPriceError(null);
                         setQuickPriceForm({
-                          customer_segment_id: customerSegments[0]?.customer_segment_id || '',
+                          customer_segment_id: customerSegments[0]?.customer_segment_id || customerSegments[0]?.id || '',
                           product_manufacturer_id: null,
                           price_type: 'FIXED',
                           currency: 'INR',
@@ -2652,14 +2864,19 @@ export const ProductCatalogModule: React.FC = () => {
                         boxShadow: '0 1px 2px rgba(15,118,110,0.2)'
                       }}
                     >
-                      <Plus size={15} /> + Add Price
+                      <Plus size={15} /> Add Price
                     </button>
                   )}
                 </div>
 
                 {(() => {
+                  const selectedPid = selectedProduct.product_id || selectedProduct.id;
                   const pricesForProd = (productPrices || []).filter(
-                    p => p.product_id === selectedProduct.product_id || p.product_id === selectedProduct.id
+                    p =>
+                      p.product_id === selectedPid ||
+                      p.product_id === selectedProduct.id ||
+                      (p as any).productId === selectedPid ||
+                      (p as any).productId === selectedProduct.id
                   );
 
                   if (pricesForProd.length === 0) {
@@ -3123,21 +3340,20 @@ export const ProductCatalogModule: React.FC = () => {
             style={{
               width: '100%',
               maxWidth: 720,
-              maxHeight: '92vh',
+              maxHeight: '90vh',
               background: '#FFFFFF',
               border: '1px solid #CBD5E1',
               borderRadius: 14,
-              padding: 24,
+              padding: 0,
               boxShadow: '0 20px 48px rgba(15, 23, 42, 0.2)',
               display: 'flex',
               flexDirection: 'column',
-              overflowY: 'auto',
-              overflowX: 'hidden',
+              overflow: 'hidden',
               boxSizing: 'border-box'
             }}
           >
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, paddingBottom: 12, borderBottom: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 24px', borderBottom: '1px solid #E2E8F0', flexShrink: 0 }}>
               <div>
                 <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0 }}>
                   {editingProductId ? 'EDIT PRODUCT MASTER' : 'CREATE CENTRAL PRODUCT'}
@@ -3148,15 +3364,16 @@ export const ProductCatalogModule: React.FC = () => {
               </button>
             </div>
 
+            <form onSubmit={handleSaveProductMaster} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+              <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, boxSizing: 'border-box', minWidth: 0 }}>
+
             {/* Inline Error Alert */}
             {modalFormError && (
-              <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#B91C1C', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '10px 14px', color: '#B91C1C', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <AlertTriangle size={16} style={{ flexShrink: 0 }} />
                 <span>{modalFormError}</span>
               </div>
             )}
-
-            <form onSubmit={handleSaveProductMaster} style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }}>
 
               {/* ────────────────────────────────────────────────────────── */}
               {/* ────────────────────────────────────────────────────────── */}
@@ -3379,7 +3596,7 @@ export const ProductCatalogModule: React.FC = () => {
                       title={availableToSelectModalAttributes.length === 0 ? 'All active attributes have already been assigned' : 'Add dynamic specification attribute'}
                     >
                       <Plus size={12} />
-                      <span>+ Select Attribute</span>
+                      <span>Select Attribute</span>
                     </button>
                   </div>
                 </div>
@@ -3867,10 +4084,71 @@ export const ProductCatalogModule: React.FC = () => {
                     </select>
                   </div>
                 </div>
+
+                {/* Generic Medicine Classification & Price */}
+                <div style={{
+                  marginTop: 4,
+                  padding: '12px 14px',
+                  borderRadius: 8,
+                  border: formData.isGenericMedicine ? '1.5px solid #0F766E' : '1px solid #E2E8F0',
+                  background: formData.isGenericMedicine ? '#F0FDFA' : '#FFFFFF',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 14
+                }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
+                    <input
+                      type="checkbox"
+                      checked={formData.isGenericMedicine}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setFormData(prev => ({
+                          ...prev,
+                          isGenericMedicine: checked,
+                          genericMedicinePrice: checked ? prev.genericMedicinePrice : ''
+                        }));
+                      }}
+                      style={{ width: 17, height: 17, accentColor: '#0F766E', cursor: 'pointer' }}
+                    />
+                    <span>Generic Medicine</span>
+                  </label>
+
+                  {formData.isGenericMedicine && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px', maxWidth: 280 }}>
+                      <label style={{ fontSize: 11.5, fontWeight: 700, color: '#0F766E', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                        Generic Price (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        required
+                        placeholder="Enter price"
+                        value={formData.genericMedicinePrice}
+                        onChange={e => setFormData(prev => ({ ...prev, genericMedicinePrice: e.target.value }))}
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '8px 10px',
+                          border: '1.5px solid #0F766E',
+                          borderRadius: 6,
+                          fontSize: 13,
+                          fontWeight: 700,
+                          background: '#FFFFFF',
+                          color: '#0F172A',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
               </div>
 
               {/* Modal Footer Actions */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 10, borderTop: '1px solid #E2E8F0' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 24px', borderTop: '1px solid #E2E8F0', flexShrink: 0, background: '#FFFFFF' }}>
                 <button
                   type="button"
                   disabled={isSavingProduct}
@@ -3909,9 +4187,15 @@ export const ProductCatalogModule: React.FC = () => {
 
       {/* ── Dynamic Product Attributes Management Modal (PRODUCT_ATTRIBUTE) ── */}
       {isAttrModalOpen && selectedProduct && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#FFFFFF', borderRadius: 12, width: '100%', maxWidth: 780, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => !isSavingAttrs && setIsAttrModalOpen(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#FFFFFF', borderRadius: 12, width: '100%', maxWidth: 780, maxHeight: '90vh', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}
+          >
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Sparkles size={18} style={{ color: '#0F766E' }} />
@@ -3921,155 +4205,262 @@ export const ProductCatalogModule: React.FC = () => {
                   Product: <strong style={{ color: '#0F766E' }}>{selectedProduct.product_name || selectedProduct.name}</strong>
                 </div>
               </div>
-              <button onClick={() => setIsAttrModalOpen(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}>
+              <button type="button" onClick={() => !isSavingAttrs && setIsAttrModalOpen(false)} style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}>
                 <X size={18} />
               </button>
             </div>
 
             {(() => {
               const ptId = selectedProduct.product_type_id || selectedProduct.productTypeId || resolveCategoryRecord(selectedProduct.category_id || selectedProduct.categoryId)?.product_type_id || 'pt_med';
-              const configuredAttrs = getProductTypeConfiguredAttributes(ptId);
               const ptObj = (productTypes || []).find(p => (p.product_type_id || p.id) === ptId);
               const ptName = ptObj?.product_type_name || ptObj?.name || ptId;
 
               return (
-                <form onSubmit={handleSaveProductAttributes} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12, color: '#0F766E', lineHeight: 1.4 }}>
-                    <strong>Product Type Attributes Architecture:</strong> Attributes applicable to Product Type <strong>{ptName}</strong> configured in Product Type Master are active here. Values are stored in <code>PRODUCT_ATTRIBUTE</code> (referenced to <code>ATTRIBUTE_MASTER</code>).
-                  </div>
+                <form onSubmit={handleSaveProductAttributes} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                  <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 24, display: 'flex', flexDirection: 'column', gap: 16, boxSizing: 'border-box' }}>
+                    {attrModalError && (
+                      <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '10px 14px', color: '#B91C1C', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+                        <span>{attrModalError}</span>
+                      </div>
+                    )}
 
-                  {configuredAttrs.length === 0 ? (
-                    <div style={{
-                      padding: '24px 20px',
-                      background: '#F8FAFC',
-                      border: '1px dashed #CBD5E1',
-                      borderRadius: 8,
-                      textAlign: 'center',
-                      fontSize: 13,
-                      color: '#64748B'
-                    }}>
-                      No attributes configured for Product Type <strong>{ptName}</strong>. You can configure attributes in Product Type Master.
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                      <div style={{ fontSize: 12, color: '#475569' }}>
+                        Product Type: <strong style={{ color: '#0F766E' }}>{ptName}</strong> • <strong>{attrModalAttributesList.length}</strong> attribute(s) assigned
+                      </div>
+                      <button
+                        type="button"
+                        disabled={availableToSelectInAttrModal.length === 0}
+                        onClick={() => setIsSelectingAttrModal(prev => !prev)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '6px 12px',
+                          borderRadius: 6,
+                          background: availableToSelectInAttrModal.length === 0 ? '#E2E8F0' : '#0F766E',
+                          color: availableToSelectInAttrModal.length === 0 ? '#94A3B8' : '#FFFFFF',
+                          border: 'none',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: availableToSelectInAttrModal.length === 0 ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        <Plus size={14} />
+                        <span>Select Attribute</span>
+                      </button>
                     </div>
-                  ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                      {configuredAttrs.map(ca => {
-                        const attr = ca.attribute || ca;
-                        const attrKey = ca.attribute_id || attr.attribute_id;
-                        const attrName = ca.attribute_name || attr.attribute_name;
-                        const isReq = ca.is_required || ca.isRequired;
-                        const dType = ca.data_type || attr.data_type;
-                        const uom = ca.unit_of_measure || attr.unit_of_measure;
-                        const val = attributeDraftValues[attrKey] || '';
-                        const listOpts = (ca.allowed_values && ca.allowed_values.length > 0)
-                          ? ca.allowed_values
-                          : (attr.allowed_values && attr.allowed_values.length > 0)
-                            ? attr.allowed_values
-                            : (attr.allowedValues && attr.allowedValues.length > 0)
-                              ? attr.allowedValues
-                              : LIST_ATTRIBUTE_OPTIONS[ca.attribute_code || attr.attribute_code];
 
-                        return (
-                          <div key={attrKey}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                              <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
-                                {attrName}
-                                {uom ? ` (${uom})` : ''}
-                                {isReq && <span style={{ color: '#DC2626' }}> *</span>}
-                              </label>
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#E2E8F0', color: '#475569' }}>
-                                {dType}
-                              </span>
-                            </div>
+                    {isSelectingAttrModal && availableToSelectInAttrModal.length > 0 && (
+                      <div style={{
+                        background: '#F0FDFA',
+                        border: '1px solid #99F6E4',
+                        borderRadius: 8,
+                        padding: '10px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        width: '100%',
+                        boxSizing: 'border-box'
+                      }}>
+                        <select
+                          autoFocus
+                          defaultValue=""
+                          onChange={e => {
+                            const pickedId = e.target.value;
+                            if (pickedId) {
+                              setAttrModalExtraIds(prev => prev.includes(pickedId) ? prev : [...prev, pickedId]);
+                              setAttributeDraftValues(prev => ({ ...prev, [pickedId]: prev[pickedId] ?? '' }));
+                              setIsSelectingAttrModal(false);
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            padding: '8px 10px',
+                            borderRadius: 6,
+                            border: '1.5px solid #0F766E',
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            background: '#FFFFFF',
+                            color: '#0F172A',
+                            outline: 'none'
+                          }}
+                        >
+                          <option value="" disabled>-- Choose Attribute from Attribute Master --</option>
+                          {availableToSelectInAttrModal.map(m => {
+                            const mId = m.attribute_id || m.id || '';
+                            const mName = m.attribute_name || m.name || m.attribute_code || m.code || mId;
+                            const mType = (m.data_type || m.dataType || 'TEXT').toUpperCase();
+                            const mUom = m.unit_of_measure || m.unitOfMeasure;
+                            return (
+                              <option key={mId} value={mId}>
+                                {mName} ({mType}{mUom ? ` - ${mUom}` : ''})
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setIsSelectingAttrModal(false)}
+                          style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#64748B', fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
 
-                            {ca.remark && (
-                              <div style={{ fontSize: 11, color: '#0F766E', fontStyle: 'italic', marginBottom: 2 }}>
-                                Note: {ca.remark}
+                    {attrModalAttributesList.length === 0 ? (
+                      <div style={{
+                        padding: '24px 20px',
+                        background: '#F8FAFC',
+                        border: '1px dashed #CBD5E1',
+                        borderRadius: 8,
+                        textAlign: 'center',
+                        fontSize: 13,
+                        color: '#64748B'
+                      }}>
+                        No attributes assigned yet. Click <strong>Select Attribute</strong> above to assign attributes from Attribute Master.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14, width: '100%', boxSizing: 'border-box' }}>
+                        {attrModalAttributesList.map(ca => {
+                          const attr = ca.attribute || ca;
+                          const attrKey = ca.attribute_id;
+                          const attrName = ca.attribute_name || attr.attribute_name || attr.name || ca.attribute_code || attrKey;
+                          const isReq = !!ca.is_required;
+                          const dType = (ca.data_type || attr.data_type || 'TEXT').toUpperCase();
+                          const uom = ca.unit_of_measure || attr.unit_of_measure || attr.unitOfMeasure;
+                          const val = attributeDraftValues[attrKey] ?? '';
+                          const listOpts = (ca.allowed_values && ca.allowed_values.length > 0)
+                            ? ca.allowed_values
+                            : (attr.allowed_values && attr.allowed_values.length > 0)
+                              ? attr.allowed_values
+                              : (attr.allowedValues && attr.allowedValues.length > 0)
+                                ? attr.allowedValues
+                                : LIST_ATTRIBUTE_OPTIONS[ca.attribute_code || attr.attribute_code || ''];
+
+                          return (
+                            <div key={attrKey} style={{ minWidth: 0, boxSizing: 'border-box' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={attrName}>
+                                  {attrName}
+                                  {uom ? ` (${uom})` : ''}
+                                  {isReq && <span style={{ color: '#DC2626' }}> *</span>}
+                                </label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#E2E8F0', color: '#475569' }}>
+                                    {dType}
+                                  </span>
+                                  {ca.is_dynamically_added && (
+                                    <button
+                                      type="button"
+                                      title={`Remove ${attrName}`}
+                                      onClick={() => {
+                                        setAttrModalExtraIds(prev => prev.filter(id => id !== attrKey));
+                                        setAttributeDraftValues(prev => ({ ...prev, [attrKey]: '' }));
+                                      }}
+                                      style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: '#94A3B8', display: 'inline-flex', alignItems: 'center' }}
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                            )}
 
-                            {dType === 'LIST' ? (
-                              <div style={{ display: 'flex', gap: 6 }}>
+                              {ca.remark && (
+                                <div style={{ fontSize: 11, color: '#0F766E', fontStyle: 'italic', marginBottom: 2 }}>
+                                  Note: {ca.remark}
+                                </div>
+                              )}
+
+                              {dType === 'LIST' ? (
+                                <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+                                  <input
+                                    type="text"
+                                    list={`modal_attr_list_${attrKey}`}
+                                    placeholder={`Select or type ${attrName.toLowerCase()}...`}
+                                    value={val}
+                                    onChange={e => setAttributeDraftValues(prev => ({ ...prev, [attrKey]: e.target.value }))}
+                                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
+                                  />
+                                  {listOpts && listOpts.length > 0 && (
+                                    <datalist id={`modal_attr_list_${attrKey}`}>
+                                      {listOpts.map((opt: any) => (
+                                        <option key={typeof opt === 'string' ? opt : opt.value || opt.label} value={typeof opt === 'string' ? opt : opt.value || opt.label} />
+                                      ))}
+                                    </datalist>
+                                  )}
+                                </div>
+                              ) : dType === 'BOOLEAN' ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38 }}>
+                                  <input
+                                    type="checkbox"
+                                    id={`modal_attr_check_${attrKey}`}
+                                    checked={val === 'true'}
+                                    onChange={e => setAttributeDraftValues(prev => ({ ...prev, [attrKey]: e.target.checked ? 'true' : 'false' }))}
+                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                                  />
+                                  <label htmlFor={`modal_attr_check_${attrKey}`} style={{ fontSize: 13, color: '#334155', cursor: 'pointer', fontWeight: 600 }}>
+                                    {val === 'true' ? 'Enabled (True)' : 'Disabled (False)'}
+                                  </label>
+                                </div>
+                              ) : dType === 'NUMBER' ? (
+                                <input
+                                  type="number"
+                                  placeholder="e.g. 24"
+                                  value={val}
+                                  onChange={e => setAttributeDraftValues(prev => ({ ...prev, [attrKey]: e.target.value }))}
+                                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
+                                />
+                              ) : dType === 'DECIMAL' ? (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="e.g. 15.5"
+                                  value={val}
+                                  onChange={e => setAttributeDraftValues(prev => ({ ...prev, [attrKey]: e.target.value }))}
+                                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
+                                />
+                              ) : dType === 'DATE' ? (
+                                <input
+                                  type="date"
+                                  value={val}
+                                  onChange={e => setAttributeDraftValues(prev => ({ ...prev, [attrKey]: e.target.value }))}
+                                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
+                                />
+                              ) : (
                                 <input
                                   type="text"
-                                  list={`modal_attr_list_${attrKey}`}
-                                  placeholder={`Select or type ${attrName.toLowerCase()}...`}
+                                  placeholder={`Enter ${attrName.toLowerCase()}...`}
                                   value={val}
-                                  onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.value })}
-                                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
+                                  onChange={e => setAttributeDraftValues(prev => ({ ...prev, [attrKey]: e.target.value }))}
+                                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
                                 />
-                                {listOpts && (
-                                  <datalist id={`modal_attr_list_${attrKey}`}>
-                                    {listOpts.map(opt => (
-                                      <option key={opt} value={opt} />
-                                    ))}
-                                  </datalist>
-                                )}
-                              </div>
-                            ) : dType === 'BOOLEAN' ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38 }}>
-                                <input
-                                  type="checkbox"
-                                  id={`modal_attr_check_${attrKey}`}
-                                  checked={val === 'true'}
-                                  onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.checked ? 'true' : 'false' })}
-                                  style={{ width: 18, height: 18, cursor: 'pointer' }}
-                                />
-                                <label htmlFor={`modal_attr_check_${attrKey}`} style={{ fontSize: 13, color: '#334155', cursor: 'pointer', fontWeight: 600 }}>
-                                  {val === 'true' ? 'Enabled (True)' : 'Disabled (False)'}
-                                </label>
-                              </div>
-                            ) : dType === 'NUMBER' ? (
-                              <input
-                                type="number"
-                                placeholder="e.g. 24"
-                                value={val}
-                                onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.value })}
-                                style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
-                              />
-                            ) : dType === 'DECIMAL' ? (
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder="e.g. 15.5"
-                                value={val}
-                                onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.value })}
-                                style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
-                              />
-                            ) : dType === 'DATE' ? (
-                              <input
-                                type="date"
-                                value={val}
-                                onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.value })}
-                                style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
-                              />
-                            ) : (
-                              <input
-                                type="text"
-                                placeholder={`Enter ${attrName.toLowerCase()}...`}
-                                value={val}
-                                onChange={e => setAttributeDraftValues({ ...attributeDraftValues, [attrKey]: e.target.value })}
-                                style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, background: '#FFFFFF', outline: 'none' }}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 14, borderTop: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 24px', borderTop: '1px solid #E2E8F0', flexShrink: 0, background: '#FFFFFF' }}>
                     <button
                       type="button"
+                      disabled={isSavingAttrs}
                       onClick={() => setIsAttrModalOpen(false)}
-                      style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                      style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFF', color: '#475569', fontSize: 13, fontWeight: 600, cursor: isSavingAttrs ? 'not-allowed' : 'pointer' }}
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      style={{ padding: '9px 22px', borderRadius: 6, border: 'none', background: '#0F766E', color: '#FFF', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,118,110,0.2)' }}
+                      disabled={isSavingAttrs}
+                      style={{ padding: '9px 22px', borderRadius: 6, border: 'none', background: isSavingAttrs ? '#94A3B8' : '#0F766E', color: '#FFF', fontSize: 13, fontWeight: 700, cursor: isSavingAttrs ? 'not-allowed' : 'pointer', boxShadow: '0 1px 3px rgba(15,118,110,0.2)' }}
                     >
-                      Save Attributes
+                      {isSavingAttrs ? 'Saving...' : 'Save Attributes'}
                     </button>
                   </div>
                 </form>
@@ -4094,25 +4485,47 @@ export const ProductCatalogModule: React.FC = () => {
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
+              setQuickPriceError(null);
               const pId = selectedProduct.product_id || selectedProduct.id;
-              addProductPrice({
-                product_price_id: `pp_${Date.now()}`,
-                product_id: pId,
-                product_manufacturer_id: quickPriceForm.product_manufacturer_id || null,
-                customer_segment_id: quickPriceForm.customer_segment_id,
-                price_type: quickPriceForm.price_type,
-                currency: quickPriceForm.currency,
-                unit_price: Number(quickPriceForm.unit_price),
-                minimum_quantity: Number(quickPriceForm.minimum_quantity),
-                maximum_quantity: quickPriceForm.maximum_quantity ? Number(quickPriceForm.maximum_quantity) : null,
-                effective_from: quickPriceForm.effective_from,
-                effective_to: quickPriceForm.effective_to || null,
-                price_status: quickPriceForm.price_status
-              });
-              setIsQuickPriceOpen(false);
+              if (!pId) {
+                setQuickPriceError('Invalid product selected.');
+                return;
+              }
+              if (Number(quickPriceForm.unit_price) <= 0) {
+                setQuickPriceError('Unit price must be greater than zero.');
+                return;
+              }
+              setIsSavingQuickPrice(true);
+              try {
+                await addProductPrice({
+                  product_price_id: '',
+                  product_id: pId,
+                  product_manufacturer_id: quickPriceForm.product_manufacturer_id || null,
+                  customer_segment_id: quickPriceForm.customer_segment_id || undefined,
+                  price_type: quickPriceForm.price_type,
+                  currency: quickPriceForm.currency,
+                  unit_price: Number(quickPriceForm.unit_price),
+                  minimum_quantity: Number(quickPriceForm.minimum_quantity),
+                  maximum_quantity: quickPriceForm.maximum_quantity ? Number(quickPriceForm.maximum_quantity) : null,
+                  effective_from: quickPriceForm.effective_from || undefined,
+                  effective_to: quickPriceForm.effective_to || null,
+                  price_status: quickPriceForm.price_status
+                } as any);
+                await refreshProductPrices?.();
+                setIsQuickPriceOpen(false);
+              } catch (err: any) {
+                setQuickPriceError(err?.message || 'Failed to save product price to database.');
+              } finally {
+                setIsSavingQuickPrice(false);
+              }
             }} style={{ padding: 20 }}>
+              {quickPriceError && (
+                <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 6, background: '#FEF2F2', border: '1px solid #FECACA', color: '#991B1B', fontSize: 12.5, fontWeight: 600 }}>
+                  {quickPriceError}
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div style={{ gridColumn: 'span 2' }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
@@ -4125,8 +4538,8 @@ export const ProductCatalogModule: React.FC = () => {
                     style={{ width: '100%', padding: '8px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13 }}
                   >
                     {customerSegments.map(s => (
-                      <option key={s.customer_segment_id} value={s.customer_segment_id}>
-                        {s.segment_name}
+                      <option key={s.customer_segment_id || s.id} value={s.customer_segment_id || s.id}>
+                        {s.segment_name || s.name}
                       </option>
                     ))}
                   </select>

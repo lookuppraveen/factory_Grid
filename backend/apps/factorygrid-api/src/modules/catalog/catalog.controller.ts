@@ -91,6 +91,7 @@ export class CatalogController {
   @ApiQuery({ name: 'productTypeId', required: false })
   @ApiQuery({ name: 'lifecycleStatus', required: false })
   @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
+  @ApiQuery({ name: 'genericMedicine', required: false, type: Boolean, description: 'Filter by Generic Medicine flag (true/false)' })
   listProducts(@Query() query: ProductQueryDto) {
     return this.service.listProducts(query);
   }

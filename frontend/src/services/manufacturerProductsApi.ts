@@ -20,6 +20,8 @@ export interface MasterCatalogProduct {
   brand?: string;
   lifecycleStatus?: string;
   isSellable?: boolean;
+  isGenericMedicine?: boolean;
+  genericMedicinePrice?: number | null;
 }
 
 export interface ManufacturerProductMappingItem {
@@ -36,6 +38,8 @@ export interface ManufacturerProductMappingItem {
   effectiveFrom?: string | null;
   effectiveTo?: string | null;
   isPreferred: boolean;
+  isGenericMedicine?: boolean;
+  genericMedicinePrice?: number | null;
   packagingDetails?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -69,7 +73,21 @@ export interface ManufacturerProductsListResponse {
 }
 
 export interface CreateMappingPayload {
-  productId: string;
+  productId?: string;
+  name?: string;
+  productCode?: string;
+  category?: string;
+  subCategory?: string;
+  subSubCategory?: string;
+  genericName?: string;
+  saltCombination?: string;
+  strength?: string;
+  dosageForm?: string;
+  packSize?: string;
+  uom?: string;
+  baseUom?: string;
+  description?: string;
+  productTypeId?: string;
   manufacturerProductCode?: string;
   manufacturerPartNumber?: string;
   manufacturerSku?: string;
@@ -79,6 +97,8 @@ export interface CreateMappingPayload {
   effectiveFrom?: string;
   effectiveTo?: string;
   isPreferred?: boolean;
+  isGenericMedicine?: boolean;
+  genericMedicinePrice?: number | null;
   lifecycleStatus?: 'ACTIVE' | 'INACTIVE';
 }
 
@@ -92,6 +112,8 @@ export interface UpdateMappingPayload {
   effectiveFrom?: string;
   effectiveTo?: string;
   isPreferred?: boolean;
+  isGenericMedicine?: boolean;
+  genericMedicinePrice?: number | null;
   lifecycleStatus?: 'ACTIVE' | 'INACTIVE';
 }
 
@@ -101,6 +123,7 @@ export interface ManufacturerProductsQueryParams {
   subCategory?: string;
   subSubCategory?: string;
   status?: string;
+  genericMedicine?: boolean;
   page?: number;
   limit?: number;
 }
@@ -170,6 +193,7 @@ export const manufacturerProductsApi = {
     if (params?.subCategory && params.subCategory !== 'ALL') qs.append('subCategory', params.subCategory);
     if (params?.subSubCategory && params.subSubCategory !== 'ALL') qs.append('subSubCategory', params.subSubCategory);
     if (params?.status && params.status !== 'ALL') qs.append('status', params.status);
+    if (params?.genericMedicine !== undefined) qs.append('genericMedicine', String(params.genericMedicine));
     if (params?.page) qs.append('page', String(params.page));
     if (params?.limit) qs.append('limit', String(params.limit));
 

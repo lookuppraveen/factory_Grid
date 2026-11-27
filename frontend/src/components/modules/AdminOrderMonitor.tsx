@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
+import { isB2bSpecial } from '../../utils/customerClassification';
 import { AdvanceMethod } from '../../types';
 import {
   adminOrderApi,
@@ -403,7 +404,7 @@ export const AdminOrderMonitor: React.FC = () => {
                       <td style={{ padding: '12px 16px', fontWeight: 700, color: '#334155' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span>{ord.customerName}</span>
-                          {ord.customerClassification === 'SPECIAL_PARTY' ? (
+                          {isB2bSpecial(ord.customerClassification) ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 10, fontWeight: 800 }}>
                               <Star size={10} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
                             </span>
@@ -1390,7 +1391,7 @@ export const AdminOrderMonitor: React.FC = () => {
                 </div>
                 <div>
                   <strong>Customer Name:</strong> {activeOrder.customerName} ({activeOrder.customerCode})
-                  {activeOrder.customerClassification === 'SPECIAL_PARTY' ? (
+                  {isB2bSpecial(activeOrder.customerClassification) ? (
                     <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 4, background: '#ECFEFF', color: '#0E7490', border: '1px solid #A5F3FC', fontSize: 10, fontWeight: 800 }}>
                       <Star size={10} fill="#0E7490" color="#0E7490" /> SPECIAL PARTY
                     </span>

@@ -121,7 +121,7 @@ export class ComplianceController {
   }
 
   @Post(':id/classification')
-  @ApiOperation({ summary: 'Update customer classification (REGULAR or SPECIAL_PARTY)' })
+  @ApiOperation({ summary: 'Update customer classification (RETAIL, B2B, or B2B_SPECIAL)' })
   @ApiParam({ name: 'id', description: 'Request Code or database ID' })
   updateClassification(
     @Param('id') id: string,
@@ -130,7 +130,7 @@ export class ComplianceController {
   ) {
     return this.complianceService.updateClassification(
       id,
-      dto?.classification || 'REGULAR',
+      dto?.classification,
       dto?.remarks,
       user?.username || 'Platform Admin',
     );

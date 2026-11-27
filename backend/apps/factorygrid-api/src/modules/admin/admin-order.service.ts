@@ -76,7 +76,7 @@ export class AdminOrderService {
       buyerId: mo.buyerId ? mo.buyerId.toString() : null,
       customerName: mo.customerName,
       customerCode: mo.customerCode || 'CUST',
-      customerClassification: mo.customerClassification || 'REGULAR',
+      customerClassification: mo.customerClassification === 'SPECIAL_PARTY' ? 'B2B_SPECIAL' : (mo.customerClassification === 'REGULAR' || !mo.customerClassification ? 'B2B' : mo.customerClassification),
       totalAmount,
       totalQuantity: mo.totalQuantity,
       status: mo.status,

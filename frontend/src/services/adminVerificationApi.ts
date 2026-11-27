@@ -190,7 +190,7 @@ export const adminVerificationApi = {
 
   async approveCustomerVerification(
     idOrCode: string,
-    options?: { customerCode?: string; customerClassification?: 'REGULAR' | 'SPECIAL_PARTY'; remarks?: string } | string
+    options?: { customerCode?: string; customerClassification?: 'RETAIL' | 'B2B' | 'B2B_SPECIAL'; remarks?: string } | string
   ): Promise<CustomerVerificationRequest> {
     const payload = typeof options === 'string'
       ? { customerCode: options }
@@ -232,7 +232,7 @@ export const adminVerificationApi = {
 
   async updateCustomerClassification(
     idOrCode: string,
-    classification: 'REGULAR' | 'SPECIAL_PARTY',
+    classification: 'RETAIL' | 'B2B' | 'B2B_SPECIAL',
     remarks?: string
   ): Promise<CustomerVerificationRequest> {
     return request<CustomerVerificationRequest>(

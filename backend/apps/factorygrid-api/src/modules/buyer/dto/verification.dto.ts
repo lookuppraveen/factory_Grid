@@ -68,10 +68,11 @@ export class ApproveVerificationDto {
   @IsString()
   customerCode?: string;
 
-  @ApiPropertyOptional({ enum: ['REGULAR', 'SPECIAL_PARTY'], example: 'REGULAR', description: 'Buyer classification' })
+  @ApiPropertyOptional({ enum: ['RETAIL', 'B2B', 'B2B_SPECIAL'], example: 'B2B', description: 'Customer classification (RETAIL, B2B, B2B_SPECIAL)' })
   @IsOptional()
   @IsString()
-  customerClassification?: 'REGULAR' | 'SPECIAL_PARTY';
+  @IsIn(['RETAIL', 'B2B', 'B2B_SPECIAL'])
+  customerClassification?: 'RETAIL' | 'B2B' | 'B2B_SPECIAL';
 
   @ApiPropertyOptional({ example: 'Verified compliance checks and approved for special terms', description: 'Approval notes / remarks' })
   @IsOptional()
@@ -80,9 +81,10 @@ export class ApproveVerificationDto {
 }
 
 export class UpdateClassificationDto {
-  @ApiProperty({ enum: ['REGULAR', 'SPECIAL_PARTY'], example: 'SPECIAL_PARTY', description: 'Buyer classification' })
+  @ApiProperty({ enum: ['RETAIL', 'B2B', 'B2B_SPECIAL'], example: 'B2B_SPECIAL', description: 'Customer classification (RETAIL, B2B, B2B_SPECIAL)' })
   @IsString()
-  classification!: 'REGULAR' | 'SPECIAL_PARTY';
+  @IsIn(['RETAIL', 'B2B', 'B2B_SPECIAL'])
+  classification!: 'RETAIL' | 'B2B' | 'B2B_SPECIAL';
 
   @ApiPropertyOptional({ example: 'Approved as special buyer after turnover audit', description: 'Audit notes / remarks' })
   @IsOptional()

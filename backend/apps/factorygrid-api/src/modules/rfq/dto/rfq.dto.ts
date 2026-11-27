@@ -141,7 +141,7 @@ export class CreateRfqDto {
   @IsBoolean()
   isGeneric?: boolean;
 
-  @ApiPropertyOptional({ description: 'Customer classification (REGULAR or SPECIAL_PARTY)', default: 'REGULAR' })
+  @ApiPropertyOptional({ description: 'Customer classification (RETAIL, B2B, or B2B_SPECIAL)', default: 'B2B' })
   @IsOptional()
   @IsString()
   customerClassification?: string;

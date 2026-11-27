@@ -682,7 +682,7 @@ export class ManufacturerOrderService {
         id: so.masterOrder.buyerId ? so.masterOrder.buyerId.toString() : '',
         name: so.masterOrder.customerName,
         code: so.masterOrder.customerCode || '',
-        classification: so.masterOrder.customerClassification || 'REGULAR',
+        classification: so.masterOrder.customerClassification === 'SPECIAL_PARTY' ? 'B2B_SPECIAL' : (so.masterOrder.customerClassification === 'REGULAR' || !so.masterOrder.customerClassification ? 'B2B' : so.masterOrder.customerClassification),
       },
       customerName: so.masterOrder.customerName,
       orderDate: so.masterOrder.orderDate

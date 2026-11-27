@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import { AuthUser } from '@factorygrid/auth';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  isB2bSpecialClassification,
+  normalizeCustomerClassification,
+} from '../../common/customer-classification';
 import { CreateRfqDto, UpdateRfqDto } from './dto/rfq.dto';
 import {
   AdminRfqQueryDto,
@@ -65,12 +69,15 @@ export class RfqService {
       throw new ForbiddenException('Your customer verification was rejected by compliance. Please review requested requirements before creating RFQs.');
     }
 
+    const rawClassification = normalizeCustomerClassification(verification?.customerClassification);
     const isSpecialApproved =
       dbUser.accountStatus === 'ACTIVE' &&
       (verification?.verificationStatus === 'Active' || verification?.verificationStatus === 'Approved') &&
-      verification?.customerClassification === 'SPECIAL_PARTY';
+      isB2bSpecialClassification(rawClassification);
 
-    const customerClassification = isSpecialApproved ? 'SPECIAL_PARTY' : 'REGULAR';
+    const customerClassification = isSpecialApproved
+      ? 'B2B_SPECIAL'
+      : (rawClassification === 'RETAIL' ? 'RETAIL' : 'B2B');
     const buyerName = dbUser.fullName || user.username;
     const companyName = dbUser.companyName || reg?.companyName || 'My Organization';
     const customerCode = verification?.customerCode || dbUser.companyCode || reg?.registrationCode || 'CUS-PENDING';
@@ -136,11 +143,11 @@ export class RfqService {
     const hasSpecialPricing = dto.lines.some(
       (l: any) => l.buyerProvidedPrice !== undefined && l.buyerProvidedPrice !== null && Number(l.buyerProvidedPrice) > 0,
     );
-    const isRequestingSpecialParty = dto.customerClassification === 'SPECIAL_PARTY' || hasSpecialPricing;
+    const isRequestingSpecialParty = isB2bSpecialClassification(dto.customerClassification) || hasSpecialPricing;
 
     if (isRequestingSpecialParty && !buyer.isSpecialApproved) {
       throw new ForbiddenException(
-        'Your account is approved as a Standard Regular Buyer. Special Buyer pre-agreed pricing workflow is restricted to verified and approved Special Buyers.',
+        'Your account is not classified as B2B Special. Pre-agreed special pricing workflow is restricted to verified and approved B2B Special customers.',
       );
     }
 
@@ -157,9 +164,9 @@ export class RfqService {
       return isNaN(parsed.getTime()) ? null : parsed;
     };
 
-    const effectiveClassification = (buyer.isSpecialApproved && dto.customerClassification === 'SPECIAL_PARTY')
-      ? 'SPECIAL_PARTY'
-      : 'REGULAR';
+    const effectiveClassification = (buyer.isSpecialApproved && isB2bSpecialClassification(dto.customerClassification))
+      ? 'B2B_SPECIAL'
+      : (buyer.customerClassification === 'RETAIL' ? 'RETAIL' : 'B2B');
 
     const rfq = await this.prisma.$transaction(async (tx) => {
       const createdRfq = await tx.rfq.create({
@@ -189,6 +196,7 @@ export class RfqService {
         const line = dto.lines[i];
         let resolvedProductId: string | null = null;
         let resolvedProductCode: string | null = line.productCode?.trim() || null;
+        let resolvedProductName: string = line.productName.trim();
 
         if (line.productId?.trim() && line.productId !== 'other') {
           const prod = await tx.catalogProduct.findFirst({
@@ -202,6 +210,7 @@ export class RfqService {
           if (prod) {
             resolvedProductId = prod.id;
             resolvedProductCode = prod.productCode;
+            resolvedProductName = prod.name;
           }
         }
 
@@ -210,7 +219,7 @@ export class RfqService {
             rfqId: createdRfq.id,
             lineItemNumber: i + 1,
             productId: resolvedProductId,
-            productName: line.productName.trim(),
+            productName: resolvedProductName,
             productCode: resolvedProductCode,
             category: line.category?.trim() || null,
             subCategory: line.subCategory?.trim() || null,
@@ -272,11 +281,11 @@ export class RfqService {
     const hasSpecialPricing = dto.lines?.some(
       (l: any) => l.buyerProvidedPrice !== undefined && l.buyerProvidedPrice !== null && Number(l.buyerProvidedPrice) > 0,
     );
-    const isUpdatingToSpecial = dto.customerClassification === 'SPECIAL_PARTY' || hasSpecialPricing;
+    const isUpdatingToSpecial = isB2bSpecialClassification(dto.customerClassification) || hasSpecialPricing;
 
     if (isUpdatingToSpecial && !buyer.isSpecialApproved) {
       throw new ForbiddenException(
-        'Your account is approved as a Standard Regular Buyer. Special Buyer pre-agreed pricing workflow is restricted to verified and approved Special Buyers.',
+        'Your account is not classified as B2B Special. Pre-agreed special pricing workflow is restricted to verified and approved B2B Special customers.',
       );
     }
 
@@ -296,9 +305,9 @@ export class RfqService {
       if (dto.creditRequired !== undefined) updateData.creditRequired = dto.creditRequired;
       if (dto.creditTerms !== undefined) updateData.creditTerms = dto.creditTerms;
       if (dto.customerClassification !== undefined) {
-        updateData.customerClassification = (buyer.isSpecialApproved && dto.customerClassification === 'SPECIAL_PARTY')
-          ? 'SPECIAL_PARTY'
-          : 'REGULAR';
+        updateData.customerClassification = (buyer.isSpecialApproved && isB2bSpecialClassification(dto.customerClassification))
+          ? 'B2B_SPECIAL'
+          : (buyer.customerClassification === 'RETAIL' ? 'RETAIL' : 'B2B');
       }
 
       if (dto.lines && dto.lines.length > 0) {
@@ -382,7 +391,7 @@ export class RfqService {
 
     const buyer = await this.resolveBuyer(userId, user);
 
-    if (existing.customerClassification === 'SPECIAL_PARTY' && !buyer.isSpecialApproved) {
+    if (isB2bSpecialClassification(existing.customerClassification) && !buyer.isSpecialApproved) {
       throw new ForbiddenException(
         'Your Special Buyer status is no longer active. You cannot submit this Special Party RFQ. Please contact platform compliance.',
       );
@@ -1574,7 +1583,7 @@ export class RfqService {
       customerId: rfq.userId ? rfq.userId.toString() : '1',
       customerName: rfq.companyName || rfq.buyerName || 'Direct Buyer',
       customerCode: rfq.customerCode || '',
-      customerClassification: rfq.customerClassification || 'REGULAR',
+      customerClassification: normalizeCustomerClassification(rfq.customerClassification),
       createdDate: rfq.rfqDate ? rfq.rfqDate.toISOString().split('T')[0] : (rfq.createdAt ? rfq.createdAt.toISOString().split('T')[0] : ''),
       createdAt: rfq.createdAt ? rfq.createdAt.toISOString() : '',
       targetDeliveryDate: rfq.requiredDate

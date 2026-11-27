@@ -47,6 +47,11 @@ export const ProductPriceModule: React.FC = () => {
   // Single active row dropdown state for standardized Actions menu
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
+  // Always hydrate latest persisted prices from PostgreSQL on mount
+  useEffect(() => {
+    refreshProductPrices?.();
+  }, []);
+
   // Outside click listener for action menu
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {

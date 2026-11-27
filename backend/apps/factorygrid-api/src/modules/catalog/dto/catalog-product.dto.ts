@@ -1,14 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   IsIn,
   IsObject,
   IsArray,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { PageableQueryDto } from '../../../common/pagination/pageable.dto';
@@ -163,6 +166,19 @@ export class CreateCatalogProductDto {
   @IsBoolean()
   isSellable?: boolean;
 
+  @ApiPropertyOptional({ example: false, description: 'Whether the product is classified as a Generic Medicine' })
+  @IsOptional()
+  @IsBoolean()
+  isGenericMedicine?: boolean;
+
+  @ApiPropertyOptional({ example: 45.5, description: 'Generic Medicine price (required and > 0 when isGenericMedicine is true)' })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01, { message: 'Generic Medicine Price must be greater than 0.' })
+  genericMedicinePrice?: number | null;
+
   @ApiPropertyOptional({ description: 'Category-specific dynamic attribute key-values' })
   @IsOptional()
   @IsObject()
@@ -236,6 +252,17 @@ export class CreateCatalogProductDto {
   @IsOptional()
   @IsBoolean()
   is_sellable?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  is_generic_medicine?: boolean;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01, { message: 'Generic Medicine Price must be greater than 0.' })
+  generic_medicine_price?: number | null;
 }
 
 export class UpdateCatalogProductDto {
@@ -372,6 +399,30 @@ export class UpdateCatalogProductDto {
   @IsBoolean()
   isSellable?: boolean;
 
+  @ApiPropertyOptional({ example: false, description: 'Whether the product is classified as a Generic Medicine' })
+  @IsOptional()
+  @IsBoolean()
+  isGenericMedicine?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  is_generic_medicine?: boolean;
+
+  @ApiPropertyOptional({ example: 45.5, description: 'Generic Medicine price (required and > 0 when isGenericMedicine is true)' })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01, { message: 'Generic Medicine Price must be greater than 0.' })
+  genericMedicinePrice?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01, { message: 'Generic Medicine Price must be greater than 0.' })
+  generic_medicine_price?: number | null;
+
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
@@ -388,6 +439,11 @@ export class ProductQueryDto extends PageableQueryDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by category ID' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by sub-category' })
   @IsOptional()
@@ -425,6 +481,26 @@ export class ProductQueryDto extends PageableQueryDto {
   @IsOptional()
   @IsString()
   dosageForm?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by Generic Medicine flag (true or false)' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return undefined;
+  })
+  @IsBoolean()
+  genericMedicine?: boolean;
+
+  @ApiPropertyOptional({ description: 'Alias for genericMedicine filter' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return undefined;
+  })
+  @IsBoolean()
+  isGenericMedicine?: boolean;
 }
 
 export class ProductBulkUploadItemDto {

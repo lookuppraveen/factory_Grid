@@ -13,7 +13,8 @@ import {
   MasterPageHeader,
   MasterStatsStrip,
   MasterStatusBadge,
-  TableActionGroup
+  TableActionGroup,
+  MasterApiStatusBanner
 } from '../common/MasterComponents';
 
 export const ProductManufacturerMappingModule: React.FC = () => {
@@ -21,6 +22,9 @@ export const ProductManufacturerMappingModule: React.FC = () => {
     products,
     manufacturers,
     mappings,
+    masterLoading,
+    masterErrors,
+    refreshMappings,
     addMapping,
     updateMapping,
     removeMapping,
@@ -384,6 +388,12 @@ export const ProductManufacturerMappingModule: React.FC = () => {
       />
 
       {/* ── Compact Statistics Strip ── */}
+      <MasterApiStatusBanner
+        loading={masterLoading.mappings && mappings.length === 0}
+        error={masterErrors.mappings}
+        entityLabel="Product Manufacturer Mappings"
+        onRetry={refreshMappings}
+      />
       <MasterStatsStrip
         stats={[
           { label: 'TOTAL MAPPINGS', value: stats.total },

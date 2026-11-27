@@ -52,6 +52,7 @@ export class ProductsController {
   @ApiQuery({ name: 'lifecycleStatus', required: false, description: 'Filter by lifecycle status (ACTIVE, DISCONTINUED, END_OF_LIFE, ALL)' })
   @ApiQuery({ name: 'buyerView', required: false, type: Boolean, description: 'Default buyer view (returns only ACTIVE products)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'genericMedicine', required: false, type: Boolean, description: 'Filter by Generic Medicine flag (true/false)' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   listProducts(@Query() query: ProductQueryDto) {
     return this.service.listProducts(query);
