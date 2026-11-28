@@ -34,6 +34,11 @@ export const AttributeMasterModule: React.FC = () => {
     setActiveTab
   } = useApp();
 
+  // Always fetch fresh Attributes from PostgreSQL when this page mounts
+  useEffect(() => {
+    refreshAttributeMasters();
+  }, [refreshAttributeMasters]);
+
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDataType, setSelectedDataType] = useState<string>('ALL');

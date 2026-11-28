@@ -177,11 +177,10 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
         fallbackProducts.find(p => p.id === selectedProductId || (p as any).productCode === selectedProductId);
       if (found) {
         const pName = found.name || (found as any).productName || (found as any).product_name || selectedProductName;
-        const pCode = found.code || (found as any).productCode || (found as any).product_code || selectedProductCode;
-        return pCode ? `${pName} (${pCode})` : pName;
+        return pName;
       }
       if (selectedProductName) {
-        return selectedProductCode ? `${selectedProductName} (${selectedProductCode})` : selectedProductName;
+        return selectedProductName;
       }
     }
     return placeholder;
@@ -238,7 +237,7 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
             <input
               type="text"
               autoFocus
-              placeholder="Search product by name, code (e.g. PRD001001, Amox, Tablet)..."
+              placeholder="Search product by name..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               onClick={e => e.stopPropagation()}
@@ -331,19 +330,14 @@ const SearchableProductSelect: React.FC<SearchableProductSelectProps> = ({
                         </div>
                       </div>
 
-                      {/* Secondary Line: Product Code + Brand */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
-                        {pCode && (
-                          <span style={{ fontFamily: 'monospace', fontSize: 10.5, fontWeight: 700, color: '#0F766E', background: '#CCFBF1', padding: '1px 6px', borderRadius: 4 }}>
-                            {pCode}
-                          </span>
-                        )}
-                        {pBrand && (
+                      {/* Secondary Line: Brand (if available) */}
+                      {pBrand && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 11, color: '#475569', fontWeight: 600 }}>
                             Brand: {pBrand}
                           </span>
-                        )}
-                      </div>
+                        </div>
+                      )}
 
                       {/* Tertiary Line: Category Hierarchy + Pack Info */}
                       {categoryPath && (
@@ -720,13 +714,13 @@ export const RFQModule: React.FC = () => {
     }
   }, [showCreateDrawer]);
 
-  // Auto-Generated RFQ Number display
+  // Backend-persisted RFQ Number display (never show placeholder "Auto-assigned" text)
   const autoRfqNumber = useMemo(() => {
     if (isEditingDraftId) {
       const existing = [...dbRfqs, ...rfqs].find(r => r.id === isEditingDraftId);
-      if (existing) return existing.rfqNumber;
+      if (existing?.rfqNumber) return existing.rfqNumber;
     }
-    return 'Auto-assigned on Save/Submit';
+    return '';
   }, [dbRfqs, rfqs, isEditingDraftId]);
 
   // Combined RFQs (PostgreSQL database RFQs prioritized)
@@ -1046,6 +1040,29 @@ export const RFQModule: React.FC = () => {
       const pCode = (product as any).productCode || product.code || (product as any).product_code || '';
       const pBrand = (product as any).brandName || (product as any).brand || (product.brandNames && product.brandNames[0]) || '';
       const genericPrice = product.genericMedicinePrice ?? product.generic_medicine_price ?? null;
+      const rawAttrs = Array.isArray((product as any).productAttributes) ? (product as any).productAttributes : [];
+      const strengthAttr = rawAttrs.find((pa: any) =>
+        String(pa?.attributeCode || pa?.attribute_code || '').toUpperCase() === 'STRENGTH' ||
+        String(pa?.attributeName || pa?.attribute_name || '').toLowerCase() === 'strength'
+      );
+      const resolvedStrength =
+        strengthAttr?.attributeValue ||
+        strengthAttr?.attribute_value ||
+        (product as any).strength ||
+        (product.attributes as any)?.strength ||
+        (product.attributes as any)?.STRENGTH ||
+        '';
+      const resolvedUom =
+        (product as any).baseUom ||
+        (product as any).base_uom ||
+        (product as any).packUom ||
+        (product as any).pack_uom ||
+        product.uom ||
+        '';
+      const resolvedComposition =
+        (product as any).composition ||
+        product.genericName ||
+        '';
       return {
         ...l,
         productId: product.id,
@@ -1053,14 +1070,14 @@ export const RFQModule: React.FC = () => {
         productName: pName,
         dosageForm: product.dosageForm || (product as any).dosage_form || '',
         packSize: product.packSize || (product as any).pack_size || '',
-        uom: (product as any).packUom || (product as any).baseUom || product.uom || 'Unit',
+        uom: resolvedUom,
         category: product.category || l.category,
         subCategory: product.subCategory || (product as any).sub_category || l.subCategory,
         subSubCategory: product.subSubCategory || (product as any).sub_sub_category || l.subSubCategory,
         productTypeId: product.productTypeId || (product as any).product_type_id || l.productTypeId,
         brand: pBrand,
-        molecule: product.genericName || pName,
-        strength: (product as any).strength || (product.attributes as any)?.strength || '',
+        molecule: resolvedComposition,
+        strength: resolvedStrength,
         genericMedicinePrice: genericPrice != null ? Number(genericPrice) : null,
         isOther: false,
         customProductName: '',
@@ -1303,9 +1320,9 @@ export const RFQModule: React.FC = () => {
           subCategory: line.subCategory || undefined,
           subSubCategory: line.subSubCategory || undefined,
           productType: line.productType || 'BRANDED',
-          dosageForm: line.dosageForm || (line.subCategory || 'Tablet'),
-          packSize: line.packSize || '10 x 10 Strip',
-          uom: line.uom || 'Unit',
+          dosageForm: line.dosageForm || undefined,
+          packSize: line.packSize || undefined,
+          uom: line.uom || undefined,
           quantity: Number(line.quantity) || 1,
           targetPrice: line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : undefined,
           buyerProvidedPrice: isSpecialPartyBuyer && line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : undefined,
@@ -1389,9 +1406,9 @@ export const RFQModule: React.FC = () => {
           subCategory: line.subCategory || undefined,
           subSubCategory: line.subSubCategory || undefined,
           productType: line.productType || 'BRANDED',
-          dosageForm: line.dosageForm || (line.subCategory || 'Tablet'),
-          packSize: line.packSize || '10 x 10 Strip',
-          uom: line.uom || 'Unit',
+          dosageForm: line.dosageForm || undefined,
+          packSize: line.packSize || undefined,
+          uom: line.uom || undefined,
           quantity: Number(line.quantity),
           targetPrice: line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : undefined,
           buyerProvidedPrice: isSpecialPartyBuyer && line.buyerProvidedPrice ? Number(line.buyerProvidedPrice) : undefined,
@@ -1410,7 +1427,10 @@ export const RFQModule: React.FC = () => {
         resultRfq = await rfqApi.createAndSubmit(payload);
       }
 
-      const assignedRfqNumber = resultRfq.rfqNumber || `RFQ-2026-${Date.now()}`;
+      const assignedRfqNumber = resultRfq.rfqNumber;
+      if (!assignedRfqNumber) {
+        throw new Error('Backend did not return a persisted RFQ number.');
+      }
       addAuditLog('RFQ Center', `Submitted RFQ ${assignedRfqNumber} (Status: ${resultRfq.status || 'Submitted'})`);
       
       // Perform manufacturer matching against database for preview display
@@ -2285,7 +2305,9 @@ export const RFQModule: React.FC = () => {
             <div style={{ padding: '16px 24px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>{autoRfqNumber}</span>
+                  {autoRfqNumber && (
+                    <span style={{ fontSize: 12, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>{autoRfqNumber}</span>
+                  )}
                   <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#EFF6FF', color: '#1D4ED8' }}>Step {rfqWizardStep} of 3</span>
                 </div>
                 <h2 style={{ fontSize: 19, fontWeight: 800, color: '#0F172A', margin: '2px 0 0 0' }}>
@@ -2364,45 +2386,43 @@ export const RFQModule: React.FC = () => {
                       <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
                         RFQ Number
                       </label>
-                      <input
-                        type="text"
-                        disabled
-                        value={isEditingDraftId ? autoRfqNumber : "Auto-assigned on Save/Submit"}
-                        style={{ width: '100%', padding: '8px 12px', background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F766E', fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace' }}
-                      />
+                      <div
+                        style={{ width: '100%', padding: '8px 12px', background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: 6, color: autoRfqNumber ? '#0F766E' : '#94A3B8', fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace', minHeight: 36, display: 'flex', alignItems: 'center', boxSizing: 'border-box' }}
+                      >
+                        {autoRfqNumber || '—'}
+                      </div>
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
-                        Buyer Name & ID
+                        Buyer Name &amp; ID
                       </label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={buyerName ? `${buyerName} (${realBuyerProfile?.userCode || (realBuyerProfile?.userId ? `USR-${realBuyerProfile.userId}` : 'BUYER')})` : 'Authenticated Buyer'}
-                        style={{ width: '100%', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 12.5, fontWeight: 600, cursor: 'default' }}
-                      />
+                      <div
+                        style={{ width: '100%', padding: '8px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, color: '#0F172A', fontSize: 12.5, fontWeight: 600, minHeight: 36, display: 'flex', alignItems: 'center', boxSizing: 'border-box', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={buyerName ? `${buyerName} (${realBuyerProfile?.userCode || (realBuyerProfile?.userId ? `USR-${realBuyerProfile.userId}` : 'BUYER')})` : 'Authenticated Buyer'}
+                      >
+                        {buyerName ? `${buyerName} (${realBuyerProfile?.userCode || (realBuyerProfile?.userId ? `USR-${realBuyerProfile.userId}` : 'BUYER')})` : 'Authenticated Buyer'}
+                      </div>
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
                         Company / Organization
                       </label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={customerName || 'Verified Organization'}
-                        style={{ width: '100%', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13, fontWeight: 600, cursor: 'default' }}
-                      />
+                      <div
+                        style={{ width: '100%', padding: '8px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, color: '#0F172A', fontSize: 13, fontWeight: 600, minHeight: 36, display: 'flex', alignItems: 'center', boxSizing: 'border-box', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={customerName || 'Verified Organization'}
+                      >
+                        {customerName || 'Verified Organization'}
+                      </div>
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
                         Customer Code
                       </label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={customerCode || (realBuyerProfile?.customerCode || (realBuyerProfile?.userId ? `CUS-${realBuyerProfile.userId}` : 'CUS-VERIFIED'))}
-                        style={{ width: '100%', padding: '8px 10px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F766E', fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace', cursor: 'default' }}
-                      />
+                      <div
+                        style={{ width: '100%', padding: '8px 10px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, color: '#0F766E', fontSize: 12.5, fontWeight: 800, fontFamily: 'monospace', minHeight: 36, display: 'flex', alignItems: 'center', boxSizing: 'border-box' }}
+                      >
+                        {customerCode || (realBuyerProfile?.customerCode || (realBuyerProfile?.userId ? `CUS-${realBuyerProfile.userId}` : '—'))}
+                      </div>
                     </div>
                   </div>
 
@@ -2717,11 +2737,6 @@ export const RFQModule: React.FC = () => {
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                       <strong style={{ fontSize: 13.5, color: '#0F172A' }}>{line.productName}</strong>
-                                      {line.productCode && (
-                                        <span style={{ fontSize: 10.5, fontWeight: 800, color: '#0F766E', background: '#CCFBF1', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>
-                                          {line.productCode}
-                                        </span>
-                                      )}
                                       {line.genericMedicinePrice != null && (
                                         <span style={{ fontSize: 11.5, fontWeight: 800, color: '#166534', background: '#DCFCE7', padding: '2px 8px', borderRadius: 4, border: '1px solid #86EFAC' }}>
                                           Generic Price: ₹{Number(line.genericMedicinePrice).toFixed(2)}
@@ -2736,45 +2751,63 @@ export const RFQModule: React.FC = () => {
                               )}
                             </div>
 
-                            {/* 3-Column Specifications Grid: Strength, Dosage Form, Pack Size */}
+                            {/* 3-Column Specifications Grid: Read-only when linked to Product Master; editable only for custom molecule */}
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 10 }}>
                               <div>
                                 <label style={{ fontSize: 10.5, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
-                                  Strength / Potency *
+                                  Strength / Potency{(!line.productId || line.productId === 'other') ? ' *' : ''}
                                 </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. 500mg, 250mg/5ml"
-                                  value={line.strength || ''}
-                                  onChange={e => handleRowChange(idx, 'strength', e.target.value)}
-                                  style={{ width: '100%', padding: '7px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
-                                />
+                                {line.productId && line.productId !== 'other' ? (
+                                  <div style={{ width: '100%', padding: '7px 10px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12.5, color: '#0F172A', fontWeight: 600, minHeight: 34, display: 'flex', alignItems: 'center', boxSizing: 'border-box' }}>
+                                    {line.strength || '—'}
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. 500mg, 250mg/5ml"
+                                    value={line.strength || ''}
+                                    onChange={e => handleRowChange(idx, 'strength', e.target.value)}
+                                    style={{ width: '100%', padding: '7px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
+                                  />
+                                )}
                               </div>
 
                               <div>
                                 <label style={{ fontSize: 10.5, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
-                                  Dosage Form *
+                                  Dosage Form{(!line.productId || line.productId === 'other') ? ' *' : ''}
                                 </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. Tablet, Syrup, Injection"
-                                  value={line.dosageForm || ''}
-                                  onChange={e => handleRowChange(idx, 'dosageForm', e.target.value)}
-                                  style={{ width: '100%', padding: '7px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
-                                />
+                                {line.productId && line.productId !== 'other' ? (
+                                  <div style={{ width: '100%', padding: '7px 10px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12.5, color: '#0F172A', fontWeight: 600, minHeight: 34, display: 'flex', alignItems: 'center', boxSizing: 'border-box' }}>
+                                    {line.dosageForm || '—'}
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Tablet, Syrup, Injection"
+                                    value={line.dosageForm || ''}
+                                    onChange={e => handleRowChange(idx, 'dosageForm', e.target.value)}
+                                    style={{ width: '100%', padding: '7px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
+                                  />
+                                )}
                               </div>
 
                               <div>
                                 <label style={{ fontSize: 10.5, fontWeight: 700, color: '#166534', display: 'block', marginBottom: 3, textTransform: 'uppercase' }}>
-                                  Pack Size
+                                  Package Size
                                 </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. 10x10 Strip, 100ml Bottle"
-                                  value={line.packSize || ''}
-                                  onChange={e => handleRowChange(idx, 'packSize', e.target.value)}
-                                  style={{ width: '100%', padding: '7px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
-                                />
+                                {line.productId && line.productId !== 'other' ? (
+                                  <div style={{ width: '100%', padding: '7px 10px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 12.5, color: '#0F172A', fontWeight: 600, minHeight: 34, display: 'flex', alignItems: 'center', boxSizing: 'border-box' }}>
+                                    {line.packSize || '—'}
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. 10x10 Strip, 100ml Bottle"
+                                    value={line.packSize || ''}
+                                    onChange={e => handleRowChange(idx, 'packSize', e.target.value)}
+                                    style={{ width: '100%', padding: '7px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 12.5, color: '#0F172A' }}
+                                  />
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2835,51 +2868,11 @@ export const RFQModule: React.FC = () => {
                                 }}
                               />
                             </div>
-
-                            {/* Branded Product Details Card when product is selected */}
-                            {line.productId && line.productId !== 'other' && (
-                              <div style={{ marginTop: 10, background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: '10px 14px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <span style={{ fontSize: 10.5, fontWeight: 800, color: '#0F766E', background: '#CCFBF1', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>
-                                      {line.productCode || 'MASTER-SKU'}
-                                    </span>
-                                    <strong style={{ fontSize: 13, color: '#0F172A' }}>{line.productName}</strong>
-                                    {line.brand && (
-                                      <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', background: '#E2E8F0', padding: '1px 6px', borderRadius: 4 }}>
-                                        Brand: {line.brand}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#0F766E', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <CheckCircle2 size={12} /> Product Master Verified
-                                  </span>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 11.5, color: '#334155' }}>
-                                  <div>
-                                    <span style={{ color: '#64748B', display: 'block', fontSize: 10.5 }}>Active Salt / Molecule:</span>
-                                    <strong>{line.molecule || 'Standard Formulation'}</strong>
-                                  </div>
-                                  <div>
-                                    <span style={{ color: '#64748B', display: 'block', fontSize: 10.5 }}>Strength:</span>
-                                    <strong>{line.strength || 'Standard'}</strong>
-                                  </div>
-                                  <div>
-                                    <span style={{ color: '#64748B', display: 'block', fontSize: 10.5 }}>Dosage Form:</span>
-                                    <strong>{line.dosageForm || 'Tablet'}</strong>
-                                  </div>
-                                  <div>
-                                    <span style={{ color: '#64748B', display: 'block', fontSize: 10.5 }}>Pack Size:</span>
-                                    <strong>{line.packSize || 'Standard Pack'}</strong>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         )}
 
-                        {/* Quantity, Unit of Measure, Required Date & Special Party Agreed Price */}
-                        <div style={{ display: 'grid', gridTemplateColumns: isSpecialPartyBuyer ? '1.2fr 1fr 1fr 1fr' : '1.2fr 1fr 1.2fr', gap: 12, marginBottom: 10 }}>
+                        {/* Quantity, Read-only Product Master Specs (UOM, Pack Size, Strength), Required Date & Special Party Agreed Price */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 10 }}>
                           <div>
                             <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
                               Quantity *
@@ -2898,21 +2891,55 @@ export const RFQModule: React.FC = () => {
                             <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
                               Unit of Measure
                             </label>
-                            <select
-                              value={line.uom || 'Unit'}
-                              onChange={e => handleRowChange(idx, 'uom', e.target.value)}
-                              style={{ width: '100%', padding: '8px 10px', background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 6, color: '#0F172A', fontSize: 13, fontWeight: 600 }}
+                            <div
+                              style={{ width: '100%', padding: '8px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, color: line.uom ? '#0F172A' : '#94A3B8', fontSize: 13, fontWeight: 600, minHeight: 38, display: 'flex', alignItems: 'center', boxSizing: 'border-box' }}
+                              title="Inherited from Product Master (Read-only)"
                             >
-                              <option value="Unit">Unit</option>
-                              <option value="Strip">Strip</option>
-                              <option value="Box">Box</option>
-                              <option value="Bottle">Bottle</option>
-                              <option value="Vial">Vial</option>
-                              <option value="Ampoule">Ampoule</option>
-                              <option value="Pack">Pack</option>
-                              <option value="Pouch">Pouch</option>
-                            </select>
+                              {line.uom || '—'}
+                            </div>
                           </div>
+
+                          {line.productId && line.productId !== 'other' && line.productType !== 'GENERIC' && (
+                            <>
+                              <div>
+                                <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                                  Package Size
+                                </label>
+                                <div
+                                  style={{ width: '100%', padding: '8px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, color: line.packSize ? '#0F172A' : '#94A3B8', fontSize: 13, fontWeight: 600, minHeight: 38, display: 'flex', alignItems: 'center', boxSizing: 'border-box' }}
+                                  title="Inherited from Product Master (Read-only)"
+                                >
+                                  {line.packSize || '—'}
+                                </div>
+                              </div>
+                              {line.strength && (
+                                <div>
+                                  <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                                    Strength
+                                  </label>
+                                  <div
+                                    style={{ width: '100%', padding: '8px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, color: '#0F172A', fontSize: 13, fontWeight: 600, minHeight: 38, display: 'flex', alignItems: 'center', boxSizing: 'border-box' }}
+                                    title="Inherited from Product Master (Read-only)"
+                                  >
+                                    {line.strength}
+                                  </div>
+                                </div>
+                              )}
+                              {line.molecule && (
+                                <div>
+                                  <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
+                                    Composition
+                                  </label>
+                                  <div
+                                    style={{ width: '100%', padding: '8px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 6, color: '#0F172A', fontSize: 13, fontWeight: 600, minHeight: 38, display: 'flex', alignItems: 'center', boxSizing: 'border-box', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                    title={line.molecule}
+                                  >
+                                    {line.molecule}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
 
                           <div>
                             <label style={{ fontSize: 11, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>
@@ -3072,7 +3099,7 @@ export const RFQModule: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, fontSize: 12.5 }}>
                     <div>
                       <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>RFQ Reference</span>
-                      <strong style={{ color: '#0F766E', fontFamily: 'monospace', fontSize: 13 }}>{autoRfqNumber}</strong>
+                      <strong style={{ color: '#0F766E', fontFamily: 'monospace', fontSize: 13 }}>{autoRfqNumber || '—'}</strong>
                     </div>
                     <div>
                       <span style={{ color: '#64748B', display: 'block', fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>RFQ Issue Date</span>

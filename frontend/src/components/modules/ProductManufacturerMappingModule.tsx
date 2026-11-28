@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ProductManufacturer, LifecycleStatus } from '../../types';
 import { PaginationControl } from '../common/PaginationControl';
@@ -25,6 +25,8 @@ export const ProductManufacturerMappingModule: React.FC = () => {
     masterLoading,
     masterErrors,
     refreshMappings,
+    refreshProducts,
+    refreshManufacturers,
     addMapping,
     updateMapping,
     removeMapping,
@@ -32,6 +34,13 @@ export const ProductManufacturerMappingModule: React.FC = () => {
     addAuditLog,
     setActiveTab
   } = useApp();
+
+  // Always fetch fresh Mappings, Products, and Manufacturers from PostgreSQL when this page mounts
+  useEffect(() => {
+    refreshMappings();
+    refreshProducts();
+    refreshManufacturers();
+  }, []);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RowActionsMenu } from '../common/RowActionsMenu';
 import { Brand, LifecycleStatus } from '../../types';
@@ -12,12 +12,18 @@ import {
 export const BrandMasterModule: React.FC = () => {
   const {
     brands,
+    refreshBrands,
     addBrand,
     updateBrand,
     deleteBrand,
     toggleBrandStatus,
     setActiveTab
   } = useApp();
+
+  // Always fetch fresh Brands from PostgreSQL when this page mounts
+  useEffect(() => {
+    refreshBrands();
+  }, [refreshBrands]);
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');

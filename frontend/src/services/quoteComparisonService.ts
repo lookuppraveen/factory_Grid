@@ -95,6 +95,7 @@ export interface BuyerQuoteComparisonDetailResponse {
     creditTerms: string | null;
     isGeneric: boolean;
     status: string;
+    comparisonStatus?: string;
     remarks: string | null;
   };
   lines: ComparisonRfqLine[];
@@ -204,8 +205,24 @@ export const quoteComparisonApi = {
   async selectQuotesForRfq(
     rfqId: string | number,
     payload: { selections: SelectQuoteComparisonLinePayload[] }
-  ): Promise<{ message: string; rfqNumber: string; selectedCount: number }> {
-    return request<{ message: string; rfqNumber: string; selectedCount: number }>(`${BASE}/${rfqId}/select`, {
+  ): Promise<{
+    success?: boolean;
+    message: string;
+    rfqId?: string;
+    rfqNumber: string;
+    status?: string;
+    rfqStatus?: string;
+    selectedCount: number;
+    totalLinesCount?: number;
+    allocations?: Array<{
+      rfqLineId: string;
+      quoteId: string;
+      quoteLineId: string;
+      manufacturerId: string;
+      status: string;
+    }>;
+  }> {
+    return request(`${BASE}/${rfqId}/select`, {
       method: 'POST',
       body: JSON.stringify(payload),
     });

@@ -99,11 +99,12 @@ export class RfqService {
   /**
    * Generates a unique, sequential backend-controlled RFQ number (RFQ-YYYY-XXXX).
    */
-  private async generateNextRfqNumber(): Promise<string> {
+  private async generateNextRfqNumber(tx?: any): Promise<string> {
+    const db = tx || this.prisma;
     const currentYear = new Date().getFullYear();
     const prefix = `RFQ-${currentYear}-`;
 
-    const lastRfq = await this.prisma.rfq.findFirst({
+    const lastRfq = await db.rfq.findFirst({
       where: { rfqNumber: { startsWith: prefix } },
       orderBy: { id: 'desc' },
       select: { rfqNumber: true },
@@ -119,6 +120,66 @@ export class RfqService {
     }
 
     return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+  }
+
+  /**
+   * Resolves authoritative Product Master fields from PostgreSQL for a selected productId.
+   * Ensures buyers cannot override Product Master values (UOM, Pack Size, Strength, Dosage Form, Hierarchy).
+   */
+  private async resolveMasterProductSnapshot(tx: any, productId: string) {
+    const prod = await tx.catalogProduct.findFirst({
+      where: {
+        OR: [
+          { id: productId.trim() },
+          { productCode: productId.trim() },
+        ],
+      },
+      include: {
+        productAttributes: {
+          include: { attribute: true },
+        },
+        productUoms: {
+          where: { isActive: true },
+          orderBy: [{ isOrderUom: 'desc' }, { isBaseUom: 'desc' }],
+        },
+      },
+    });
+
+    if (!prod) {
+      return null;
+    }
+
+    const strengthAttr = (prod.productAttributes || []).find(
+      (pa: any) =>
+        pa.attribute?.attributeCode?.toUpperCase() === 'STRENGTH' ||
+        pa.attribute?.attributeName?.toLowerCase() === 'strength',
+    );
+    const jsonAttrs = (prod.attributes && typeof prod.attributes === 'object') ? (prod.attributes as Record<string, any>) : {};
+    const resolvedStrength =
+      strengthAttr?.attributeValue?.trim() ||
+      (typeof jsonAttrs.strength === 'string' ? jsonAttrs.strength.trim() : '') ||
+      (typeof jsonAttrs.STRENGTH === 'string' ? jsonAttrs.STRENGTH.trim() : '') ||
+      null;
+
+    const primaryUom =
+      prod.baseUom?.trim() ||
+      (prod.productUoms && prod.productUoms.length > 0 ? prod.productUoms[0].uom : null) ||
+      prod.packUom?.trim() ||
+      null;
+
+    return {
+      productId: prod.id,
+      productCode: prod.productCode,
+      productName: prod.name,
+      category: prod.category || null,
+      subCategory: prod.subCategory || null,
+      subSubCategory: prod.subSubCategory || null,
+      dosageForm: prod.dosageForm?.trim() || null,
+      packSize: prod.packSize?.trim() || null,
+      uom: primaryUom,
+      molecule: prod.composition?.trim() || prod.genericName?.trim() || null,
+      strength: resolvedStrength,
+    };
   }
 
   /**
@@ -151,8 +212,6 @@ export class RfqService {
       );
     }
 
-    const rfqNumber = await this.generateNextRfqNumber();
-
     const isSubmitted = dto.status === 'Submitted';
     const initialStatus = isSubmitted
       ? (dto.isGeneric || dto.lines.some((l) => l.productType === 'GENERIC') ? 'Pricing In Progress' : 'Submitted')
@@ -169,6 +228,7 @@ export class RfqService {
       : (buyer.customerClassification === 'RETAIL' ? 'RETAIL' : 'B2B');
 
     const rfq = await this.prisma.$transaction(async (tx) => {
+      const rfqNumber = await this.generateNextRfqNumber(tx);
       const createdRfq = await tx.rfq.create({
         data: {
           rfqNumber,
@@ -194,48 +254,37 @@ export class RfqService {
 
       for (let i = 0; i < dto.lines.length; i++) {
         const line = dto.lines[i];
-        let resolvedProductId: string | null = null;
-        let resolvedProductCode: string | null = line.productCode?.trim() || null;
-        let resolvedProductName: string = line.productName.trim();
+        const isCatalogProduct = !!(line.productId?.trim() && line.productId !== 'other');
+        const masterSnap = isCatalogProduct
+          ? await this.resolveMasterProductSnapshot(tx, line.productId!.trim())
+          : null;
 
-        if (line.productId?.trim() && line.productId !== 'other') {
-          const prod = await tx.catalogProduct.findFirst({
-            where: {
-              OR: [
-                { id: line.productId.trim() },
-                { productCode: line.productId.trim() },
-              ],
-            },
-          });
-          if (prod) {
-            resolvedProductId = prod.id;
-            resolvedProductCode = prod.productCode;
-            resolvedProductName = prod.name;
-          }
+        if (isCatalogProduct && !masterSnap) {
+          throw new BadRequestException(`Line #${i + 1}: Selected product "${line.productId}" does not exist in Product Master.`);
         }
 
         await tx.rfqLine.create({
           data: {
             rfqId: createdRfq.id,
             lineItemNumber: i + 1,
-            productId: resolvedProductId,
-            productName: resolvedProductName,
-            productCode: resolvedProductCode,
-            category: line.category?.trim() || null,
-            subCategory: line.subCategory?.trim() || null,
-            subSubCategory: line.subSubCategory?.trim() || null,
+            productId: masterSnap ? masterSnap.productId : null,
+            productName: masterSnap ? masterSnap.productName : line.productName.trim(),
+            productCode: masterSnap ? masterSnap.productCode : (line.productCode?.trim() || null),
+            category: masterSnap ? masterSnap.category : (line.category?.trim() || null),
+            subCategory: masterSnap ? masterSnap.subCategory : (line.subCategory?.trim() || null),
+            subSubCategory: masterSnap ? masterSnap.subSubCategory : (line.subSubCategory?.trim() || null),
             productType: line.productType === 'GENERIC' ? 'GENERIC' : 'BRANDED',
-            dosageForm: line.dosageForm?.trim() || null,
-            packSize: line.packSize?.trim() || null,
-            uom: line.uom?.trim() || 'Units',
+            dosageForm: masterSnap ? masterSnap.dosageForm : (line.dosageForm?.trim() || null),
+            packSize: masterSnap ? masterSnap.packSize : (line.packSize?.trim() || null),
+            uom: masterSnap ? (masterSnap.uom || '') : (line.uom?.trim() || ''),
             quantity: line.quantity,
             targetPrice: line.buyerProvidedPrice !== undefined && line.buyerProvidedPrice !== null
               ? line.buyerProvidedPrice
               : (line.targetPrice !== undefined && line.targetPrice !== null ? line.targetPrice : null),
             requiredDate: parseDate(line.requiredDate || dto.requiredDate),
             remarks: line.remarks?.trim() || null,
-            molecule: line.molecule?.trim() || null,
-            strength: line.strength?.trim() || null,
+            molecule: masterSnap ? masterSnap.molecule : (line.molecule?.trim() || null),
+            strength: masterSnap ? masterSnap.strength : (line.strength?.trim() || null),
           },
         });
       }
@@ -316,46 +365,37 @@ export class RfqService {
         await tx.rfqLine.deleteMany({ where: { rfqId: existing.id } });
         for (let i = 0; i < dto.lines.length; i++) {
           const line = dto.lines[i];
-          let resolvedProductId: string | null = null;
-          let resolvedProductCode: string | null = line.productCode?.trim() || null;
+          const isCatalogProduct = !!(line.productId?.trim() && line.productId !== 'other');
+          const masterSnap = isCatalogProduct
+            ? await this.resolveMasterProductSnapshot(tx, line.productId!.trim())
+            : null;
 
-          if (line.productId?.trim() && line.productId !== 'other') {
-            const prod = await tx.catalogProduct.findFirst({
-              where: {
-                OR: [
-                  { id: line.productId.trim() },
-                  { productCode: line.productId.trim() },
-                ],
-              },
-            });
-            if (prod) {
-              resolvedProductId = prod.id;
-              resolvedProductCode = prod.productCode;
-            }
+          if (isCatalogProduct && !masterSnap) {
+            throw new BadRequestException(`Line #${i + 1}: Selected product "${line.productId}" does not exist in Product Master.`);
           }
 
           await tx.rfqLine.create({
             data: {
               rfqId: existing.id,
               lineItemNumber: i + 1,
-              productId: resolvedProductId,
-              productName: line.productName.trim(),
-              productCode: resolvedProductCode,
-              category: line.category?.trim() || null,
-              subCategory: line.subCategory?.trim() || null,
-              subSubCategory: line.subSubCategory?.trim() || null,
+              productId: masterSnap ? masterSnap.productId : null,
+              productName: masterSnap ? masterSnap.productName : line.productName.trim(),
+              productCode: masterSnap ? masterSnap.productCode : (line.productCode?.trim() || null),
+              category: masterSnap ? masterSnap.category : (line.category?.trim() || null),
+              subCategory: masterSnap ? masterSnap.subCategory : (line.subCategory?.trim() || null),
+              subSubCategory: masterSnap ? masterSnap.subSubCategory : (line.subSubCategory?.trim() || null),
               productType: line.productType === 'GENERIC' ? 'GENERIC' : 'BRANDED',
-              dosageForm: line.dosageForm?.trim() || null,
-              packSize: line.packSize?.trim() || null,
-              uom: line.uom?.trim() || 'Units',
+              dosageForm: masterSnap ? masterSnap.dosageForm : (line.dosageForm?.trim() || null),
+              packSize: masterSnap ? masterSnap.packSize : (line.packSize?.trim() || null),
+              uom: masterSnap ? (masterSnap.uom || '') : (line.uom?.trim() || ''),
               quantity: line.quantity,
               targetPrice: line.buyerProvidedPrice !== undefined && line.buyerProvidedPrice !== null
                 ? line.buyerProvidedPrice
                 : (line.targetPrice !== undefined && line.targetPrice !== null ? line.targetPrice : null),
               requiredDate: parseDate(line.requiredDate || dto.requiredDate),
               remarks: line.remarks?.trim() || null,
-              molecule: line.molecule?.trim() || null,
-              strength: line.strength?.trim() || null,
+              molecule: masterSnap ? masterSnap.molecule : (line.molecule?.trim() || null),
+              strength: masterSnap ? masterSnap.strength : (line.strength?.trim() || null),
             },
           });
         }
@@ -768,7 +808,12 @@ export class RfqService {
       where.userId = BigInt(userId);
     }
 
-    if (query?.status && query.status !== 'ALL') {
+    const computedStatusFilter =
+      query?.status === 'READY_FOR_COMPARISON' || query?.status === 'ALLOCATED' || query?.status === 'PARTIALLY_ALLOCATED'
+        ? query.status
+        : null;
+
+    if (query?.status && query.status !== 'ALL' && !computedStatusFilter) {
       where.status = { equals: query.status, mode: 'insensitive' };
     } else {
       where.status = { not: 'Draft' };
@@ -802,7 +847,7 @@ export class RfqService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return rfqs.map((rfq) => {
+    const mapped = rfqs.map((rfq) => {
       const quotationCount = rfq.quotes.length;
       const productLineCount = rfq.lines.length;
 
@@ -814,6 +859,8 @@ export class RfqService {
       let comparisonStatus = 'READY_FOR_COMPARISON';
       if (selectedLinesCount > 0 && selectedLinesCount === productLineCount) {
         comparisonStatus = 'ALLOCATED';
+      } else if (selectedLinesCount > 0 && selectedLinesCount < productLineCount) {
+        comparisonStatus = 'PARTIALLY_ALLOCATED';
       } else if (quotationCount > 0) {
         comparisonStatus = 'READY_FOR_COMPARISON';
       } else {
@@ -839,6 +886,11 @@ export class RfqService {
         selectedLinesCount,
       };
     });
+
+    if (computedStatusFilter) {
+      return mapped.filter((item) => item.status === computedStatusFilter);
+    }
+    return mapped;
   }
 
   /**
@@ -914,6 +966,16 @@ export class RfqService {
       }
     });
 
+    const allocatedLinesCount = Object.keys(lineSelections).length;
+    const comparisonStatus =
+      allocatedLinesCount > 0 && allocatedLinesCount === rfq.lines.length
+        ? 'ALLOCATED'
+        : allocatedLinesCount > 0 && allocatedLinesCount < rfq.lines.length
+          ? 'PARTIALLY_ALLOCATED'
+          : rfq.quotes.length > 0
+            ? 'READY_FOR_COMPARISON'
+            : rfq.status.toUpperCase().replace(/\s+/g, '_');
+
     return {
       rfq: {
         id: rfq.id.toString(),
@@ -931,6 +993,7 @@ export class RfqService {
         creditTerms: rfq.creditTerms,
         isGeneric: rfq.isGeneric,
         status: rfq.status,
+        comparisonStatus,
         remarks: rfq.remarks,
       },
       lines: rfq.lines.map((l) => {
@@ -1038,6 +1101,10 @@ export class RfqService {
         throw new BadRequestException(`Quotation Line ID ${sel.quoteLineId} was not found in Quote ${quote.quoteNumber}.`);
       }
 
+      if (quoteLine.rfqLineId && quoteLine.rfqLineId.toString() !== sel.rfqLineId) {
+        throw new BadRequestException(`Quotation Line ID ${sel.quoteLineId} does not belong to RFQ Line ID ${sel.rfqLineId}.`);
+      }
+
       if (quoteLine.responseType === 'CANNOT_SUPPLY') {
         throw new BadRequestException(`Cannot select a quotation line marked as "Cannot Supply" (${quoteLine.productName}).`);
       }
@@ -1047,8 +1114,26 @@ export class RfqService {
       }
     }
 
+    let persistedComparisonStatus = 'READY_FOR_COMPARISON';
+    let persistedRfqStatus = rfq.status;
+    let allocatedLinesCount = 0;
+
     await this.prisma.$transaction(async (tx) => {
       const selectedQuoteIds = new Set<string>();
+      const allQuoteIdsForRfq = rfq.quotes.map((q) => q.id);
+
+      // Clear previous SELECTED remarks for affected RFQ lines' quote lines so re-saving updates cleanly without stale flags
+      if (allQuoteIdsForRfq.length > 0) {
+        const affectedRfqLineIds = dto.selections.map((s) => BigInt(s.rfqLineId));
+        await tx.quoteLine.updateMany({
+          where: {
+            quoteId: { in: allQuoteIdsForRfq },
+            rfqLineId: { in: affectedRfqLineIds },
+            remarks: 'SELECTED',
+          },
+          data: { remarks: null },
+        });
+      }
 
       for (const sel of dto.selections) {
         selectedQuoteIds.add(sel.quoteId);
@@ -1068,8 +1153,24 @@ export class RfqService {
         });
       }
 
+      // Recount total allocated lines across the entire RFQ (supports multi-line independent allocations)
+      const updatedRfqLines = await tx.rfqLine.findMany({
+        where: { rfqId: rfq.id },
+        select: { id: true, remarks: true },
+      });
+      const allSelectedQuoteLineIds = new Set<string>();
+      for (const rl of updatedRfqLines) {
+        if (rl.remarks && rl.remarks.startsWith('SELECTED_QUOTE_LINE:')) {
+          allocatedLinesCount++;
+          const qlId = rl.remarks.split(':')[1];
+          if (qlId) allSelectedQuoteLineIds.add(qlId);
+        }
+      }
+
       for (const q of rfq.quotes) {
-        const isChosen = selectedQuoteIds.has(q.id.toString());
+        const isChosen =
+          selectedQuoteIds.has(q.id.toString()) ||
+          q.lines.some((ql) => allSelectedQuoteLineIds.has(ql.id.toString()));
         await tx.quote.update({
           where: { id: q.id },
           data: {
@@ -1078,10 +1179,19 @@ export class RfqService {
         });
       }
 
+      const isFullyAllocated = rfq.lines.length > 0 && allocatedLinesCount === rfq.lines.length;
+      const isPartiallyAllocated = allocatedLinesCount > 0 && allocatedLinesCount < rfq.lines.length;
+      persistedRfqStatus = isFullyAllocated ? 'Vendor Selected' : (rfq.status === 'Submitted' ? 'Quoted' : rfq.status);
+      persistedComparisonStatus = isFullyAllocated
+        ? 'ALLOCATED'
+        : isPartiallyAllocated
+          ? 'PARTIALLY_ALLOCATED'
+          : 'READY_FOR_COMPARISON';
+
       await tx.rfq.update({
         where: { id: rfq.id },
         data: {
-          status: 'Vendor Selected',
+          status: persistedRfqStatus,
         },
       });
 
@@ -1244,9 +1354,21 @@ export class RfqService {
     });
 
     return {
-      message: 'Manufacturer quotations selected and saved successfully.',
+      success: true,
+      message: 'Quote allocations saved successfully.',
+      rfqId: rfq.id.toString(),
       rfqNumber: rfq.rfqNumber,
-      selectedCount: dto.selections.length,
+      status: persistedComparisonStatus,
+      rfqStatus: persistedRfqStatus,
+      selectedCount: allocatedLinesCount,
+      totalLinesCount: rfq.lines.length,
+      allocations: dto.selections.map((s) => ({
+        rfqLineId: s.rfqLineId,
+        quoteId: s.quoteId,
+        quoteLineId: s.quoteLineId,
+        manufacturerId: s.manufacturerId,
+        status: 'SELECTED',
+      })),
     };
   }
 

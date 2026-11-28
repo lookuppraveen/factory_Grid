@@ -71,8 +71,28 @@ export const BuyerQuoteComparisonModule: React.FC = () => {
     leadTimeDays: number;
     moq: number;
   }>>({});
+  // Persisted selections snapshot hydrated strictly from PostgreSQL API responses
+  const [savedSelections, setSavedSelections] = useState<Record<string, string>>({});
   const [isSavingSelection, setIsSavingSelection] = useState<boolean>(false);
   const [successNotification, setSuccessNotification] = useState<string | null>(null);
+
+  const toSelectionSnapshot = (
+    map?: Record<string, { quoteLineId: string }> | null
+  ): Record<string, string> => {
+    const out: Record<string, string> = {};
+    if (!map) return out;
+    Object.entries(map).forEach(([lineId, sel]) => {
+      if (sel?.quoteLineId) out[lineId] = String(sel.quoteLineId);
+    });
+    return out;
+  };
+
+  const hasUnsavedChanges = useMemo(() => {
+    const currentKeys = Object.keys(lineSelections);
+    const savedKeys = Object.keys(savedSelections);
+    if (currentKeys.length !== savedKeys.length) return true;
+    return currentKeys.some((k) => lineSelections[k]?.quoteLineId !== savedSelections[k]);
+  }, [lineSelections, savedSelections]);
 
   /**
    * Fetch comparison RFQs list from real PostgreSQL database.
@@ -133,6 +153,7 @@ export const BuyerQuoteComparisonModule: React.FC = () => {
       const data = await quoteComparisonApi.getQuoteComparisonDetail(rfqId);
       setDetailData(data);
       setLineSelections(data.lineSelections || {});
+      setSavedSelections(toSelectionSnapshot(data.lineSelections));
     } catch (err: any) {
       console.error('Failed to load comparison detail:', err);
       setDetailError(err?.message || 'Could not retrieve quotation comparison details.');
@@ -218,10 +239,12 @@ export const BuyerQuoteComparisonModule: React.FC = () => {
         );
       }
 
-      // Re-fetch detail to reflect saved state in PostgreSQL
+      // Re-fetch detail and list from PostgreSQL to reflect authoritative persisted state
       const refreshed = await quoteComparisonApi.getQuoteComparisonDetail(selectedRfqId);
       setDetailData(refreshed);
       setLineSelections(refreshed.lineSelections || {});
+      setSavedSelections(toSelectionSnapshot(refreshed.lineSelections));
+      loadRfqList();
     } catch (err: any) {
       console.error('Failed to save selections:', err);
       setDetailError(err?.message || 'Failed to save manufacturer selections.');
@@ -240,6 +263,9 @@ export const BuyerQuoteComparisonModule: React.FC = () => {
       case 'VENDOR_SELECTED':
       case 'Vendor Selected':
         return { bg: '#F0FDF4', color: '#166534', border: '#86EFAC', label: 'ALLOCATED' };
+      case 'PARTIALLY_ALLOCATED':
+      case 'PARTIALLY_ACCEPTED':
+        return { bg: '#EFF6FF', color: '#1D4ED8', border: '#93C5FD', label: 'PARTIALLY ALLOCATED' };
       case 'PRICING_IN_PROGRESS':
       case 'Pricing In Progress':
         return { bg: '#FEF3C7', color: '#D97706', border: '#FDE68A', label: 'PRICING IN PROGRESS' };
@@ -293,7 +319,12 @@ export const BuyerQuoteComparisonModule: React.FC = () => {
         const buyerName = detailData.rfq.companyName || detailData.rfq.buyerName || 'Buyer Organization';
         const totalLinesCount = detailData.lines.length;
         const selectedCount = Object.keys(lineSelections).length;
+        const savedCount = Object.keys(savedSelections).length;
+        const isPersistedSaved = savedCount > 0 && selectedCount > 0 && !hasUnsavedChanges;
         const isComplete = totalLinesCount > 0 && selectedCount >= totalLinesCount;
+        const persistedStatusBadge = getStatusBadge(
+          detailData.rfq.comparisonStatus || (savedCount > 0 && savedCount === totalLinesCount ? 'ALLOCATED' : detailData.rfq.status)
+        );
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -310,16 +341,14 @@ export const BuyerQuoteComparisonModule: React.FC = () => {
                 </button>
 
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 800, color: '#0F766E', fontFamily: 'monospace' }}>{detailData.rfq.rfqNumber}</span>
                     <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}>
                       {detailData.manufacturerQuotations.length} QUOTATION{detailData.manufacturerQuotations.length === 1 ? '' : 'S'} RECEIVED
                     </span>
-                    {isComplete && (
-                      <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: '#F0FDF4', color: '#166534', border: '1px solid #86EFAC' }}>
-                        ALL LINES ALLOCATED ✓
-                      </span>
-                    )}
+                    <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: persistedStatusBadge.bg, color: persistedStatusBadge.color, border: `1px solid ${persistedStatusBadge.border}` }}>
+                      {persistedStatusBadge.label}
+                    </span>
                   </div>
                   <h1 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
                     Manufacturer Quotations Comparison — {buyerName}
@@ -331,23 +360,28 @@ export const BuyerQuoteComparisonModule: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button
                   type="button"
-                  disabled={isSavingSelection || selectedCount === 0}
+                  disabled={isSavingSelection || selectedCount === 0 || isPersistedSaved}
                   onClick={handleSaveSelections}
                   style={{
                     padding: '8px 18px',
                     borderRadius: 6,
-                    background: selectedCount > 0 ? '#0F766E' : '#E2E8F0',
-                    color: selectedCount > 0 ? '#FFFFFF' : '#94A3B8',
+                    background: isPersistedSaved ? '#16A34A' : selectedCount > 0 ? '#0F766E' : '#E2E8F0',
+                    color: (isPersistedSaved || selectedCount > 0) ? '#FFFFFF' : '#94A3B8',
                     border: 'none',
                     fontWeight: 800,
                     fontSize: 12.5,
-                    cursor: selectedCount > 0 ? 'pointer' : 'not-allowed',
+                    cursor: (isSavingSelection || selectedCount === 0 || isPersistedSaved) ? 'default' : 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 6
                   }}
                 >
-                  <CheckSquare size={14} /> {isSavingSelection ? 'Saving Selections...' : `Save Allocations (${selectedCount}/${totalLinesCount})`}
+                  {isPersistedSaved ? <CheckCircle2 size={14} /> : <CheckSquare size={14} />}
+                  {isSavingSelection
+                    ? 'Saving...'
+                    : isPersistedSaved
+                      ? 'Allocations Saved ✓'
+                      : `Save Allocations (${selectedCount}/${totalLinesCount})`}
                 </button>
               </div>
             </div>
@@ -619,23 +653,28 @@ export const BuyerQuoteComparisonModule: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  disabled={isSavingSelection || selectedCount === 0}
+                  disabled={isSavingSelection || selectedCount === 0 || isPersistedSaved}
                   onClick={handleSaveSelections}
                   style={{
                     padding: '8px 20px',
                     borderRadius: 6,
-                    background: selectedCount > 0 ? '#0F766E' : '#E2E8F0',
-                    color: selectedCount > 0 ? '#FFFFFF' : '#94A3B8',
+                    background: isPersistedSaved ? '#16A34A' : selectedCount > 0 ? '#0F766E' : '#E2E8F0',
+                    color: (isPersistedSaved || selectedCount > 0) ? '#FFFFFF' : '#94A3B8',
                     border: 'none',
                     fontWeight: 800,
                     fontSize: 12.5,
-                    cursor: selectedCount > 0 ? 'pointer' : 'not-allowed',
+                    cursor: (isSavingSelection || selectedCount === 0 || isPersistedSaved) ? 'default' : 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 6
                   }}
                 >
-                  <CheckSquare size={14} /> {isSavingSelection ? 'Saving to Database...' : 'Save & Persist Allocations'}
+                  {isPersistedSaved ? <CheckCircle2 size={14} /> : <CheckSquare size={14} />}
+                  {isSavingSelection
+                    ? 'Saving...'
+                    : isPersistedSaved
+                      ? 'Allocations Saved ✓'
+                      : 'Save & Persist Allocations'}
                 </button>
               </div>
             </div>
@@ -683,6 +722,8 @@ export const BuyerQuoteComparisonModule: React.FC = () => {
                 >
                   <option value="ALL">All Active Statuses</option>
                   <option value="READY_FOR_COMPARISON">Ready for Comparison</option>
+                  <option value="PARTIALLY_ALLOCATED">Partially Allocated</option>
+                  <option value="ALLOCATED">Allocated</option>
                   <option value="Quoted">Quoted</option>
                   <option value="Submitted">Submitted</option>
                   <option value="Pricing In Progress">Pricing In Progress</option>

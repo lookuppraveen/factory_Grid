@@ -176,40 +176,75 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+export interface ProductCapabilityAttribute {
+  id: string;
+  code: string;
+  name: string;
+  value: string;
+  unit: string | null;
+}
+
+export interface ProductTypeOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface CategoryHierarchyItem {
   id: string;
+  productId?: string;
+  productCode?: string;
   categoryId: string;
   productTypeId: string;
+  productTypeName?: string;
   category: string;
   subCategory: string | null;
   subSubCategory: string | null;
   categoryCode: string;
+  composition?: string | null;
+  baseUom?: string;
+  packSize?: string;
   description: string | null;
+  lifecycleStatus?: string;
   name: string;
   fullName: string;
+  capabilities?: ProductCapabilityAttribute[];
 }
 
 export interface CategoryTreeSubItem {
   id: string;
+  productId?: string;
+  productCode?: string;
   categoryId: string;
   categoryCode: string;
   subSubCategory: string | null;
   name: string;
+  composition?: string | null;
+  baseUom?: string;
+  packSize?: string;
   description: string | null;
+  capabilities?: ProductCapabilityAttribute[];
 }
 
 export interface CategoryTreeSubCategory {
+  subCategoryId?: string;
   subCategory: string;
+  productsCount?: number;
   items: CategoryTreeSubItem[];
+  products?: CategoryTreeSubItem[];
 }
 
 export interface CategoryTreeCategory {
+  categoryId?: string;
   category: string;
   productTypeId: string;
+  productTypeName?: string;
   subCategories: CategoryTreeSubCategory[];
 }
 
 export interface CategoryHierarchyResponse {
+  productTypes?: ProductTypeOption[];
+  products?: CategoryHierarchyItem[];
   categories: CategoryHierarchyItem[];
   tree: CategoryTreeCategory[];
 }

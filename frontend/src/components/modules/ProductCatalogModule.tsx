@@ -87,9 +87,25 @@ export const ProductCatalogModule: React.FC = () => {
     toggleProductMasterStatus,
     refreshProducts,
     refreshMappings,
+    refreshCustomerSegments,
+    refreshProductTypes,
+    refreshUnifiedCategories,
+    refreshBrands,
+    refreshAttributeMasters,
     addAuditLog,
     setActiveTab
   } = useApp();
+
+  // Always hydrate fresh catalog & master reference data from PostgreSQL when this page mounts
+  useEffect(() => {
+    refreshProducts();
+    refreshCustomerSegments();
+    refreshProductTypes();
+    refreshUnifiedCategories();
+    refreshBrands();
+    refreshAttributeMasters();
+    refreshMappings();
+  }, []);
 
   const [displayMode, setDisplayMode] = useState<'TABLE' | 'CARD'>('TABLE');
   const [isAdminBulkUploadOpen, setIsAdminBulkUploadOpen] = useState(false);
@@ -361,20 +377,21 @@ export const ProductCatalogModule: React.FC = () => {
 
   // Client-Aligned Form Data State (Strictly PRODUCT fields only)
   const [formData, setFormData] = useState({
-    productTypeId: 'pt_med',
-    category: 'Drugs',
-    subCategory: 'Tablets',
-    subSubCategory: 'Film Coated Tablets',
-    categoryId: 'CAT001',
+    segmentId: '',
+    productTypeId: '',
+    category: '',
+    subCategory: '',
+    subSubCategory: '',
+    categoryId: '',
     brandId: '',
     code: '',
     name: '',
-    shortName: '',
+    composition: '',
+    strength: '',
     pharmaReference: '',
     description: '',
     baseUom: 'Unit',
-    packSize: '10 x 1 x 10',
-    packUom: 'Strip',
+    packSize: '',
     lifecycleStatus: 'ACTIVE' as LifecycleStatus,
     availableFrom: '2025-01-01',
     discontinuedOn: '',
@@ -690,11 +707,7 @@ export const ProductCatalogModule: React.FC = () => {
       let matchesStatus = true;
       if (selectedStatus !== 'ALL') {
         const statusVal = (p.lifecycle_status || (p.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE')).toUpperCase();
-        if (selectedStatus === 'END_OF_LIFE' || selectedStatus === 'EOL') {
-          matchesStatus = statusVal === 'END_OF_LIFE' || statusVal === 'EOL';
-        } else {
-          matchesStatus = statusVal === selectedStatus.toUpperCase();
-        }
+        matchesStatus = statusVal === selectedStatus.toUpperCase();
       }
 
       return matchesSearch && matchesPt && matchesCat && matchesBrand && matchesStatus;
@@ -875,26 +888,42 @@ export const ProductCatalogModule: React.FC = () => {
     }
   };
 
+  const generateUniqueProductCode = () => {
+    const existingCodes = new Set(
+      (products || []).map(p => (p.product_code || p.code || (p as any).productCode || '').toUpperCase().trim())
+    );
+    let seq = (products || []).length + 1;
+    let candidate = `PRD${String(seq).padStart(6, '0')}`;
+    while (existingCodes.has(candidate)) {
+      seq += 1;
+      candidate = `PRD${String(seq).padStart(6, '0')}`;
+    }
+    return candidate;
+  };
+
   // Open Add Product Modal (Pure Core PRODUCT fields)
   const handleOpenAddModal = () => {
     setEditingProductId(null);
-    const nextCodeNum = products.length + 1;
-    const defaultPtId = productTypes[0]?.product_type_id || 'pt_med';
+    const defaultPtId = productTypes[0]?.product_type_id || productTypes[0]?.id || '';
+    const defaultSegId = (customerSegments || []).find(s => (s.lifecycle_status || (s.is_active ? 'ACTIVE' : 'INACTIVE')) === 'ACTIVE')?.customer_segment_id
+      || (customerSegments || [])[0]?.id
+      || '';
     setFormData({
+      segmentId: defaultSegId,
       productTypeId: defaultPtId,
       category: '',
       subCategory: '',
       subSubCategory: '',
       categoryId: '',
       brandId: '',
-      code: `PRD001${nextCodeNum < 10 ? '00' + nextCodeNum : nextCodeNum < 100 ? '0' + nextCodeNum : nextCodeNum}`,
+      code: generateUniqueProductCode(),
       name: '',
-      shortName: '',
+      composition: '',
+      strength: '',
       pharmaReference: '',
       description: '',
       baseUom: 'Unit',
-      packSize: '10 x 1 x 10',
-      packUom: 'Strip',
+      packSize: '',
       lifecycleStatus: 'DRAFT',
       availableFrom: new Date().toISOString().split('T')[0],
       discontinuedOn: '',
@@ -925,22 +954,38 @@ export const ProductCatalogModule: React.FC = () => {
     const prdSub = (prd as any).sub_category || (prd as any).subCategory || existingCat?.sub_category || '';
     const prdSubSub = (prd as any).sub_sub_category || prd.subSubCategory || existingCat?.sub_sub_category || '';
 
+    const currentAttrs = getProductAttributeMap(prd.id);
+    const existingStrength =
+      (prd as any).strength ||
+      currentAttrs['attr_strength'] ||
+      currentAttrs['STRENGTH'] ||
+      (prd.attributes as any)?.STRENGTH ||
+      (prd.attributes as any)?.strength ||
+      '';
+
     setFormData({
+      segmentId: (prd as any).segmentId || (prd as any).segment_id || '',
       productTypeId: prdPtId,
       category: prdCat,
       subCategory: prdSub,
       subSubCategory: prdSubSub,
-      categoryId: prd.category_id || prd.categoryId || existingCat?.category_id || 'CAT001',
+      categoryId: prd.category_id || prd.categoryId || existingCat?.category_id || '',
       brandId: prd.brand_id || prd.brandId || '',
       code: prd.product_code || prd.code || '',
       name: prd.product_name || prd.name || '',
-      shortName: prd.product_short_name || '',
+      composition: (prd as any).composition || prd.genericName || '',
+      strength: existingStrength,
       pharmaReference: prd.pharmaReference || prd.pharma_reference || (prd as any).pharma_ref || '',
       description: prd.product_description || prd.description || '',
-      baseUom: prd.base_uom || prd.uom || 'Unit',
-      packSize: prd.pack_size || prd.packSize || '10 x 1 x 10',
-      packUom: prd.pack_uom || 'Strip',
-      lifecycleStatus: prd.lifecycle_status || (prd.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'),
+      baseUom: prd.base_uom || prd.baseUom || prd.uom || 'Unit',
+      packSize: prd.pack_size || prd.packSize || '',
+      lifecycleStatus: (() => {
+        const raw = String(prd.lifecycle_status || (prd.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE')).toUpperCase();
+        if (raw === 'DRAFT' || raw === 'ACTIVE' || raw === 'INACTIVE' || raw === 'DISCONTINUED' || raw === 'EOL') {
+          return raw as LifecycleStatus;
+        }
+        return 'EOL' as LifecycleStatus;
+      })(),
       availableFrom: prd.available_from ? prd.available_from.split('T')[0] : '2025-01-01',
       discontinuedOn: prd.discontinued_on ? prd.discontinued_on.split('T')[0] : '',
       replacementProductId: prd.replacement_product_id || '',
@@ -951,7 +996,6 @@ export const ProductCatalogModule: React.FC = () => {
         : ''
     });
 
-    const currentAttrs = getProductAttributeMap(prd.id);
     setFormAttrValues(currentAttrs);
     setExtraSelectedAttributeIds(Object.keys(currentAttrs));
     setIsSelectingModalAttr(false);
@@ -1139,20 +1183,20 @@ export const ProductCatalogModule: React.FC = () => {
     setModalFormError(null);
 
     // 1. Classification Validations
+    if (!formData.segmentId) {
+      setModalFormError('Segment is mandatory. Please select a Segment.');
+      return;
+    }
     if (!formData.productTypeId) {
       setModalFormError('Product Type is mandatory. Please select a Product Type.');
       return;
     }
     if (!formData.category) {
-      setModalFormError('Category is mandatory. Please select a Category from the master hierarchy tree.');
+      setModalFormError('Product Category is mandatory. Please select a Category from the master hierarchy tree.');
       return;
     }
 
     // 2. Product Information Validations
-    if (!formData.code.trim()) {
-      setModalFormError('Product Code is mandatory.');
-      return;
-    }
     if (!formData.name.trim()) {
       setModalFormError('Product Name is mandatory.');
       return;
@@ -1161,8 +1205,8 @@ export const ProductCatalogModule: React.FC = () => {
       setModalFormError('Base UOM is mandatory.');
       return;
     }
-    if (!formData.packUom.trim()) {
-      setModalFormError('Pack UOM is mandatory.');
+    if (!formData.packSize.trim()) {
+      setModalFormError('Pack Size is mandatory.');
       return;
     }
 
@@ -1179,18 +1223,21 @@ export const ProductCatalogModule: React.FC = () => {
       }
     }
 
-    // Unique Product Code Validation Check
-    const codeClean = formData.code.trim().toUpperCase();
-    const isDuplicateCode = (products || []).some(p => {
-      const isSelf = (p.id && p.id === editingProductId) ||
-                     (p.product_id && p.product_id === editingProductId) ||
-                     (p.code && p.code.toUpperCase() === (editingProductId || '').toUpperCase());
-      if (isSelf) return false;
-      const otherCode = (p.product_code || p.code || (p as any).productCode || '').toUpperCase().trim();
-      return otherCode === codeClean;
-    });
+    // Ensure unique Product Code (auto-generated for new products since Product Code is internal)
+    let codeClean = (formData.code || '').trim().toUpperCase();
+    const isCodeTaken = (candidate: string) =>
+      (products || []).some(p => {
+        const isSelf = (p.id && p.id === editingProductId) ||
+                       (p.product_id && p.product_id === editingProductId) ||
+                       (p.code && p.code.toUpperCase() === (editingProductId || '').toUpperCase());
+        if (isSelf) return false;
+        const otherCode = (p.product_code || p.code || (p as any).productCode || '').toUpperCase().trim();
+        return otherCode === candidate;
+      });
 
-    if (isDuplicateCode) {
+    if (!codeClean || (!editingProductId && isCodeTaken(codeClean))) {
+      codeClean = generateUniqueProductCode();
+    } else if (editingProductId && isCodeTaken(codeClean)) {
       setModalFormError(`Product Code "${codeClean}" already exists. Product Code must be unique across the central master catalog.`);
       return;
     }
@@ -1217,21 +1264,24 @@ export const ProductCatalogModule: React.FC = () => {
 
     const apiPayload = {
       productCode: codeClean,
+      segmentId: formData.segmentId || undefined,
+      segment_id: formData.segmentId || undefined,
       name: formData.name.trim(),
-      shortName: formData.shortName.trim() || formData.name.trim().slice(0, 30),
+      composition: formData.composition.trim() || undefined,
+      genericName: formData.composition.trim() || undefined,
+      strength: formData.strength.trim() || undefined,
       pharmaReference: formData.pharmaReference.trim() || undefined,
       pharma_reference: formData.pharmaReference.trim() || undefined,
       productTypeId: formData.productTypeId,
       categoryId: formData.categoryId || chosenCatRecord?.category_id || undefined,
-      category: formData.category || chosenCatRecord?.category || 'Drugs',
+      category: formData.category || chosenCatRecord?.category || '',
       subCategory: formData.subCategory || chosenCatRecord?.sub_category || undefined,
       subSubCategory: formData.subSubCategory || chosenCatRecord?.sub_sub_category || undefined,
       brand: chosenBrandRecord ? (chosenBrandRecord.brand_name || chosenBrandRecord.name) : undefined,
       brandId: formData.brandId || undefined,
       description: formData.description.trim() || undefined,
-      baseUom: formData.baseUom,
-      packSize: formData.packSize.trim() || 'Standard Pack',
-      packUom: formData.packUom,
+      baseUom: formData.baseUom.trim(),
+      packSize: formData.packSize.trim(),
       lifecycleStatus: formData.lifecycleStatus,
       availableFrom: formData.availableFrom || nowIso,
       discontinuedOn: formData.discontinuedOn || undefined,
@@ -1662,11 +1712,11 @@ export const ProductCatalogModule: React.FC = () => {
               }}
             >
               <option value="ALL">All Statuses</option>
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="DISCONTINUED">DISCONTINUED</option>
-              <option value="END_OF_LIFE">END OF LIFE</option>
               <option value="DRAFT">DRAFT</option>
+              <option value="ACTIVE">ACTIVE</option>
               <option value="INACTIVE">INACTIVE</option>
+              <option value="DISCONTINUED">DISCONTINUED</option>
+              <option value="EOL">EOL (End of Life)</option>
             </select>
           </div>
 
@@ -1745,11 +1795,9 @@ export const ProductCatalogModule: React.FC = () => {
               paginatedProducts.map(p => {
                 const badge = getLifecycleBadge(p.lifecycle_status || (p.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'));
                 const brandStr = getBrandName(p);
-                const pShort = p.product_short_name || '—';
-                const pCode = p.product_code || p.code;
+                const pComposition = p.composition || p.generic_name || '';
                 const pName = p.product_name || p.name;
                 const baseUom = p.base_uom || p.uom || 'Unit';
-                const packUom = p.pack_uom || 'Strip';
                 const packSize = p.pack_size || p.packSize || 'Standard Pack';
 
                 return (
@@ -1773,9 +1821,9 @@ export const ProductCatalogModule: React.FC = () => {
                           <h3 style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 800, color: '#0F172A' }}>
                             {pName}
                           </h3>
-                          {pShort && pShort !== '—' && (
+                          {pComposition && (
                             <div style={{ fontSize: 11.5, color: '#64748B', fontWeight: 600 }}>
-                              Short: <span style={{ color: '#0F766E' }}>{pShort}</span>
+                              Composition: <span style={{ color: '#0F766E' }}>{pComposition}</span>
                             </div>
                           )}
                         </div>
@@ -1836,7 +1884,7 @@ export const ProductCatalogModule: React.FC = () => {
                         </div>
                         <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
                           <div>Base UOM: <strong style={{ color: '#0F172A' }}>{baseUom}</strong></div>
-                          <div>Pack: <strong style={{ color: '#0F172A' }}>{packSize} ({packUom})</strong></div>
+                          <div>Pack Size: <strong style={{ color: '#0F172A' }}>{packSize}</strong></div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                           <span style={{ fontSize: 11, color: '#64748B' }}>Sellable:</span>
@@ -1904,14 +1952,13 @@ export const ProductCatalogModule: React.FC = () => {
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
                 <th style={{ padding: '12px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 180, maxWidth: 260, position: 'sticky', left: 0, background: '#F8FAFC', zIndex: 4, boxShadow: '2px 0 5px rgba(0,0,0,0.04)' }}>PRODUCT NAME</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 100, minWidth: 100 }}>SHORT NAME</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 140, maxWidth: 200 }}>COMPOSITION</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 115, minWidth: 115 }}>PRODUCT TYPE</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', minWidth: 160, maxWidth: 220 }}>CATEGORY</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 110, minWidth: 110 }}>BRAND</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#0F766E', minWidth: 140, maxWidth: 180 }}>MANUFACTURER</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 75, minWidth: 75 }}>BASE UOM</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 90, minWidth: 90 }}>PACK SIZE</th>
-                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 75, minWidth: 75 }}>PACK UOM</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 85, minWidth: 85 }}>BASE UOM</th>
+                <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 100, minWidth: 100 }}>PACK SIZE</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95, minWidth: 95 }}>LIFECYCLE</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 70, minWidth: 70 }}>SELLABLE</th>
                 <th style={{ padding: '12px 10px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', width: 95, minWidth: 95 }}>AVAILABLE</th>
@@ -1939,7 +1986,7 @@ export const ProductCatalogModule: React.FC = () => {
             <tbody>
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={14} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
+                  <td colSpan={13} style={{ textAlign: 'center', padding: '48px 20px', color: '#64748B' }}>
                     <Package size={36} style={{ color: '#94A3B8', marginBottom: 10, display: 'block', margin: '0 auto 10px' }} />
                     <div style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>No central products found.</div>
                     <div style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 18 }}>
@@ -1959,12 +2006,10 @@ export const ProductCatalogModule: React.FC = () => {
                 paginatedProducts.map((prd) => {
                   const badge = getLifecycleBadge(prd.lifecycle_status || (prd.status === 'Inactive' ? 'INACTIVE' : 'ACTIVE'));
                   const brandStr = getBrandName(prd);
-                  const pCode = prd.product_code || prd.code;
                   const pName = prd.product_name || prd.name;
-                  const pShort = prd.product_short_name || '—';
+                  const pComposition = prd.composition || prd.generic_name || '—';
                   const baseUom = prd.base_uom || prd.uom || 'Unit';
                   const packSize = prd.pack_size || prd.packSize || '—';
-                  const packUom = prd.pack_uom || '—';
                   const isSellable = prd.is_sellable !== false;
                   const availFrom = prd.available_from || '—';
                   const discOn = prd.discontinued_on || '—';
@@ -1996,9 +2041,9 @@ export const ProductCatalogModule: React.FC = () => {
                         )}
                       </td>
 
-                      {/* 2. PRODUCT SHORT NAME */}
-                      <td style={{ padding: '12px 10px', fontSize: 12, fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
-                        {pShort}
+                      {/* 2. COMPOSITION */}
+                      <td style={{ padding: '12px 10px', fontSize: 12, fontWeight: 600, color: '#334155', maxWidth: 200 }}>
+                        {pComposition}
                       </td>
 
                       {/* 3. PRODUCT TYPE */}
@@ -2079,12 +2124,7 @@ export const ProductCatalogModule: React.FC = () => {
                         {packSize}
                       </td>
 
-                      {/* 9. PACK UOM */}
-                      <td style={{ padding: '12px 10px', fontSize: 12, color: '#475569', whiteSpace: 'nowrap' }}>
-                        {packUom}
-                      </td>
-
-                      {/* 10. LIFECYCLE STATUS */}
+                      {/* 9. LIFECYCLE STATUS */}
                       <td style={{ padding: '12px 10px', whiteSpace: 'nowrap' }}>
                         <span style={{
                           fontSize: 10.5,
@@ -3339,7 +3379,7 @@ export const ProductCatalogModule: React.FC = () => {
             onClick={e => e.stopPropagation()}
             style={{
               width: '100%',
-              maxWidth: 720,
+              maxWidth: 780,
               maxHeight: '90vh',
               background: '#FFFFFF',
               border: '1px solid #CBD5E1',
@@ -3364,7 +3404,7 @@ export const ProductCatalogModule: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveProductMaster} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+            <form noValidate onSubmit={handleSaveProductMaster} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
               <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20, boxSizing: 'border-box', minWidth: 0 }}>
 
             {/* Inline Error Alert */}
@@ -3377,17 +3417,38 @@ export const ProductCatalogModule: React.FC = () => {
 
               {/* ────────────────────────────────────────────────────────── */}
               {/* ────────────────────────────────────────────────────────── */}
-              {/* 1. CLASSIFICATION HIERARCHY */}
+              {/* 1. PRODUCT CATEGORY HIERARCHY */}
               {(() => {
                 const hasL2 = !!formData.category && dependentL2SubCategories.length > 0;
                 const hasL3 = hasL2 && !!formData.subCategory && dependentL3SubSubCategories.length > 0;
-                const dynamicCols = (hasL2 && hasL3) ? '1fr 1fr 1fr' : hasL2 ? '1fr 1fr' : '1fr';
+                const activeProductTypes = (productTypes || []).filter(t => (t.lifecycle_status || t.status) === 'ACTIVE');
+                const fieldLabelStyle: React.CSSProperties = {
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  color: '#475569',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.03em',
+                  lineHeight: 1.3,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                };
+                const baseSelectStyle: React.CSSProperties = {
+                  width: '100%',
+                  height: 40,
+                  padding: '0 12px',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                };
 
                 return (
-                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 14, width: '100%', boxSizing: 'border-box' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                       <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Layers size={14} /> 1. CLASSIFICATION HIERARCHY
+                        <Layers size={14} /> 1. PRODUCT CATEGORY HIERARCHY
                       </div>
                       {formData.categoryId && (
                         <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0F766E', background: '#CCFBF1', padding: '2px 8px', borderRadius: 4 }}>
@@ -3396,47 +3457,89 @@ export const ProductCatalogModule: React.FC = () => {
                       )}
                     </div>
 
-                    {/* 1. PRODUCT TYPE * */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                          Product Type *
-                        </label>
-                      </div>
-                      <select
-                        required
-                        value={formData.productTypeId}
-                        onChange={e => handleProductTypeChange(e.target.value)}
-                        style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none', background: '#F0FDFA', color: '#0F766E' }}
-                      >
-                        <option value="" disabled>-- Select Product Type * --</option>
-                        {(productTypes || []).filter(t => (t.lifecycle_status || t.status) === 'ACTIVE').map(t => (
-                          <option key={t.product_type_id || t.id} value={t.product_type_id || t.id}>
-                            {t.product_type_name || t.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {/* 0. Segment * (First field in hierarchy) */}
+                    {(() => {
+                      const activeSegments = (customerSegments || []).filter(
+                        s => (s.lifecycle_status || (s.is_active ? 'ACTIVE' : 'INACTIVE')) === 'ACTIVE'
+                      );
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minHeight: 18 }}>
+                            <label style={fieldLabelStyle}>Segment *</label>
+                            <span style={{ fontSize: 11, color: '#64748B', flexShrink: 0 }}>
+                              {activeSegments.length} available
+                            </span>
+                          </div>
+                          <select
+                            required
+                            value={formData.segmentId}
+                            onChange={e => setFormData(prev => ({ ...prev, segmentId: e.target.value }))}
+                            style={{ ...baseSelectStyle, border: '1.5px solid #0F766E', fontWeight: 700, background: '#F0FDFA', color: '#0F766E' }}
+                          >
+                            <option value="" disabled>
+                              {activeSegments.length === 0 ? 'No segments available' : '-- Select Segment * --'}
+                            </option>
+                            {activeSegments.map(seg => (
+                              <option key={seg.customer_segment_id || seg.id} value={seg.customer_segment_id || seg.id}>
+                                {seg.segment_name || seg.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
 
-                    {/* 2. DYNAMIC CASCADING CATEGORY DROPDOWNS (Progressive Disclosure) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: dynamicCols, gap: 14 }}>
-                      {/* Level 1: Category * */}
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                            Category *
-                          </label>
-                          <span style={{ fontSize: 11, color: '#64748B' }}>
+                    {/* Consistent 2x2 Responsive Grid for Product Type -> Category -> Sub-Category -> Sub-Sub-Category */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, alignItems: 'end', width: '100%', boxSizing: 'border-box' }}>
+                      {/* 1. Product Type * */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minHeight: 18 }}>
+                          <label style={fieldLabelStyle}>Product Type *</label>
+                          <span style={{ fontSize: 11, color: '#64748B', flexShrink: 0 }}>
+                            {activeProductTypes.length} available
+                          </span>
+                        </div>
+                        <select
+                          required
+                          value={formData.productTypeId}
+                          onChange={e => handleProductTypeChange(e.target.value)}
+                          style={{ ...baseSelectStyle, border: '1.5px solid #0F766E', fontWeight: 700, background: '#F0FDFA', color: '#0F766E' }}
+                        >
+                          <option value="" disabled>
+                            {activeProductTypes.length === 0 ? 'No options available' : '-- Select Product Type * --'}
+                          </option>
+                          {activeProductTypes.map(t => (
+                            <option key={t.product_type_id || t.id} value={t.product_type_id || t.id}>
+                              {t.product_type_name || t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 2. Category * */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minHeight: 18 }}>
+                          <label style={fieldLabelStyle}>Category *</label>
+                          <span style={{ fontSize: 11, color: '#64748B', flexShrink: 0 }}>
                             {dependentL1Categories.length} available
                           </span>
                         </div>
                         <select
                           required
+                          disabled={!formData.productTypeId || dependentL1Categories.length === 0}
                           value={formData.category}
                           onChange={e => handleCategoryChange(e.target.value)}
-                          style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', color: '#0F172A' }}
+                          style={{
+                            ...baseSelectStyle,
+                            border: '1.5px solid #0F766E',
+                            background: (!formData.productTypeId || dependentL1Categories.length === 0) ? '#F1F5F9' : '#FFFFFF',
+                            color: (!formData.productTypeId || dependentL1Categories.length === 0) ? '#94A3B8' : '#0F172A',
+                            cursor: (!formData.productTypeId || dependentL1Categories.length === 0) ? 'not-allowed' : 'pointer'
+                          }}
                         >
-                          <option value="">-- Select Category * --</option>
+                          <option value="">
+                            {!formData.productTypeId ? '-- Select Product Type first --' : dependentL1Categories.length === 0 ? 'No options available' : '-- Select Category * --'}
+                          </option>
                           {dependentL1Categories.map(cat => (
                             <option key={cat} value={cat}>
                               {cat}
@@ -3445,96 +3548,110 @@ export const ProductCatalogModule: React.FC = () => {
                         </select>
                       </div>
 
-                      {/* Level 2: Sub-Category * (Rendered ONLY if Level-2 children exist in DB) */}
-                      {hasL2 && (
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                              Sub-Category *
-                            </label>
-                            <span style={{ fontSize: 11, color: '#64748B' }}>
-                              {dependentL2SubCategories.length} available
-                            </span>
-                          </div>
-                          <select
-                            required
-                            value={formData.subCategory}
-                            onChange={e => handleSubCategoryChange(e.target.value)}
-                            style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #0F766E', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', color: '#0F172A' }}
-                          >
-                            <option value="">-- Select Sub-Category * --</option>
-                            {dependentL2SubCategories.map(sub => (
-                              <option key={sub} value={sub}>
-                                {sub}
-                              </option>
-                            ))}
-                          </select>
+                      {/* 3. Sub-Category */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minHeight: 18 }}>
+                          <label style={fieldLabelStyle}>
+                            Sub-Category{hasL2 ? ' *' : ''}
+                          </label>
+                          <span style={{ fontSize: 11, color: '#64748B', flexShrink: 0 }}>
+                            {dependentL2SubCategories.length} available
+                          </span>
                         </div>
-                      )}
+                        <select
+                          required={hasL2}
+                          disabled={!hasL2}
+                          value={hasL2 ? formData.subCategory : ''}
+                          onChange={e => handleSubCategoryChange(e.target.value)}
+                          style={{
+                            ...baseSelectStyle,
+                            border: hasL2 ? '1.5px solid #0F766E' : '1px solid #CBD5E1',
+                            background: hasL2 ? '#FFFFFF' : '#F1F5F9',
+                            color: hasL2 ? '#0F172A' : '#94A3B8',
+                            cursor: hasL2 ? 'pointer' : 'not-allowed'
+                          }}
+                        >
+                          <option value="">
+                            {!formData.category ? '-- Select Category first --' : hasL2 ? '-- Select Sub-Category * --' : 'No sub-categories available'}
+                          </option>
+                          {dependentL2SubCategories.map(sub => (
+                            <option key={sub} value={sub}>
+                              {sub}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                      {/* Level 3: Sub-Sub-Category (Optional) (Rendered ONLY if Level-3 children exist in DB) */}
-                      {hasL3 && (
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                              Sub-Sub-Category <span style={{ fontWeight: 400, color: '#94A3B8' }}>(Optional)</span>
-                            </label>
-                            <span style={{ fontSize: 11, color: '#64748B' }}>
-                              {dependentL3SubSubCategories.length} available
-                            </span>
-                          </div>
-                          <select
-                            value={formData.subSubCategory}
-                            onChange={e => handleSubSubCategoryChange(e.target.value)}
-                            style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', color: '#0F172A' }}
-                          >
-                            <option value="">-- Select Sub-Sub-Category (Optional) --</option>
-                            {dependentL3SubSubCategories.map(subSub => (
-                              <option key={subSub} value={subSub}>
-                                {subSub}
-                              </option>
-                            ))}
-                          </select>
+                      {/* 4. Sub-Sub-Category */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minHeight: 18 }}>
+                          <label style={fieldLabelStyle}>
+                            Sub-Sub-Category <span style={{ fontWeight: 400, color: '#94A3B8', textTransform: 'none' }}>(Optional)</span>
+                          </label>
+                          <span style={{ fontSize: 11, color: '#64748B', flexShrink: 0 }}>
+                            {dependentL3SubSubCategories.length} available
+                          </span>
                         </div>
-                      )}
+                        <select
+                          disabled={!hasL3}
+                          value={hasL3 ? formData.subSubCategory : ''}
+                          onChange={e => handleSubSubCategoryChange(e.target.value)}
+                          style={{
+                            ...baseSelectStyle,
+                            border: '1px solid #CBD5E1',
+                            background: hasL3 ? '#FFFFFF' : '#F1F5F9',
+                            color: hasL3 ? '#0F172A' : '#94A3B8',
+                            cursor: hasL3 ? 'pointer' : 'not-allowed'
+                          }}
+                        >
+                          <option value="">
+                            {!formData.subCategory ? '-- Select Sub-Category first --' : hasL3 ? '-- Select Sub-Sub-Category (Optional) --' : 'No sub-sub-categories available'}
+                          </option>
+                          {dependentL3SubSubCategories.map(subSub => (
+                            <option key={subSub} value={subSub}>
+                              {subSub}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
-                    {/* Resolved Master Category Hierarchy Display */}
+                    {/* Resolved Master Category Hierarchy Display (Full Width) */}
                     {formData.category && (
-                      <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: 12, fontSize: 12 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <div style={{ background: '#F0FDFA', border: '1px solid #99F6E4', borderRadius: 8, padding: '12px 14px', fontSize: 12.5, width: '100%', boxSizing: 'border-box' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                           <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.05em' }}>
-                            Resolved Master Category Hierarchy:
+                            Resolved Master Category Hierarchy
                           </div>
+                          <span style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            background: '#0F766E',
+                            color: '#FFFFFF',
+                            flexShrink: 0
+                          }}>
+                            {!hasL2 ? 'L1 Leaf' : (!hasL3 || !formData.subSubCategory) ? 'L2 Leaf' : 'L3 Leaf'}
+                          </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', lineHeight: 1.5 }}>
                           <span style={{ color: '#64748B' }}>Category:</span>
                           <strong style={{ color: '#0F766E' }}>{formData.category}</strong>
                           {hasL2 && formData.subCategory && (
                             <>
-                              <span style={{ color: '#94A3B8' }}>›</span>
+                              <span style={{ color: '#94A3B8', fontWeight: 700 }}>&gt;</span>
                               <span style={{ color: '#64748B' }}>Sub-Category:</span>
                               <strong style={{ color: '#0F766E' }}>{formData.subCategory}</strong>
                             </>
                           )}
                           {hasL3 && formData.subSubCategory && (
                             <>
-                              <span style={{ color: '#94A3B8' }}>›</span>
+                              <span style={{ color: '#94A3B8', fontWeight: 700 }}>&gt;</span>
                               <span style={{ color: '#64748B' }}>Sub-Sub:</span>
                               <strong style={{ color: '#0284C7' }}>{formData.subSubCategory}</strong>
                             </>
                           )}
-                          <span style={{
-                            marginLeft: 'auto',
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: 4,
-                            background: '#0F766E',
-                            color: '#FFFFFF'
-                          }}>
-                            {!hasL2 ? 'L1 Leaf' : (!hasL3 || !formData.subSubCategory) ? 'L2 Leaf' : 'L3 Leaf'}
-                          </span>
                         </div>
                       </div>
                     )}
@@ -3543,7 +3660,7 @@ export const ProductCatalogModule: React.FC = () => {
               })()}
 
               {/* ────────────────────────────────────────────────────────── */}
-              {/* 2. DYNAMIC PRODUCT SPECIFICATIONS (ATTRIBUTES) */}
+              {/* 2. PRODUCT ATTRIBUTES */}
               {/* ────────────────────────────────────────────────────────── */}
               <div style={{
                 background: '#FFFFFF',
@@ -3554,51 +3671,53 @@ export const ProductCatalogModule: React.FC = () => {
                 flexDirection: 'column',
                 gap: 12,
                 width: '100%',
-                maxWidth: '100%',
                 boxSizing: 'border-box',
-                minWidth: 0,
-                overflowX: 'hidden'
+                minWidth: 0
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, width: '100%', boxSizing: 'border-box' }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Sparkles size={14} /> 2. DYNAMIC PRODUCT SPECIFICATIONS (ATTRIBUTES)
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, width: '100%', boxSizing: 'border-box' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Sparkles size={14} /> 2. PRODUCT ATTRIBUTES
+                    </div>
                     <span style={{
-                      fontSize: 11,
+                      fontSize: 11.5,
                       fontWeight: 700,
-                      padding: '2px 8px',
+                      padding: '3px 10px',
                       borderRadius: 12,
                       background: '#F0FDFA',
                       color: '#0F766E',
-                      border: '1px solid #99F6E4'
+                      border: '1px solid #99F6E4',
+                      whiteSpace: 'nowrap'
                     }}>
-                      {modalProductTypeAttributes.length} Specifications Assigned
+                      Specifications Assigned: {modalProductTypeAttributes.length}
                     </span>
-                    <button
-                      type="button"
-                      disabled={availableToSelectModalAttributes.length === 0}
-                      onClick={() => setIsSelectingModalAttr(!isSelectingModalAttr)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        background: availableToSelectModalAttributes.length === 0 ? '#E2E8F0' : '#0F766E',
-                        color: availableToSelectModalAttributes.length === 0 ? '#94A3B8' : '#FFFFFF',
-                        border: 'none',
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        cursor: availableToSelectModalAttributes.length === 0 ? 'not-allowed' : 'pointer',
-                        transition: 'all 0.15s ease'
-                      }}
-                      title={availableToSelectModalAttributes.length === 0 ? 'All active attributes have already been assigned' : 'Add dynamic specification attribute'}
-                    >
-                      <Plus size={12} />
-                      <span>Select Attribute</span>
-                    </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSelectingModalAttr(!isSelectingModalAttr)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      padding: '8px 14px',
+                      borderRadius: 6,
+                      background: '#0F766E',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      boxShadow: '0 1px 2px rgba(15,118,110,0.2)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    title="Select and assign an attribute from Attribute Master"
+                  >
+                    <Plus size={14} />
+                    <span>Select Attribute</span>
+                  </button>
                 </div>
 
                 {isSelectingModalAttr && (
@@ -3861,55 +3980,68 @@ export const ProductCatalogModule: React.FC = () => {
               {/* ────────────────────────────────────────────────────────── */}
               {/* 3. PRODUCT INFORMATION */}
               {/* ────────────────────────────────────────────────────────── */}
-              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 14, width: '100%', boxSizing: 'border-box' }}>
                 <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: '#0F766E', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Package size={14} /> 3. PRODUCT INFORMATION
                 </div>
 
-                <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                    Product Short Name
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    Product Name *
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Paracetamol 650"
-                    value={formData.shortName}
-                    onChange={e => setFormData({ ...formData, shortName: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                    required
+                    placeholder="e.g. Paracetamol 650mg Tablets"
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    style={{ width: '100%', height: 40, padding: '0 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none', background: '#FFFFFF', boxSizing: 'border-box' }}
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
-                  <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      Product Name *
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, alignItems: 'end' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Composition
                     </label>
                     <input
                       type="text"
-                      required
-                      placeholder="e.g. Paracetamol 650mg Tablets"
-                      value={formData.name}
-                      onChange={e => setFormData({ ...formData, name: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 700, outline: 'none' }}
+                      placeholder="e.g. Paracetamol IP"
+                      value={formData.composition}
+                      onChange={e => setFormData({ ...formData, composition: e.target.value })}
+                      style={{ width: '100%', height: 40, padding: '0 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', background: '#FFFFFF', boxSizing: 'border-box' }}
                     />
                   </div>
 
-                  <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      Pharma Reference <span style={{ fontWeight: 400, color: '#94A3B8' }}>(e.g. IP, BP, USP)</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Strength
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. IP, BP, USP"
-                      value={formData.pharmaReference}
-                      onChange={e => setFormData({ ...formData, pharmaReference: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                      placeholder="e.g. 650 mg"
+                      value={formData.strength}
+                      onChange={e => setFormData({ ...formData, strength: e.target.value })}
+                      style={{ width: '100%', height: 40, padding: '0 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', background: '#FFFFFF', boxSizing: 'border-box' }}
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    Pharma Reference <span style={{ fontWeight: 400, color: '#94A3B8', textTransform: 'none' }}>(e.g. IP, BP, USP)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. IP, BP, USP"
+                    value={formData.pharmaReference}
+                    onChange={e => setFormData({ ...formData, pharmaReference: e.target.value })}
+                    style={{ width: '100%', height: 40, padding: '0 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', background: '#FFFFFF', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                     Product Description
                   </label>
                   <textarea
@@ -3917,7 +4049,7 @@ export const ProductCatalogModule: React.FC = () => {
                     placeholder="Enter generic product description..."
                     value={formData.description}
                     onChange={e => setFormData({ ...formData, description: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', resize: 'vertical' }}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', resize: 'vertical', background: '#FFFFFF', boxSizing: 'border-box' }}
                   />
                 </div>
               </div>
@@ -3930,15 +4062,16 @@ export const ProductCatalogModule: React.FC = () => {
                   <Package size={14} /> 4. UNIT / PACKAGING
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-                  <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, alignItems: 'end' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                       Base UOM *
                     </label>
                     <select
+                      required
                       value={formData.baseUom}
                       onChange={e => setFormData({ ...formData, baseUom: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600 }}
+                      style={{ width: '100%', height: 40, padding: '0 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#FFFFFF', boxSizing: 'border-box' }}
                     >
                       {COMMON_BASE_UOMS.map(u => (
                         <option key={u} value={u}>{u}</option>
@@ -3946,32 +4079,18 @@ export const ProductCatalogModule: React.FC = () => {
                     </select>
                   </div>
 
-                  <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                       Pack Size *
                     </label>
                     <input
                       type="text"
+                      required
                       placeholder="e.g. 10 x 1 x 10"
                       value={formData.packSize}
                       onChange={e => setFormData({ ...formData, packSize: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                      style={{ width: '100%', height: 40, padding: '0 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, outline: 'none', background: '#FFFFFF', boxSizing: 'border-box' }}
                     />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
-                      Pack UOM *
-                    </label>
-                    <select
-                      value={formData.packUom}
-                      onChange={e => setFormData({ ...formData, packUom: e.target.value })}
-                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #CBD5E1', borderRadius: 6, fontSize: 13, fontWeight: 600 }}
-                    >
-                      {COMMON_PACK_UOMS.map(u => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                    </select>
                   </div>
                 </div>
               </div>
@@ -3996,7 +4115,6 @@ export const ProductCatalogModule: React.FC = () => {
                     >
                       <option value="ACTIVE">ACTIVE</option>
                       <option value="DISCONTINUED">DISCONTINUED</option>
-                      <option value="END_OF_LIFE">END_OF_LIFE</option>
                       <option value="EOL">EOL (End of Life)</option>
                       <option value="DRAFT">DRAFT</option>
                       <option value="INACTIVE">INACTIVE</option>
@@ -4146,6 +4264,14 @@ export const ProductCatalogModule: React.FC = () => {
                 </div>
               </div>
               </div>
+
+              {/* Inline Error Alert pinned above Footer so it is always visible without scrolling */}
+              {modalFormError && (
+                <div style={{ background: '#FEE2E2', borderTop: '1px solid #FCA5A5', padding: '10px 24px', color: '#B91C1C', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+                  <span>{modalFormError}</span>
+                </div>
+              )}
 
               {/* Modal Footer Actions */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 24px', borderTop: '1px solid #E2E8F0', flexShrink: 0, background: '#FFFFFF' }}>

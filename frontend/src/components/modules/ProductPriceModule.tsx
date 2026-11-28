@@ -28,6 +28,9 @@ export const ProductPriceModule: React.FC = () => {
     removeProductPrice,
     toggleProductPriceStatus,
     refreshProductPrices,
+    refreshProducts,
+    refreshCustomerSegments,
+    refreshMappings,
     currentRole,
     setActiveTab
   } = useApp();
@@ -47,9 +50,12 @@ export const ProductPriceModule: React.FC = () => {
   // Single active row dropdown state for standardized Actions menu
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
-  // Always hydrate latest persisted prices from PostgreSQL on mount
+  // Always hydrate latest persisted prices & reference masters from PostgreSQL on mount
   useEffect(() => {
     refreshProductPrices?.();
+    refreshProducts?.();
+    refreshCustomerSegments?.();
+    refreshMappings?.();
   }, []);
 
   // Outside click listener for action menu

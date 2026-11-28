@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Manufacturer, ManufacturerLifecycleStatus } from '../../types';
 import { PaginationControl } from '../common/PaginationControl';
@@ -31,6 +31,11 @@ export const ManufacturerMasterModule: React.FC = () => {
     toggleManufacturerStatus,
     setActiveTab
   } = useApp();
+
+  // Always fetch fresh Manufacturers from PostgreSQL when this page mounts
+  useEffect(() => {
+    refreshManufacturers();
+  }, [refreshManufacturers]);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');

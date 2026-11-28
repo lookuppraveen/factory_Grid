@@ -306,8 +306,18 @@ export class CatalogService {
     const effectiveSubCategory = subCat?.trim() || categoryRecord?.subCategory || null;
     const effectiveSubSubCategory = subSubCat?.trim() || categoryRecord?.subSubCategory || null;
     const effectiveProductTypeId = dto.productTypeId?.trim() || dto.product_type_id?.trim() || categoryRecord?.productTypeId || 'pt_med';
-    const effectiveGenericName = dto.genericName?.trim() || dto.generic_name?.trim() || dto.shortName?.trim() || dto.short_name?.trim() || dto.name.trim();
-    const effectiveDosageForm = dto.dosageForm?.trim() || dto.dosage_form?.trim() || effectiveSubCategory || 'Standard Form';
+    const effectiveSegmentId = dto.segmentId?.trim() || dto.segment_id?.trim() || null;
+    if (effectiveSegmentId) {
+      const segExists = await this.prisma.customerSegment.findFirst({
+        where: { OR: [{ id: effectiveSegmentId }, { segmentCode: effectiveSegmentId }] },
+      });
+      if (!segExists) {
+        throw new BadRequestException(`Segment "${effectiveSegmentId}" does not exist.`);
+      }
+    }
+    const effectiveComposition = dto.composition?.trim() || dto.genericName?.trim() || dto.generic_name?.trim() || null;
+    const effectiveGenericName = effectiveComposition || dto.shortName?.trim() || dto.short_name?.trim() || dto.name.trim();
+    const effectiveDosageForm = dto.dosageForm?.trim() || dto.dosage_form?.trim() || effectiveSubCategory || '';
     const effectivePharmaReference = dto.pharmaReference?.trim() || dto.pharma_reference?.trim() || null;
 
     const rawLifecycle = dto.lifecycleStatus || dto.lifecycle_status;
@@ -315,9 +325,15 @@ export class CatalogService {
     if (lifecycleStatus === 'EOL') lifecycleStatus = 'END_OF_LIFE';
     const active = lifecycleStatus === 'ACTIVE';
 
-    const effectiveBaseUom = dto.baseUom?.trim() || dto.base_uom?.trim() || 'Unit';
-    const effectivePackSize = dto.packSize?.trim() || dto.pack_size?.trim() || '10 x 10 Strip';
-    const effectivePackUom = dto.packUom?.trim() || dto.pack_uom?.trim() || 'Strip';
+    const effectiveBaseUom = dto.baseUom?.trim() || dto.base_uom?.trim() || '';
+    const effectivePackSize = dto.packSize?.trim() || dto.pack_size?.trim() || '';
+    if (!effectiveBaseUom) {
+      throw new BadRequestException('Base UOM is required.');
+    }
+    if (!effectivePackSize) {
+      throw new BadRequestException('Pack Size is required.');
+    }
+    const effectivePackUom = dto.packUom?.trim() || dto.pack_uom?.trim() || null;
     const effectiveAvailFrom = dto.availableFrom || dto.available_from;
     const effectiveDiscOn = dto.discontinuedOn || dto.discontinued_on;
     const effectiveReplId = dto.replacementProductId?.trim() || dto.replacement_product_id?.trim() || null;
@@ -374,15 +390,32 @@ export class CatalogService {
       }
     }
 
+    // Merge explicit strength into dynamic attributes so it persists in product_attributes (STRENGTH Attribute Master)
+    const mergedAttributes: Record<string, any> = {
+      ...((dto.attributes && typeof dto.attributes === 'object' && !Array.isArray(dto.attributes)) ? dto.attributes : {}),
+    };
+    if (dto.strength !== undefined && dto.strength !== null && String(dto.strength).trim() !== '') {
+      const strengthVal = String(dto.strength).trim();
+      const strengthMaster = await this.prisma.attributeMaster.findFirst({
+        where: { OR: [{ attributeCode: 'STRENGTH' }, { attributeName: { equals: 'Strength', mode: 'insensitive' } }] },
+      });
+      if (strengthMaster) {
+        mergedAttributes[strengthMaster.id] = strengthVal;
+      }
+      mergedAttributes['STRENGTH'] = strengthVal;
+    }
+
     const created = await this.prisma.catalogProduct.create({
       data: {
         id: targetId,
         productCode: codeClean,
         name: dto.name.trim(),
         shortName: dto.shortName?.trim() || dto.short_name?.trim() || null,
+        composition: effectiveComposition,
         genericName: effectiveGenericName,
         dosageForm: effectiveDosageForm,
         pharmaReference: effectivePharmaReference,
+        segmentId: effectiveSegmentId,
         productTypeId: effectiveProductTypeId,
         categoryId: categoryRecord?.id || catId || null,
         category: effectiveCategory,
@@ -401,14 +434,14 @@ export class CatalogService {
         isSellable: effectiveIsSellable,
         isGenericMedicine,
         genericMedicinePrice: genericMedicinePrice !== null ? new Prisma.Decimal(genericMedicinePrice) : null,
-        attributes: dto.attributes ? (dto.attributes as Prisma.InputJsonValue) : Prisma.DbNull,
+        attributes: Object.keys(mergedAttributes).length > 0 ? (mergedAttributes as Prisma.InputJsonValue) : Prisma.DbNull,
         active,
       },
     });
 
     // Synchronize dynamic attributes in product_attributes table
-    if (dto.attributes) {
-      await this.syncProductAttributes(created.id, dto.attributes);
+    if (Object.keys(mergedAttributes).length > 0) {
+      await this.syncProductAttributes(created.id, mergedAttributes);
     }
 
     return this.getProductById(created.id);
@@ -576,7 +609,26 @@ export class CatalogService {
     if (dto.productCode !== undefined) updateData.productCode = dto.productCode.trim().toUpperCase();
     if (dto.name !== undefined) updateData.name = dto.name.trim();
     if (dto.shortName !== undefined) updateData.shortName = dto.shortName?.trim() || null;
+    if (dto.composition !== undefined) {
+      const compVal = dto.composition?.trim() || null;
+      updateData.composition = compVal;
+      if (compVal && dto.genericName === undefined) {
+        updateData.genericName = compVal;
+      }
+    }
     if (dto.genericName !== undefined) updateData.genericName = dto.genericName.trim();
+    if (dto.segmentId !== undefined || dto.segment_id !== undefined) {
+      const segVal = (dto.segmentId !== undefined ? dto.segmentId : dto.segment_id)?.trim() || null;
+      if (segVal) {
+        const segExists = await this.prisma.customerSegment.findFirst({
+          where: { OR: [{ id: segVal }, { segmentCode: segVal }] },
+        });
+        if (!segExists) {
+          throw new BadRequestException(`Segment "${segVal}" does not exist.`);
+        }
+      }
+      updateData.segmentId = segVal;
+    }
     if (dto.dosageForm !== undefined) updateData.dosageForm = dto.dosageForm.trim();
     if (dto.pharmaReference !== undefined || dto.pharma_reference !== undefined) {
       const val = dto.pharmaReference !== undefined ? dto.pharmaReference : dto.pharma_reference;
@@ -645,8 +697,24 @@ export class CatalogService {
           ? new Prisma.Decimal(resolvedGeneric.genericMedicinePrice)
           : null;
     }
-    if (dto.attributes !== undefined) {
-      updateData.attributes = dto.attributes ? (dto.attributes as Prisma.InputJsonValue) : Prisma.DbNull;
+    const hasAttrOrStrengthUpdate = dto.attributes !== undefined || dto.strength !== undefined;
+    let mergedUpdateAttrs: Record<string, any> | undefined;
+    if (hasAttrOrStrengthUpdate) {
+      mergedUpdateAttrs = {
+        ...((existing.attributes && typeof existing.attributes === 'object' && !Array.isArray(existing.attributes)) ? (existing.attributes as Record<string, any>) : {}),
+        ...((dto.attributes && typeof dto.attributes === 'object' && !Array.isArray(dto.attributes)) ? dto.attributes : {}),
+      };
+      if (dto.strength !== undefined) {
+        const strengthVal = dto.strength ? String(dto.strength).trim() : '';
+        const strengthMaster = await this.prisma.attributeMaster.findFirst({
+          where: { OR: [{ attributeCode: 'STRENGTH' }, { attributeName: { equals: 'Strength', mode: 'insensitive' } }] },
+        });
+        if (strengthVal) {
+          if (strengthMaster) mergedUpdateAttrs[strengthMaster.id] = strengthVal;
+          mergedUpdateAttrs['STRENGTH'] = strengthVal;
+        }
+      }
+      updateData.attributes = Object.keys(mergedUpdateAttrs).length > 0 ? (mergedUpdateAttrs as Prisma.InputJsonValue) : Prisma.DbNull;
     }
 
     await this.prisma.catalogProduct.update({
@@ -654,8 +722,8 @@ export class CatalogService {
       data: updateData,
     });
 
-    if (dto.attributes !== undefined) {
-      await this.syncProductAttributes(existing.id, dto.attributes);
+    if (mergedUpdateAttrs !== undefined) {
+      await this.syncProductAttributes(existing.id, mergedUpdateAttrs);
     }
 
     return this.getProductById(existing.id);
@@ -2533,7 +2601,7 @@ export class CatalogService {
       const lifecycleStatus = rawStatus ? rawStatus.toUpperCase() : 'ACTIVE';
       const displayOrder = dto.displayOrder ?? dto.display_order ?? 1;
 
-      // 4. Atomic PostgreSQL Persistence
+      // 4. Atomic PostgreSQL Persistence (Categories must remain strictly separate from Catalog Products)
       const created = await tx.category.create({
         data: {
           id,
@@ -2546,35 +2614,6 @@ export class CatalogService {
           description: dto.description?.trim() || null,
           lifecycleStatus,
           displayOrder,
-        },
-      });
-
-      // 5. Upsert foreign key capability record in catalog_products
-      await tx.catalogProduct.upsert({
-        where: { id },
-        update: {
-          category: created.category,
-          subCategory: created.subCategory,
-          subSubCategory: created.subSubCategory,
-          productTypeId: created.productTypeId,
-          categoryId: created.id,
-          lifecycleStatus: created.lifecycleStatus,
-          active: created.lifecycleStatus === 'ACTIVE',
-        },
-        create: {
-          id,
-          productCode: candidateCode,
-          name: created.subSubCategory || created.subCategory || created.category,
-          genericName: [created.category, created.subCategory].filter(Boolean).join(' - ') || 'Manufacturing Capability',
-          dosageForm: created.subCategory || 'Standard',
-          category: created.category,
-          subCategory: created.subCategory,
-          subSubCategory: created.subSubCategory,
-          productTypeId: created.productTypeId,
-          categoryId: created.id,
-          packSize: 'Standard Batch',
-          lifecycleStatus: created.lifecycleStatus,
-          active: created.lifecycleStatus === 'ACTIVE',
         },
       });
 
@@ -2656,18 +2695,6 @@ export class CatalogService {
       data: updateData,
     });
 
-    // Sync to catalog_products if exists
-    await this.prisma.catalogProduct.updateMany({
-      where: { id: existing.id },
-      data: {
-        category: updated.category,
-        subCategory: updated.subCategory,
-        subSubCategory: updated.subSubCategory,
-        lifecycleStatus: updated.lifecycleStatus,
-        active: updated.lifecycleStatus === 'ACTIVE',
-      },
-    });
-
     return this.getCategoryById(existing.id);
   }
 
@@ -2685,14 +2712,6 @@ export class CatalogService {
       data: { lifecycleStatus: newStatus },
     });
 
-    await this.prisma.catalogProduct.updateMany({
-      where: { id: existing.id },
-      data: {
-        lifecycleStatus: newStatus,
-        active: newStatus === 'ACTIVE',
-      },
-    });
-
     return updated;
   }
 
@@ -2703,10 +2722,6 @@ export class CatalogService {
     if (!existing) {
       throw new NotFoundException(`Category with ID "${id}" not found.`);
     }
-
-    await this.prisma.catalogProduct.deleteMany({
-      where: { id: existing.id },
-    });
 
     await this.prisma.category.delete({
       where: { id: existing.id },
@@ -3358,6 +3373,17 @@ export class CatalogService {
       }
     }
 
+    const strengthAttr = (p.productAttributes || []).find(
+      (pa: any) =>
+        pa.attribute?.attributeCode?.toUpperCase() === 'STRENGTH' ||
+        pa.attribute?.attributeName?.toLowerCase() === 'strength',
+    );
+    const resolvedStrength =
+      strengthAttr?.attributeValue?.trim() ||
+      (typeof attributesObj.STRENGTH === 'string' ? attributesObj.STRENGTH.trim() : '') ||
+      (typeof attributesObj.strength === 'string' ? attributesObj.strength.trim() : '') ||
+      null;
+
     return {
       // Backend canonical database schema
       id: p.id,
@@ -3367,7 +3393,11 @@ export class CatalogService {
       productName: p.name,
       shortName: p.shortName || p.name,
       productShortName: p.shortName || p.name,
-      genericName: p.genericName || p.name,
+      composition: p.composition || p.genericName || null,
+      strength: resolvedStrength,
+      segmentId: p.segmentId || null,
+      segment_id: p.segmentId || null,
+      genericName: p.composition || p.genericName || p.name,
       dosageForm: p.dosageForm || 'Standard',
       pharmaReference: p.pharmaReference || null,
       pharma_reference: p.pharmaReference || null,

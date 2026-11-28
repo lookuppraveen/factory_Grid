@@ -217,15 +217,18 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   const [uploadingCategory, setUploadingCategory] = useState<string | null>(null);
   const [cardErrors, setCardErrors] = useState<Record<string, string | null>>({});
 
-  // Real Category Master from Backend (Hierarchical Category -> Sub-Category -> Sub-Sub-Category)
+  // Real Product Type -> Category -> Sub-Category -> Product Master from Backend
+  const [productTypesList, setProductTypesList] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [activeProductTypeId, setActiveProductTypeId] = useState<string>('ALL');
   const [categoriesList, setCategoriesList] = useState<CategoryHierarchyItem[]>([]);
   const [categoryTree, setCategoryTree] = useState<CategoryTreeCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [categoryApiError, setCategoryApiError] = useState<string | null>(null);
 
-  // Active Hierarchical Drilldown Navigation State
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [activeSubCategory, setActiveSubCategory] = useState<string | null>(null);
+  // Active Hierarchical Drilldown Navigation State (strictly ID-based: productTypeId -> categoryId -> subCategoryId -> productId)
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [activeSubCategoryId, setActiveSubCategoryId] = useState<string | null>(null);
+  const [activeProductId, setActiveProductId] = useState<string | null>(null);
 
   // STEP 3 — Manufacturing Category Capabilities State
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
@@ -241,31 +244,36 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   const [isValidating, setIsValidating] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // Fetch real category hierarchy master from backend
+  // Fetch real Product Type -> Category -> Sub-Category -> Product hierarchy from backend
   const loadCategories = () => {
     setIsLoadingCategories(true);
     setCategoryApiError(null);
     manufacturerRegistrationApi.listCategories()
       .then(res => {
-        const cats = res.categories || [];
+        const pts = res.productTypes || [];
+        const prods = res.products || res.categories || [];
         const tree = res.tree || [];
-        setCategoriesList(cats);
+        setProductTypesList(pts);
+        setCategoriesList(prods);
         setCategoryTree(tree);
         if (tree.length > 0) {
-          setActiveCategory(prev => (prev && tree.some(t => t.category === prev) ? prev : tree[0].category));
-          const currentTree = (activeCategory && tree.find(t => t.category === activeCategory)) || tree[0];
-          if (currentTree && currentTree.subCategories.length > 0) {
-            setActiveSubCategory(prev => (prev && currentTree.subCategories.some(s => s.subCategory === prev) ? prev : currentTree.subCategories[0].subCategory));
+          const nextCatNode = (activeCategoryId && tree.find(t => t.categoryId === activeCategoryId))
+            || tree[0];
+          setActiveCategoryId(nextCatNode.categoryId || null);
+          if (nextCatNode && nextCatNode.subCategories.length > 0) {
+            const nextSubNode = (activeSubCategoryId && nextCatNode.subCategories.find(s => s.subCategoryId === activeSubCategoryId))
+              || nextCatNode.subCategories[0];
+            setActiveSubCategoryId(nextSubNode.subCategoryId || null);
           } else {
-            setActiveSubCategory(null);
+            setActiveSubCategoryId(null);
           }
         } else {
-          setActiveCategory(null);
-          setActiveSubCategory(null);
+          setActiveCategoryId(null);
+          setActiveSubCategoryId(null);
         }
       })
       .catch(err => {
-        setCategoryApiError(err.message || 'Failed to load category hierarchy from server.');
+        setCategoryApiError(err.message || 'Failed to load product catalog hierarchy from server.');
       })
       .finally(() => {
         setIsLoadingCategories(false);
@@ -275,6 +283,13 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
   useEffect(() => {
     loadCategories();
   }, []);
+
+  // Re-fetch fresh products from PostgreSQL whenever entering Step 3 so newly created catalog products appear immediately
+  useEffect(() => {
+    if (currentStep === 3) {
+      loadCategories();
+    }
+  }, [currentStep]);
 
   // Sync real uploaded documents and reload saved capabilities from backend whenever registration code is present or step changes
   useEffect(() => {
@@ -1921,21 +1936,30 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
               </div>
             )}
 
-            {/* STEP 3 — CATEGORY CAPABILITIES (HIERARCHICAL SELECTION) */}
+            {/* STEP 3 — PRODUCT SELECTION & SPECIFIC CAPABILITIES (HIERARCHICAL SELECTION) */}
             {currentStep === 3 && (() => {
-              const currentCatNode = categoryTree.find(c => c.category === activeCategory) || categoryTree[0];
+              const filteredTree = activeProductTypeId === 'ALL'
+                ? categoryTree
+                : categoryTree.filter(c => c.productTypeId === activeProductTypeId);
+              const currentCatNode = filteredTree.find(c => c.categoryId === activeCategoryId) || filteredTree[0];
               const subCategories = currentCatNode?.subCategories || [];
-              const currentSubNode = subCategories.find(s => s.subCategory === activeSubCategory) || subCategories[0];
-              const currentItems = currentSubNode?.items || [];
+              const currentSubNode = subCategories.find(s => s.subCategoryId === activeSubCategoryId) || subCategories[0];
+              const currentProducts = currentSubNode?.products || currentSubNode?.items || [];
+              const inspectedProduct = currentProducts.find(p => p.id === activeProductId)
+                || currentProducts.find(p => selectedCategoryIds.includes(p.id))
+                || null;
 
               const isSearching = categorySearchTerm.trim().length > 0;
               const q = categorySearchTerm.toLowerCase().trim();
               const searchResults = isSearching
                 ? categoriesList.filter(c =>
-                    c.fullName.toLowerCase().includes(q) ||
-                    c.name.toLowerCase().includes(q) ||
-                    c.categoryCode.toLowerCase().includes(q) ||
-                    (c.description || '').toLowerCase().includes(q)
+                    (activeProductTypeId === 'ALL' || c.productTypeId === activeProductTypeId) && (
+                      c.fullName.toLowerCase().includes(q) ||
+                      c.name.toLowerCase().includes(q) ||
+                      (c.composition || '').toLowerCase().includes(q) ||
+                      (c.productCode || c.categoryCode || '').toLowerCase().includes(q) ||
+                      (c.description || '').toLowerCase().includes(q)
+                    )
                   )
                 : [];
 
@@ -2007,6 +2031,62 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                       </div>
                     )}
                   </div>
+
+                  {/* Product Type Filter Strip (Product Type -> Category -> Sub-Category -> Product) */}
+                  {productTypesList.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Product Type:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveProductTypeId('ALL');
+                          setActiveProductId(null);
+                        }}
+                        style={{
+                          padding: '5px 12px',
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: activeProductTypeId === 'ALL' ? '1.5px solid #14B8A6' : '1px solid #CBD5E1',
+                          background: activeProductTypeId === 'ALL' ? 'rgba(20,184,166,0.14)' : (isPublicPage ? '#1E293B' : '#FFFFFF'),
+                          color: activeProductTypeId === 'ALL' ? '#14B8A6' : (isPublicPage ? '#CBD5E1' : '#334155'),
+                        }}
+                      >
+                        All ({productTypesList.length})
+                      </button>
+                      {productTypesList.map(pt => {
+                        const isActivePt = activeProductTypeId === pt.id;
+                        return (
+                          <button
+                            key={pt.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveProductTypeId(pt.id);
+                              const firstCat = categoryTree.find(c => c.productTypeId === pt.id);
+                              setActiveCategoryId(firstCat?.categoryId || null);
+                              setActiveSubCategoryId(firstCat?.subCategories[0]?.subCategoryId || null);
+                              setActiveProductId(null);
+                            }}
+                            style={{
+                              padding: '5px 12px',
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              border: isActivePt ? '1.5px solid #14B8A6' : '1px solid #CBD5E1',
+                              background: isActivePt ? 'rgba(20,184,166,0.14)' : (isPublicPage ? '#1E293B' : '#FFFFFF'),
+                              color: isActivePt ? '#14B8A6' : (isPublicPage ? '#CBD5E1' : '#334155'),
+                            }}
+                          >
+                            {pt.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Search Bar across all Hierarchy Levels */}
                   <div style={{ position: 'relative', marginBottom: 16 }}>
@@ -2126,9 +2206,9 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
 
                   {/* 3-PANEL HIERARCHICAL DRILLDOWN SELECTION FLOW (Default Mode) */}
                   {!isLoadingCategories && !isSearching && (
-                    categoryTree.length === 0 ? (
+                    filteredTree.length === 0 ? (
                       <div style={{ padding: 48, textAlign: 'center', color: '#64748B', fontSize: 13, background: isPublicPage ? '#1E293B' : '#F8FAFC', borderRadius: 10, border: '1px solid #CBD5E1' }}>
-                        No manufacturing categories available.
+                        No manufacturing categories available for the selected Product Type.
                       </div>
                     ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.35fr', gap: 12, minHeight: 400 }}>
@@ -2139,19 +2219,21 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                           <Layers size={14} /> 1. Category
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', maxHeight: 380, paddingRight: 4 }}>
-                          {categoryTree.map(cat => {
-                            const isActive = (activeCategory || categoryTree[0]?.category) === cat.category;
-                            const selCount = categoriesList.filter(item => item.category === cat.category && selectedCategoryIds.includes(item.id)).length;
+                          {filteredTree.map(cat => {
+                            const isActive = currentCatNode?.categoryId === cat.categoryId;
+                            const catProducts = cat.subCategories.flatMap(s => s.products || s.items || []);
+                            const selCount = catProducts.filter(item => selectedCategoryIds.includes(item.id)).length;
                             return (
                               <button
-                                key={cat.category}
+                                key={cat.categoryId || `${cat.productTypeId}::${cat.category}`}
                                 type="button"
                                 onClick={() => {
-                                  setActiveCategory(cat.category);
+                                  setActiveCategoryId(cat.categoryId || null);
+                                  setActiveProductId(null);
                                   if (cat.subCategories.length > 0) {
-                                    setActiveSubCategory(cat.subCategories[0].subCategory);
+                                    setActiveSubCategoryId(cat.subCategories[0].subCategoryId || null);
                                   } else {
-                                    setActiveSubCategory(null);
+                                    setActiveSubCategoryId(null);
                                   }
                                 }}
                                 style={{
@@ -2170,7 +2252,10 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                               >
                                 <div>
                                   <div style={{ fontSize: 13, fontWeight: isActive ? 800 : 600 }}>{cat.category}</div>
-                                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{cat.subCategories.length} sub-categories</div>
+                                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                                    {activeProductTypeId === 'ALL' && cat.productTypeName ? `${cat.productTypeName} • ` : ''}
+                                    {cat.subCategories.length} {cat.subCategories.length === 1 ? 'sub-category' : 'sub-categories'}
+                                  </div>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   {selCount > 0 && (
@@ -2201,13 +2286,17 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                             </div>
                           ) : (
                             subCategories.map(sub => {
-                              const isActive = (activeSubCategory || subCategories[0]?.subCategory) === sub.subCategory;
-                              const selCount = sub.items.filter(item => selectedCategoryIds.includes(item.id)).length;
+                              const subProds = sub.products || sub.items || [];
+                              const isActive = currentSubNode?.subCategoryId === sub.subCategoryId;
+                              const selCount = subProds.filter(item => selectedCategoryIds.includes(item.id)).length;
                               return (
                                 <button
-                                  key={sub.subCategory}
+                                  key={sub.subCategoryId || sub.subCategory}
                                   type="button"
-                                  onClick={() => setActiveSubCategory(sub.subCategory)}
+                                  onClick={() => {
+                                    setActiveSubCategoryId(sub.subCategoryId || null);
+                                    setActiveProductId(null);
+                                  }}
                                   style={{
                                     display: 'flex',
                                     alignItems: 'center',
@@ -2224,7 +2313,9 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                                 >
                                   <div>
                                     <div style={{ fontSize: 13, fontWeight: isActive ? 800 : 600 }}>{sub.subCategory}</div>
-                                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{sub.items.length} capabilities</div>
+                                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                                      {subProds.length} {subProds.length === 1 ? 'product' : 'products'}
+                                    </div>
                                   </div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     {selCount > 0 && (
@@ -2241,59 +2332,109 @@ export const ManufacturerOnboardingWizard: React.FC<ManufacturerOnboardingWizard
                         </div>
                       </div>
 
-                      {/* 3. Sub-Sub-Category / Specific Capabilities Column */}
+                      {/* 3. Products & Product-Specific Capabilities Column */}
                       <div style={{ background: isPublicPage ? '#1E293B' : '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column' }}>
                         <div style={{ fontSize: 12, fontWeight: 800, color: '#14B8A6', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <CheckCircle2 size={14} /> 3. Specific Capabilities
+                          <CheckCircle2 size={14} /> 3. Products &amp; Specific Capabilities
                         </div>
                         <div style={{ fontSize: 11, color: '#64748B', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {currentCatNode?.category} → <strong style={{ color: isPublicPage ? '#FFF' : '#0F172A' }}>{currentSubNode?.subCategory || 'Select Sub-Category'}</strong>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', maxHeight: 350, paddingRight: 4 }}>
-                          {currentItems.length === 0 ? (
+                          {currentProducts.length === 0 ? (
                             <div style={{ padding: 24, textAlign: 'center', color: '#64748B', fontSize: 12 }}>
-                              {currentSubNode ? 'No capabilities available for this sub-category.' : 'Please select a Sub-Category to view specific capabilities.'}
+                              {currentSubNode ? 'No products available for this sub-category.' : 'Please select a Sub-Category to view available products.'}
                             </div>
                           ) : (
-                            currentItems.map(item => {
-                              const isSelected = selectedCategoryIds.includes(item.id);
-                              return (
-                                <div
-                                  key={item.id}
-                                  onClick={() => handleToggleCategoryCapability(item.id)}
-                                  style={{
-                                    padding: '10px 12px',
-                                    borderRadius: 8,
-                                    border: isSelected ? '1.5px solid #14B8A6' : '1px solid #CBD5E1',
-                                    background: isSelected ? 'rgba(20,184,166,0.12)' : (isPublicPage ? '#0F172A' : '#FFFFFF'),
-                                    cursor: 'pointer',
-                                    transition: 'all 0.15s ease',
-                                    display: 'flex',
-                                    alignItems: 'flex-start',
-                                    gap: 10
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => {}} // Controlled by container onClick
-                                    style={{ marginTop: 3, cursor: 'pointer', accentColor: '#14B8A6' }}
-                                  />
-                                  <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                                      <span style={{ fontSize: 13, fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A' }}>
-                                        {item.name}
-                                      </span>
-                                    </div>
-                                    {item.description && (
-                                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 3, lineHeight: 1.4 }}>
-                                        {item.description}
+                            <>
+                              {currentProducts.map(item => {
+                                const isSelected = selectedCategoryIds.includes(item.id);
+                                const isFocused = inspectedProduct?.id === item.id;
+                                return (
+                                  <div
+                                    key={item.id}
+                                    onClick={() => {
+                                      setActiveProductId(item.id);
+                                      handleToggleCategoryCapability(item.id);
+                                    }}
+                                    style={{
+                                      padding: '10px 12px',
+                                      borderRadius: 8,
+                                      border: isSelected ? '1.5px solid #14B8A6' : (isFocused ? '1.5px solid #94A3B8' : '1px solid #CBD5E1'),
+                                      background: isSelected ? 'rgba(20,184,166,0.12)' : (isPublicPage ? '#0F172A' : '#FFFFFF'),
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease',
+                                      display: 'flex',
+                                      alignItems: 'flex-start',
+                                      gap: 10
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => {}}
+                                      style={{ marginTop: 3, cursor: 'pointer', accentColor: '#14B8A6' }}
+                                    />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: isPublicPage ? '#FFF' : '#0F172A' }}>
+                                          {item.name}
+                                        </span>
                                       </div>
-                                    )}
+                                      {(item.composition || item.packSize || item.baseUom) && (
+                                        <div style={{ fontSize: 11, color: '#64748B', marginTop: 2, lineHeight: 1.4 }}>
+                                          {[item.composition, item.packSize, item.baseUom].filter(Boolean).join(' • ')}
+                                        </div>
+                                      )}
+                                      {item.description && (
+                                        <div style={{ fontSize: 11, color: '#64748B', marginTop: 3, lineHeight: 1.4 }}>
+                                          {item.description}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
+                                );
+                              })}
+
+                              {/* Product-Specific Capabilities Panel (shown when a product is selected/focused) */}
+                              {inspectedProduct && (
+                                <div style={{
+                                  marginTop: 6,
+                                  padding: '10px 12px',
+                                  borderRadius: 8,
+                                  background: isPublicPage ? '#0F172A' : '#FFFFFF',
+                                  border: '1px solid #CBD5E1',
+                                }}>
+                                  <div style={{ fontSize: 11, fontWeight: 800, color: '#14B8A6', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                                    Specific Capabilities — {inspectedProduct.name}
+                                  </div>
+                                  {inspectedProduct.capabilities && inspectedProduct.capabilities.length > 0 ? (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                      {inspectedProduct.capabilities.map(cap => (
+                                        <span
+                                          key={cap.id}
+                                          style={{
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                            padding: '3px 8px',
+                                            borderRadius: 6,
+                                            background: 'rgba(20,184,166,0.12)',
+                                            color: isPublicPage ? '#E2E8F0' : '#0F766E',
+                                            border: '1px solid rgba(20,184,166,0.3)',
+                                          }}
+                                        >
+                                          {cap.name}: {cap.value}{cap.unit ? ` ${cap.unit}` : ''}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div style={{ fontSize: 11.5, color: '#64748B', fontStyle: 'italic' }}>
+                                      No specific capabilities configured for this product yet.
+                                    </div>
+                                  )}
                                 </div>
-                              );
-                            })
+                              )}
+                            </>
                           )}
                         </div>
                       </div>

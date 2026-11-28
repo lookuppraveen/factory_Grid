@@ -259,7 +259,7 @@ export interface Manufacturer {
   recentReviews?: any[];
 }
 
-export type LifecycleStatus = 'ACTIVE' | 'DISCONTINUED' | 'END_OF_LIFE' | 'DRAFT' | 'INACTIVE' | 'EOL';
+export type LifecycleStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED' | 'EOL';
 
 export interface ProductType {
   product_type_id: string;

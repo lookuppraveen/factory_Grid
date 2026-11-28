@@ -3455,7 +3455,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ── Customer Segments & Product Pricing (PostgreSQL Database-Backed) ──
   const [customerSegments, setCustomerSegments] = useState<CustomerSegment[]>([]);
 
-  const refreshCustomerSegments = async () => {
+  const refreshCustomerSegments = useCallback(async () => {
     setMasterLoading(prev => ({ ...prev, customerSegments: true }));
     setMasterErrors(prev => ({ ...prev, customerSegments: null }));
     try {
@@ -3469,23 +3469,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } finally {
       setMasterLoading(prev => ({ ...prev, customerSegments: false }));
     }
-  };
+  }, []);
 
   const addCustomerSegment = async (segment: CustomerSegment) => {
     const saved = await catalogApi.createCustomerSegment(segment);
-    setCustomerSegments(prev => [saved, ...prev.filter(s => s.customer_segment_id !== saved.customer_segment_id && s.id !== saved.id)]);
+    await refreshCustomerSegments();
     return saved;
   };
 
   const updateCustomerSegment = async (id: string, updates: Partial<CustomerSegment>) => {
     const saved = await catalogApi.updateCustomerSegment(id, updates);
-    setCustomerSegments(prev => prev.map(s => (s.customer_segment_id === id || s.id === id) ? { ...s, ...saved } : s));
+    await refreshCustomerSegments();
     return saved;
   };
 
   const removeCustomerSegment = async (id: string) => {
     await catalogApi.deleteCustomerSegment(id);
-    setCustomerSegments(prev => prev.filter(s => s.customer_segment_id !== id && s.id !== id));
+    await refreshCustomerSegments();
   };
 
   const [productPrices, setProductPrices] = useState<ProductPrice[]>([]);
@@ -5867,6 +5867,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteUnifiedCategory,
         toggleUnifiedCategoryStatus,
         brands,
+        refreshBrands,
         addBrand,
         updateBrand,
         deleteBrand,
@@ -5936,7 +5937,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeBuyerAccount, setActiveBuyerAccount, resetDemoState,
       buyerBackendProfile, isResolvingBuyerProfile, refreshBuyerProfile,
       customers, manufacturers, products, setProducts, addProductMaster, updateProductMaster, toggleProductMasterStatus,
-      refreshProducts, refreshCategories,
+      refreshProducts, refreshCategories, refreshManufacturers, refreshMappings,
       addManufacturer, updateManufacturer, deleteManufacturer, toggleManufacturerStatus, setPreferredManufacturer,
       categories, setCategories, categoryMargins, setCategoryMargins, addCategory, updateCategory, deleteCategory, toggleCategoryStatus, updateCategoryMargin, getCategoryMargin, getCategoryMarginConfig,
       marginRules, setMarginRules, addOrUpdateMarginRule, deleteMarginRule, getApplicableMargin,

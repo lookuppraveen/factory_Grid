@@ -16,7 +16,7 @@ import {
 } from 'class-validator';
 import { PageableQueryDto } from '../../../common/pagination/pageable.dto';
 
-export const VALID_LIFECYCLE_STATUSES = ['ACTIVE', 'DISCONTINUED', 'END_OF_LIFE', 'DRAFT', 'INACTIVE', 'EOL'] as const;
+export const VALID_LIFECYCLE_STATUSES = ['DRAFT', 'ACTIVE', 'INACTIVE', 'DISCONTINUED', 'EOL'] as const;
 
 export class CreateCatalogProductDto {
   @ApiPropertyOptional({ example: 'prd_01', description: 'Product database ID' })
@@ -54,6 +54,29 @@ export class CreateCatalogProductDto {
   @IsString()
   @MaxLength(150)
   shortName?: string;
+
+  @ApiPropertyOptional({ example: 'Amoxicillin Trihydrate IP', description: 'Product composition / active ingredients' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  composition?: string;
+
+  @ApiPropertyOptional({ example: '650 mg', description: 'Product strength (persisted in product_attributes via STRENGTH Attribute Master)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  strength?: string;
+
+  @ApiPropertyOptional({ example: 'seg_dist', description: 'Segment ID from Customer Segment Master' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  segmentId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  segment_id?: string;
 
   @ApiPropertyOptional({ example: 'Amoxicillin Trihydrate IP', description: 'Generic composition name' })
   @IsOptional()
@@ -283,6 +306,29 @@ export class UpdateCatalogProductDto {
   @IsString()
   @MaxLength(150)
   shortName?: string;
+
+  @ApiPropertyOptional({ example: 'Paracetamol', description: 'Product composition / active ingredients' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  composition?: string;
+
+  @ApiPropertyOptional({ example: '650 mg', description: 'Product strength' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  strength?: string;
+
+  @ApiPropertyOptional({ example: 'seg_dist', description: 'Segment ID' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  segmentId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  segment_id?: string;
 
   @ApiPropertyOptional({ example: 'Amoxicillin Trihydrate IP' })
   @IsOptional()

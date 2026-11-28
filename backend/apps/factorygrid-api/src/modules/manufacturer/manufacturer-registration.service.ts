@@ -162,111 +162,257 @@ export class ManufacturerRegistrationService {
   }
 
   async listCategoryHierarchy() {
-    const categories = await this.prisma.category.findMany({
-      where: { lifecycleStatus: 'ACTIVE' },
-      orderBy: [{ productTypeId: 'asc' }, { category: 'asc' }, { subCategory: 'asc' }, { displayOrder: 'asc' }],
-    });
+    const [productTypes, categories, catalogProducts] = await Promise.all([
+      this.prisma.productType.findMany({
+        where: { lifecycleStatus: 'ACTIVE' },
+        orderBy: [{ displayOrder: 'asc' }, { productTypeName: 'asc' }],
+      }),
+      this.prisma.category.findMany({
+        where: { lifecycleStatus: 'ACTIVE' },
+        orderBy: [{ productTypeId: 'asc' }, { category: 'asc' }, { subCategory: 'asc' }, { displayOrder: 'asc' }],
+      }),
+      this.prisma.catalogProduct.findMany({
+        where: {
+          lifecycleStatus: { notIn: ['INACTIVE', 'DISCONTINUED', 'EOL', 'END_OF_LIFE'] },
+        },
+        include: {
+          productAttributes: {
+            include: { attribute: true },
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }, { name: 'asc' }],
+      }),
+    ]);
+
+    const ptNameMap = new Map(productTypes.map((pt) => [pt.id, pt.productTypeName]));
+    const catByIdMap = new Map(categories.map((c) => [c.id, c]));
+
+    type ProductItem = {
+      id: string;
+      productId: string;
+      productCode: string;
+      categoryId: string;
+      categoryCode: string;
+      productTypeId: string;
+      productTypeName: string;
+      category: string;
+      subCategory: string | null;
+      subSubCategory: string | null;
+      name: string;
+      composition: string | null;
+      baseUom: string;
+      packSize: string;
+      description: string | null;
+      lifecycleStatus: string;
+      fullName: string;
+      capabilities: Array<{
+        id: string;
+        code: string;
+        name: string;
+        value: string;
+        unit: string | null;
+      }>;
+    };
 
     const treeMap = new Map<string, {
+      key: string;
+      categoryId: string;
       category: string;
       productTypeId: string;
+      productTypeName: string;
       subCategories: Map<string, {
+        subCategoryId: string;
         subCategory: string;
-        items: Array<{
-          id: string;
-          categoryId: string;
-          categoryCode: string;
-          subSubCategory: string;
-          name: string;
-          description: string | null;
-        }>;
+        items: ProductItem[];
+        products: ProductItem[];
       }>;
     }>();
 
-    // 1. Register all valid L1 categories
+    // 1a. Register L1 root categories (subCategory is null) first so categoryId is always the true L1 primary key
     for (const cat of categories) {
       const catName = cat.category?.trim();
-      if (!catName) continue;
-      if (!treeMap.has(catName)) {
-        treeMap.set(catName, {
+      if (!catName || cat.subCategory?.trim()) continue;
+      const key = `${cat.productTypeId}::${catName.toLowerCase()}`;
+      if (!treeMap.has(key)) {
+        treeMap.set(key, {
+          key,
+          categoryId: cat.id,
           category: catName,
           productTypeId: cat.productTypeId,
+          productTypeName: ptNameMap.get(cat.productTypeId) || '',
           subCategories: new Map(),
         });
       }
     }
 
-    // 2. Register real sub-categories and leaf capabilities
-    const leafItems: Array<{
-      id: string;
-      categoryId: string;
-      productTypeId: string;
-      category: string;
-      subCategory: string;
-      subSubCategory: string;
-      categoryCode: string;
-      description: string | null;
-      name: string;
-      fullName: string;
-    }> = [];
+    // 1b. Register L2 sub-categories under their exact productTypeId + category parent (keyed by subCategoryId)
+    const subNodeById = new Map<string, {
+      catNode: {
+        key: string;
+        categoryId: string;
+        category: string;
+        productTypeId: string;
+        productTypeName: string;
+        subCategories: Map<string, {
+          subCategoryId: string;
+          subCategory: string;
+          items: ProductItem[];
+          products: ProductItem[];
+        }>;
+      };
+      subNode: {
+        subCategoryId: string;
+        subCategory: string;
+        items: ProductItem[];
+        products: ProductItem[];
+      };
+    }>();
 
     for (const cat of categories) {
       const catName = cat.category?.trim();
       const subName = cat.subCategory?.trim();
-      const subSubName = cat.subSubCategory?.trim();
-
-      // Only records with a valid Sub-Category belong under an L2 node
-      if (!catName || !subName) continue;
-
-      const catNode = treeMap.get(catName);
-      if (!catNode) continue;
-
-      if (!catNode.subCategories.has(subName)) {
-        catNode.subCategories.set(subName, {
-          subCategory: subName,
-          items: [],
+      if (!catName) continue;
+      const key = `${cat.productTypeId}::${catName.toLowerCase()}`;
+      if (!treeMap.has(key)) {
+        treeMap.set(key, {
+          key,
+          categoryId: cat.id,
+          category: catName,
+          productTypeId: cat.productTypeId,
+          productTypeName: ptNameMap.get(cat.productTypeId) || '',
+          subCategories: new Map(),
         });
       }
-
-      // If it has a specific capability (subSubCategory)
-      if (subSubName) {
-        const item = {
-          id: cat.id,
-          categoryId: cat.categoryId,
-          categoryCode: cat.categoryCode,
-          subSubCategory: subSubName,
-          name: subSubName,
-          description: cat.description,
-        };
-        catNode.subCategories.get(subName)!.items.push(item);
-
-        leafItems.push({
-          id: cat.id,
-          categoryId: cat.categoryId,
-          productTypeId: cat.productTypeId,
-          category: catName,
-          subCategory: subName,
-          subSubCategory: subSubName,
-          categoryCode: cat.categoryCode,
-          description: cat.description,
-          name: subSubName,
-          fullName: `${catName} → ${subName} → ${subSubName}`,
-        });
+      if (subName) {
+        const catNode = treeMap.get(key)!;
+        const subKey = subName.toLowerCase();
+        if (!catNode.subCategories.has(subKey)) {
+          catNode.subCategories.set(subKey, {
+            subCategoryId: cat.id,
+            subCategory: subName,
+            items: [],
+            products: [],
+          });
+        }
+        subNodeById.set(cat.id, { catNode, subNode: catNode.subCategories.get(subKey)! });
       }
     }
 
-    // Convert treeMap to structured array
-    const tree = Array.from(treeMap.values()).map(cat => ({
+    // 2. Attach ONLY real CatalogProduct records using strict ID relationships (productTypeId + categoryId)
+    const productItems: ProductItem[] = [];
+
+    for (const prod of catalogProducts) {
+      const linkedCat = prod.categoryId ? catByIdMap.get(prod.categoryId) : undefined;
+      const ptId = prod.productTypeId || linkedCat?.productTypeId || '';
+
+      // Consistency guard: if product has both productTypeId and linked category, they must belong to the same Product Type
+      if (prod.productTypeId && linkedCat && prod.productTypeId !== linkedCat.productTypeId) {
+        continue;
+      }
+
+      // Primary resolution: exact categoryId -> sub-category node match
+      let targetCatNode: typeof treeMap extends Map<string, infer V> ? V | undefined : never = undefined;
+      let targetSubNode: {
+        subCategoryId: string;
+        subCategory: string;
+        items: ProductItem[];
+        products: ProductItem[];
+      } | undefined = undefined;
+
+      if (prod.categoryId && subNodeById.has(prod.categoryId)) {
+        const hit = subNodeById.get(prod.categoryId)!;
+        targetCatNode = hit.catNode;
+        targetSubNode = hit.subNode;
+      } else {
+        const catName = (prod.category || linkedCat?.category || '').trim();
+        const subName = (prod.subCategory || linkedCat?.subCategory || '').trim() || null;
+        if (!catName || !ptId) continue;
+
+        const catKey = `${ptId}::${catName.toLowerCase()}`;
+        targetCatNode = treeMap.get(catKey);
+        if (!targetCatNode) continue;
+
+        if (subName) {
+          targetSubNode = targetCatNode.subCategories.get(subName.toLowerCase());
+        } else {
+          // Product attached directly to L1 category without sub-category
+          const generalKey = 'general';
+          if (!targetCatNode.subCategories.has(generalKey)) {
+            targetCatNode.subCategories.set(generalKey, {
+              subCategoryId: `${targetCatNode.categoryId}::general`,
+              subCategory: 'General',
+              items: [],
+              products: [],
+            });
+          }
+          targetSubNode = targetCatNode.subCategories.get(generalKey);
+        }
+      }
+
+      if (!targetCatNode || !targetSubNode) continue;
+
+      const subSubName = (prod.subSubCategory || linkedCat?.subSubCategory || '').trim() || null;
+
+      const realCapabilities = (prod.productAttributes || [])
+        .filter((pa) => pa.attributeValue && String(pa.attributeValue).trim() !== '')
+        .map((pa) => ({
+          id: String(pa.id),
+          code: pa.attribute?.attributeCode || pa.attributeId,
+          name: pa.attribute?.attributeName || pa.attributeId,
+          value: String(pa.attributeValue).trim(),
+          unit: pa.attribute?.unitOfMeasure || null,
+        }));
+
+      const item: ProductItem = {
+        id: prod.id,
+        productId: prod.id,
+        productCode: prod.productCode,
+        categoryId: targetSubNode.subCategoryId,
+        categoryCode: prod.productCode,
+        productTypeId: targetCatNode.productTypeId,
+        productTypeName: targetCatNode.productTypeName,
+        category: targetCatNode.category,
+        subCategory: targetSubNode.subCategory,
+        subSubCategory: subSubName,
+        name: prod.name,
+        composition: prod.composition || prod.genericName || null,
+        baseUom: prod.baseUom || 'Unit',
+        packSize: prod.packSize || '',
+        description: prod.description || null,
+        lifecycleStatus: prod.lifecycleStatus,
+        fullName: [targetCatNode.productTypeName, targetCatNode.category, targetSubNode.subCategory, prod.name]
+          .filter(Boolean)
+          .join(' → '),
+        capabilities: realCapabilities,
+      };
+
+      targetSubNode.items.push(item);
+      targetSubNode.products.push(item);
+      productItems.push(item);
+    }
+
+    const tree = Array.from(treeMap.values()).map((cat) => ({
+      categoryId: cat.categoryId,
       category: cat.category,
       productTypeId: cat.productTypeId,
-      subCategories: Array.from(cat.subCategories.values()).map(sub => ({
+      productTypeName: cat.productTypeName,
+      subCategories: Array.from(cat.subCategories.values()).map((sub) => ({
+        subCategoryId: sub.subCategoryId,
         subCategory: sub.subCategory,
+        productsCount: sub.products.length,
         items: sub.items,
+        products: sub.products,
       })),
     }));
 
     return {
-      categories: leafItems,
+      productTypes: productTypes.map((pt) => ({
+        id: pt.id,
+        code: pt.productTypeCode,
+        name: pt.productTypeName,
+      })),
+      products: productItems,
+      categories: productItems,
       tree,
     };
   }
@@ -653,54 +799,19 @@ export class ManufacturerRegistrationService {
       throw new BadRequestException('At least one manufacturing category or product capability must be selected.');
     }
 
-    // Verify all IDs exist in PostgreSQL Category or CatalogProduct
-    const [catRecords, cpRecords] = await Promise.all([
-      this.prisma.category.findMany({
-        where: {
-          OR: [
-            { id: { in: ids } },
-            { categoryId: { in: ids } },
-          ],
-          lifecycleStatus: 'ACTIVE',
-        },
-      }),
-      this.prisma.catalogProduct.findMany({
-        where: { id: { in: ids }, active: true },
-      }),
-    ]);
+    // Verify all selected IDs exist as real CatalogProduct records in PostgreSQL
+    const cpRecords = await this.prisma.catalogProduct.findMany({
+      where: {
+        id: { in: ids },
+        lifecycleStatus: { notIn: ['INACTIVE', 'DISCONTINUED', 'EOL', 'END_OF_LIFE'] },
+      },
+    });
 
-    const validIdSet = new Set<string>([
-      ...catRecords.map((c) => c.id),
-      ...catRecords.map((c) => c.categoryId),
-      ...cpRecords.map((p) => p.id),
-    ]);
+    const validIdSet = new Set<string>(cpRecords.map((p) => p.id));
 
     const unknown = ids.filter((id) => !validIdSet.has(id));
     if (unknown.length) {
-      throw new BadRequestException(`Unknown category or capability IDs: ${unknown.join(', ')}`);
-    }
-
-    // Ensure CatalogProduct records exist for each category leaf ID to satisfy DB foreign key constraint
-    const cpExistingIds = new Set(cpRecords.map((p) => p.id));
-    for (const c of catRecords) {
-      if (!cpExistingIds.has(c.id)) {
-        await this.prisma.catalogProduct.upsert({
-          where: { id: c.id },
-          update: {},
-          create: {
-            id: c.id,
-            productCode: c.categoryCode || `CAP-${c.id}`,
-            name: c.subSubCategory || c.subCategory || c.category,
-            category: c.category,
-            subCategory: c.subCategory,
-            subSubCategory: c.subSubCategory,
-            packSize: 'Standard',
-            lifecycleStatus: 'ACTIVE',
-            active: true,
-          },
-        });
-        cpExistingIds.add(c.id);
-      }
+      throw new BadRequestException(`Unknown or inactive product IDs: ${unknown.join(', ')}`);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -748,7 +859,7 @@ export class ManufacturerRegistrationService {
     for (const prodId of selectedIds) {
       const c = catMap.get(prodId);
       const cp = cpMap.get(prodId);
-      const subCategory = c?.subCategory?.trim() || cp?.subCategory?.trim();
+      const subCategory = c?.subCategory?.trim() || cp?.subCategory?.trim() || 'General';
       const category = c?.category?.trim() || cp?.category?.trim() || 'General';
       if (subCategory) {
         if (!validSubCategoryMap.has(subCategory)) {

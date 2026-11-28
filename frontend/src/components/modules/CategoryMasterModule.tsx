@@ -42,6 +42,13 @@ export const CategoryMasterModule: React.FC = () => {
   } = useApp();
 
   // ── TOP NAVIGATION TABS ──
+  // Always hydrate fresh Product Types, Categories & Attributes from PostgreSQL when this page mounts
+  useEffect(() => {
+    refreshProductTypes();
+    refreshUnifiedCategories();
+    refreshAttributeMasters();
+  }, [refreshProductTypes, refreshUnifiedCategories, refreshAttributeMasters]);
+
   // Active master: 'PRODUCT_TYPE' (Product Type Master) | 'CATEGORY' (Category Master)
   const [activeMasterTab, setActiveMasterTab] = useState<'PRODUCT_TYPE' | 'CATEGORY'>('CATEGORY');
 

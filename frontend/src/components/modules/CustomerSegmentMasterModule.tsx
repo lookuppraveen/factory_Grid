@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Users, Search, Plus, Filter, Edit2, Trash2, X, AlertTriangle,
@@ -31,6 +31,11 @@ export const CustomerSegmentMasterModule: React.FC = () => {
   } = useApp();
 
   const canEdit = currentRole === 'ADMIN';
+
+  // Always fetch fresh Customer Segments from PostgreSQL when this page mounts
+  useEffect(() => {
+    refreshCustomerSegments();
+  }, [refreshCustomerSegments]);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
